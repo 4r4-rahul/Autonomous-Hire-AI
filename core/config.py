@@ -1,0 +1,76 @@
+from functools import lru_cache
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import Field
+
+
+class Settings(BaseSettings):
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        case_sensitive=False,
+        extra="ignore",
+    )
+
+    # Anthropic
+    anthropic_api_key: str = Field(..., alias="ANTHROPIC_API_KEY")
+    anthropic_model: str = "claude-opus-4-8"
+
+    # Google
+    gmail_client_id: str = Field(default="", alias="GMAIL_CLIENT_ID")
+    gmail_client_secret: str = Field(default="", alias="GMAIL_CLIENT_SECRET")
+    gmail_refresh_token: str = Field(default="", alias="GMAIL_REFRESH_TOKEN")
+    google_calendar_id: str = Field(default="primary", alias="GOOGLE_CALENDAR_ID")
+
+    # Workday (shared account across *.myworkdayjobs.com) — secret, lives in .env not the profile YAML
+    workday_password: str = Field(default="", alias="WORKDAY_PASSWORD")
+
+    # LinkedIn
+    linkedin_li_at: str = Field(default="", alias="LINKEDIN_LI_AT")
+    linkedin_jsessionid: str = Field(default="", alias="LINKEDIN_JSESSIONID")
+    linkedin_profile_dir: str = Field(default="./data/chrome_profile", alias="LI_PROFILE_DIR")
+    linkedin_pause: bool = Field(default=False, alias="LI_PAUSE")  # kill switch
+    linkedin_active_hours_start: int = Field(default=8, alias="LI_ACTIVE_HOURS_START")
+    linkedin_active_hours_end: int = Field(default=21, alias="LI_ACTIVE_HOURS_END")
+
+    # Discord (review queue + daily digest)
+    discord_webhook_review: str = Field(default="", alias="DISCORD_WEBHOOK_REVIEW")
+    discord_webhook_digest: str = Field(default="", alias="DISCORD_WEBHOOK_DIGEST")
+
+    # Human-in-the-loop gates
+    hitl_new_ats: bool = Field(default=True, alias="HUMAN_IN_LOOP_NEW_ATS")
+    hitl_low_confidence: bool = Field(default=True, alias="HUMAN_IN_LOOP_LOW_CONF")
+    hitl_high_value_contact: bool = Field(default=True, alias="HUMAN_IN_LOOP_HIGH_VALUE")
+
+    # Search
+    tavily_api_key: str = Field(default="", alias="TAVILY_API_KEY")
+
+    # Vector DB
+    chroma_persist_dir: str = Field(default="./data/chroma_db", alias="CHROMA_PERSIST_DIR")
+    pinecone_api_key: str = Field(default="", alias="PINECONE_API_KEY")
+    pinecone_index_name: str = Field(default="autonomoushire", alias="PINECONE_INDEX_NAME")
+
+    # Redis
+    redis_url: str = Field(default="redis://localhost:6379", alias="REDIS_URL")
+
+    # App
+    log_level: str = Field(default="INFO", alias="LOG_LEVEL")
+    environment: str = Field(default="development", alias="ENVIRONMENT")
+    dashboard_port: int = Field(default=8501, alias="DASHBOARD_PORT")
+    approval_webhook_url: str = Field(default="", alias="APPROVAL_WEBHOOK_URL")
+
+    # Thresholds (can be overridden via env)
+    min_fit_score: int = Field(default=65, alias="MIN_FIT_SCORE")
+    min_app_quality: int = Field(default=70, alias="MIN_APP_QUALITY")
+    min_quantity_per_week: int = Field(default=10, alias="MIN_QUANTITY_PER_WEEK")
+    min_response_rate: float = Field(default=0.15, alias="MIN_RESPONSE_RATE")
+    apply_max_per_day: int = Field(default=15, alias="APPLY_MAX_PER_DAY")
+    outreach_max_per_day: int = Field(default=3, alias="OUTREACH_MAX_PER_DAY")
+
+    @property
+    def is_production(self) -> bool:
+        return self.environment == "production"
+
+
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    return Settings()

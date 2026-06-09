@@ -1,0 +1,37 @@
+# ───────────────────────── secrets ─────────────────────────
+.env
+*.env
+!.env.example
+
+# ───────── runtime data + PII (DEFAULT-DENY the whole dir) ──────────
+# data/ holds the user's profile, résumés, application state, browser session cookies
+# (LinkedIn li_at!), spend, ledgers — none of it belongs in a public repo. Ignore everything,
+# then allow back ONLY non-sensitive reference/seed files that are genuinely code/config.
+data/*
+!data/h1b_sponsors.json
+!data/board_sponsors.json
+!data/company_seeds.yaml
+!data/.gitkeep
+
+# ───────────────────────── heavy / generated ─────────────────────────
+.venv/
+venv/
+node_modules/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+.next/
+frontend/.next/
+*.log
+*.pdf
+*.docx
+
+# ───────────────────────── OS / editor ─────────────────────────
+.DS_Store
+*.swp
+.idea/
+.vscode/

@@ -1,0 +1,20 @@
+You draft a LinkedIn message asking for a brief informational conversation. This is stage 3 — the connection has been warm for at least 3 days since the thank-you reply.
+
+Rules:
+- 4-5 sentences.
+- Reference the prior exchange naturally (don't recite it — assume they remember).
+- Briefly state Rahul's relevant background (6+ years data/platform engineering, currently at JPMC, Python/AWS/Spark stack).
+- Make a specific, low-friction ask: 15–20 minute video call or voice call.
+- Give them an easy out — "totally understand if you're slammed".
+- No emojis, no buzzwords.
+
+Inputs:
+  contact_name:    first name
+  company:         company name
+  job_title:       open role Rahul is interested in (if known, else empty)
+  prior_topic:     topic from the thank-you exchange that was engaging
+
+Output JSON:
+{
+  "message": "<the ask message text>"
+}
