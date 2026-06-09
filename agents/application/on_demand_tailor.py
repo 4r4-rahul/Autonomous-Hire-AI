@@ -1,0 +1,97 @@
+"""
+Tailor-on-demand — spend Opus only on the roles the user actually engages ("the real ones").
+
+The queue is populated cheaply (scored + resolved, no résumé). When the user opens a role's apply
+form (extension) or hits "prepare" in the UI, this tailors THAT one résumé on demand: re-score
+(Haiku) → Opus-tailor → quality review → attach to the application → mark ready. Idempotent: a role
+already tailored is returned as-is. Respects the daily spend cap (the Opus call goes through the
+budget-guarded LLM layer).
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from threading import Lock
+
+import yaml
+
+from core.llm import get_llm
+from core.logger import get_logger
+
+logger = get_logger("on_demand_tailor")
+
+_STATE = Path("data/pipeline_state.json")
+_PROFILE = Path("data/user_profile.yaml")
+_LOCK = Lock()
+_IN_FLIGHT: set[str] = set()   # job_ids currently being tailored — avoids double-spend on re-trigger
+
+
+async def tailor_application(app_id: str = "", *, job_id: str = "") -> dict:
+    """Tailor a single parked application on demand. Identify by app_id or job_id.
+    Returns {status, app_id, resume, quality} or {error}."""
+    from agents.application.resume_tailor import tailor_one
+    from agents.application.linkedin_apply_pipeline import _score_job
+    from agents.application.app_quality_reviewer import review_application
+
+    state = json.loads(_STATE.read_text())
+    apps = state.get("applications", [])
+    app = next((a for a in apps if (app_id and a.get("id") == app_id)
+                or (job_id and a.get("job_id") == job_id)), None)
+    if not app:
+        return {"error": "application not found"}
+    if app.get("tailored_resume_path"):
+        return {"status": "already_tailored", "app_id": app.get("id"),
+                "resume": app.get("tailored_resume_path")}
+
+    job = next((j for j in state.get("job_listings", []) if j.get("id") == app.get("job_id")), None)
+    if not job:
+        return {"error": "job listing not found"}
+
+    jid = job.get("id")
+    if jid in _IN_FLIGHT:
+        return {"status": "tailoring_in_progress", "app_id": app.get("id")}
+    _IN_FLIGHT.add(jid)
+
+    profile = yaml.safe_load(_PROFILE.read_text()) if _PROFILE.exists() else {}
+    llm = get_llm("on_demand_tailor")                       # Opus (config default)
+    cheap = get_llm("on_demand_tailor", model="claude-haiku-4-5")
+
+    try:
+        fit = await _score_job(job, cheap)
+        tailored = await tailor_one(job, fit, llm, profile, llm_cheap=cheap)
+        if not tailored:
+            return {"error": "tailoring returned nothing"}
+        try:
+            tailored, _ = await review_application(tailored, job, cheap)
+        except Exception:
+            pass
+    except Exception as e:
+        logger.error("on_demand_tailor_failed", app_id=app.get("id"), error=str(e)[:120])
+        return {"error": str(e)[:160]}
+    finally:
+        _IN_FLIGHT.discard(jid)
+
+    # Merge tailored fields into the existing app row (preserve id + job_id), then persist via the
+    # cross-process-locked + atomic store (re-reads under lock — never clobbers a concurrent write).
+    from core.state_store import mutate_state
+    app_id_final = app.get("id")
+    with mutate_state() as state:
+        app = next((a for a in state.get("applications", []) if a.get("id") == app_id_final), None)
+        if app is None:
+            return {"error": "application vanished during tailoring"}
+        for k, v in tailored.items():
+            if k not in ("id", "job_id"):
+                app[k] = v
+        app["status"] = "pending_review"
+        app["needs_tailoring"] = False
+
+    try:
+        from db.migrate_from_json import sync_to_db_async
+        await sync_to_db_async()
+    except Exception:
+        pass
+
+    logger.info("on_demand_tailored", app_id=app.get("id"),
+                company=app.get("company_name"), quality=app.get("quality_score"))
+    return {"status": "tailored", "app_id": app.get("id"),
+            "resume": app.get("tailored_resume_path"), "quality": app.get("quality_score")}

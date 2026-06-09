@@ -1,0 +1,1151 @@
+# Curated seed list of tech companies with known Greenhouse/Lever/Ashby ATS boards.
+# Format: name, website, size, domain, ats (optional hint)
+# job_scanner.py loads these as Company stubs on first run.
+
+companies:
+
+  # ── AI / LLM Infrastructure ──────────────────────────────────────────────
+  - name: Anthropic
+    website: https://www.anthropic.com
+    size: scaleup
+    domain: AI/ML
+
+  - name: OpenAI
+    website: https://www.openai.com
+    size: scaleup
+    domain: AI/ML
+
+  - name: Cohere
+    website: https://cohere.com
+    size: scaleup
+    domain: AI/ML
+
+  - name: Mistral AI
+    website: https://mistral.ai
+    size: startup
+    domain: AI/ML
+
+  - name: Groq
+    website: https://groq.com
+    size: startup
+    domain: AI/ML
+
+  - name: Together AI
+    website: https://www.together.ai
+    size: startup
+    domain: AI/ML
+
+  - name: Replicate
+    website: https://replicate.com
+    size: startup
+    domain: AI/ML
+
+  - name: Hugging Face
+    website: https://huggingface.co
+    size: scaleup
+    domain: AI/ML
+
+  - name: Modal
+    website: https://modal.com
+    size: startup
+    domain: AI/ML
+
+  - name: Anyscale
+    website: https://www.anyscale.com
+    size: scaleup
+    domain: AI/ML
+
+  - name: Scale AI
+    website: https://scale.com
+    size: scaleup
+    domain: AI/ML
+
+  - name: Weights & Biases
+    website: https://wandb.ai
+    size: scaleup
+    domain: AI/ML
+
+  - name: Arize AI
+    website: https://arize.com
+    size: startup
+    domain: AI/ML
+
+  - name: WhyLabs
+    website: https://whylabs.ai
+    size: startup
+    domain: AI/ML
+
+  - name: Tecton
+    website: https://www.tecton.ai
+    size: scaleup
+    domain: AI/ML
+
+  - name: Pinecone
+    website: https://www.pinecone.io
+    size: scaleup
+    domain: AI/ML
+
+  - name: Weaviate
+    website: https://weaviate.io
+    size: scaleup
+    domain: AI/ML
+
+  - name: Qdrant
+    website: https://qdrant.tech
+    size: startup
+    domain: AI/ML
+
+  - name: Chroma
+    website: https://www.trychroma.com
+    size: startup
+    domain: AI/ML
+
+  - name: LangChain
+    website: https://www.langchain.com
+    size: startup
+    domain: AI/ML
+
+  - name: Langfuse
+    website: https://langfuse.com
+    size: startup
+    domain: AI/ML
+
+  - name: Vellum AI
+    website: https://www.vellum.ai
+    size: startup
+    domain: AI/ML
+
+  - name: Fixie AI
+    website: https://www.fixie.ai
+    size: startup
+    domain: AI/ML
+
+  - name: Dust
+    website: https://dust.tt
+    size: startup
+    domain: AI/ML
+
+  - name: Adept AI
+    website: https://www.adept.ai
+    size: startup
+    domain: AI/ML
+
+  - name: Character AI
+    website: https://character.ai
+    size: scaleup
+    domain: AI/ML
+
+  - name: Inflection AI
+    website: https://inflection.ai
+    size: scaleup
+    domain: AI/ML
+
+  - name: Stability AI
+    website: https://stability.ai
+    size: scaleup
+    domain: AI/ML
+
+  - name: Runway
+    website: https://runwayml.com
+    size: startup
+    domain: AI/ML
+
+  - name: ElevenLabs
+    website: https://elevenlabs.io
+    size: scaleup
+    domain: AI/ML
+
+  - name: Ideogram
+    website: https://ideogram.ai
+    size: startup
+    domain: AI/ML
+
+  - name: Midjourney
+    website: https://www.midjourney.com
+    size: startup
+    domain: AI/ML
+
+  # ── MLOps / ML Platform ───────────────────────────────────────────────────
+  - name: Databricks
+    website: https://www.databricks.com
+    size: large
+    domain: Data Infrastructure
+
+  - name: Domino Data Lab
+    website: https://www.dominodatalab.com
+    size: mid
+    domain: AI/ML
+
+  - name: Dataiku
+    website: https://www.dataiku.com
+    size: mid
+    domain: AI/ML
+
+  - name: H2O.ai
+    website: https://h2o.ai
+    size: mid
+    domain: AI/ML
+
+  - name: DataRobot
+    website: https://www.datarobot.com
+    size: mid
+    domain: AI/ML
+
+  - name: Algorithmia
+    website: https://algorithmia.com
+    size: startup
+    domain: AI/ML
+
+  - name: Seldon
+    website: https://www.seldon.io
+    size: startup
+    domain: AI/ML
+
+  - name: BentoML
+    website: https://bentoml.com
+    size: startup
+    domain: AI/ML
+
+  - name: ZenML
+    website: https://www.zenml.io
+    size: startup
+    domain: AI/ML
+
+  - name: Metaflow
+    website: https://metaflow.org
+    size: startup
+    domain: AI/ML
+
+  # ── Developer Tools / Infra ───────────────────────────────────────────────
+  - name: Datadog
+    website: https://www.datadoghq.com
+    size: large
+    domain: Developer Tools
+
+  - name: New Relic
+    website: https://newrelic.com
+    size: large
+    domain: Developer Tools
+
+  - name: Grafana Labs
+    website: https://grafana.com
+    size: mid
+    domain: Developer Tools
+
+  - name: Honeycomb
+    website: https://www.honeycomb.io
+    size: mid
+    domain: Developer Tools
+
+  - name: Lightstep
+    website: https://lightstep.com
+    size: mid
+    domain: Developer Tools
+
+  - name: Sentry
+    website: https://sentry.io
+    size: mid
+    domain: Developer Tools
+
+  - name: PagerDuty
+    website: https://www.pagerduty.com
+    size: large
+    domain: Developer Tools
+
+  - name: Incident.io
+    website: https://incident.io
+    size: startup
+    domain: Developer Tools
+
+  - name: LaunchDarkly
+    website: https://launchdarkly.com
+    size: mid
+    domain: Developer Tools
+
+  - name: Split.io
+    website: https://www.split.io
+    size: mid
+    domain: Developer Tools
+
+  - name: Vercel
+    website: https://vercel.com
+    size: mid
+    domain: Developer Tools
+
+  - name: Netlify
+    website: https://www.netlify.com
+    size: mid
+    domain: Developer Tools
+
+  - name: Railway
+    website: https://railway.app
+    size: startup
+    domain: Developer Tools
+
+  - name: Render
+    website: https://render.com
+    size: startup
+    domain: Developer Tools
+
+  - name: Fly.io
+    website: https://fly.io
+    size: startup
+    domain: Developer Tools
+
+  - name: Heroku
+    website: https://www.heroku.com
+    size: large
+    domain: Developer Tools
+
+  - name: CircleCI
+    website: https://circleci.com
+    size: mid
+    domain: Developer Tools
+
+  - name: GitHub
+    website: https://github.com
+    size: large
+    domain: Developer Tools
+
+  - name: GitLab
+    website: https://about.gitlab.com
+    size: large
+    domain: Developer Tools
+
+  - name: JFrog
+    website: https://jfrog.com
+    size: large
+    domain: Developer Tools
+
+  - name: HashiCorp
+    website: https://www.hashicorp.com
+    size: large
+    domain: Developer Tools
+
+  - name: Pulumi
+    website: https://www.pulumi.com
+    size: mid
+    domain: Developer Tools
+
+  - name: Spacelift
+    website: https://spacelift.io
+    size: startup
+    domain: Developer Tools
+
+  - name: Cortex
+    website: https://www.cortex.io
+    size: startup
+    domain: Developer Tools
+
+  - name: Port
+    website: https://www.getport.io
+    size: startup
+    domain: Developer Tools
+
+  - name: Backstage
+    website: https://backstage.io
+    size: startup
+    domain: Developer Tools
+
+  - name: Cursor
+    website: https://cursor.sh
+    size: startup
+    domain: Developer Tools
+
+  - name: Replit
+    website: https://replit.com
+    size: mid
+    domain: Developer Tools
+
+  - name: Codeium
+    website: https://codeium.com
+    size: startup
+    domain: Developer Tools
+
+  - name: Tabnine
+    website: https://www.tabnine.com
+    size: mid
+    domain: Developer Tools
+
+  - name: Sourcegraph
+    website: https://sourcegraph.com
+    size: mid
+    domain: Developer Tools
+
+  - name: Swimm
+    website: https://swimm.io
+    size: startup
+    domain: Developer Tools
+
+  # ── Data Infrastructure ───────────────────────────────────────────────────
+  - name: Snowflake
+    website: https://www.snowflake.com
+    size: large
+    domain: Data Infrastructure
+
+  - name: dbt Labs
+    website: https://www.getdbt.com
+    size: mid
+    domain: Data Infrastructure
+
+  - name: Fivetran
+    website: https://www.fivetran.com
+    size: mid
+    domain: Data Infrastructure
+
+  - name: Airbyte
+    website: https://airbyte.com
+    size: scaleup
+    domain: Data Infrastructure
+
+  - name: Stitch
+    website: https://www.stitchdata.com
+    size: mid
+    domain: Data Infrastructure
+
+  - name: Confluent
+    website: https://www.confluent.io
+    size: large
+    domain: Data Infrastructure
+
+  - name: Imply
+    website: https://imply.io
+    size: mid
+    domain: Data Infrastructure
+
+  - name: ClickHouse
+    website: https://clickhouse.com
+    size: mid
+    domain: Data Infrastructure
+
+  - name: StarTree
+    website: https://startree.ai
+    size: startup
+    domain: Data Infrastructure
+
+  - name: SingleStore
+    website: https://www.singlestore.com
+    size: mid
+    domain: Data Infrastructure
+
+  - name: CockroachDB
+    website: https://www.cockroachlabs.com
+    size: mid
+    domain: Data Infrastructure
+
+  - name: PlanetScale
+    website: https://planetscale.com
+    size: startup
+    domain: Data Infrastructure
+
+  - name: Neon
+    website: https://neon.tech
+    size: startup
+    domain: Data Infrastructure
+
+  - name: Supabase
+    website: https://supabase.com
+    size: scaleup
+    domain: Data Infrastructure
+
+  - name: Turso
+    website: https://turso.tech
+    size: startup
+    domain: Data Infrastructure
+
+  - name: Materialize
+    website: https://materialize.com
+    size: startup
+    domain: Data Infrastructure
+
+  - name: Starburst
+    website: https://www.starburst.io
+    size: mid
+    domain: Data Infrastructure
+
+  - name: Monte Carlo
+    website: https://www.montecarlodata.com
+    size: mid
+    domain: Data Infrastructure
+
+  - name: Anomalo
+    website: https://www.anomalo.com
+    size: startup
+    domain: Data Infrastructure
+
+  - name: Bigeye
+    website: https://www.bigeye.com
+    size: startup
+    domain: Data Infrastructure
+
+  - name: Soda
+    website: https://www.soda.io
+    size: startup
+    domain: Data Infrastructure
+
+  - name: Great Expectations
+    website: https://greatexpectations.io
+    size: startup
+    domain: Data Infrastructure
+
+  - name: Atlan
+    website: https://atlan.com
+    size: scaleup
+    domain: Data Infrastructure
+
+  - name: Alation
+    website: https://www.alation.com
+    size: mid
+    domain: Data Infrastructure
+
+  - name: Collibra
+    website: https://www.collibra.com
+    size: mid
+    domain: Data Infrastructure
+
+  - name: DataHub
+    website: https://datahubproject.io
+    size: startup
+    domain: Data Infrastructure
+
+  - name: Dagster
+    website: https://dagster.io
+    size: startup
+    domain: Data Infrastructure
+
+  - name: Prefect
+    website: https://www.prefect.io
+    size: mid
+    domain: Data Infrastructure
+
+  - name: Astronomer
+    website: https://www.astronomer.io
+    size: mid
+    domain: Data Infrastructure
+
+  - name: Mage AI
+    website: https://www.mage.ai
+    size: startup
+    domain: Data Infrastructure
+
+  # ── Cloud / Platform ──────────────────────────────────────────────────────
+  - name: Cloudflare
+    website: https://www.cloudflare.com
+    size: large
+    domain: Developer Tools
+
+  - name: Fastly
+    website: https://www.fastly.com
+    size: large
+    domain: Developer Tools
+
+  - name: Akamai
+    website: https://www.akamai.com
+    size: large
+    domain: Developer Tools
+
+  - name: DigitalOcean
+    website: https://www.digitalocean.com
+    size: large
+    domain: Developer Tools
+
+  - name: Coreweave
+    website: https://www.coreweave.com
+    size: scaleup
+    domain: AI/ML
+
+  - name: Lambda Labs
+    website: https://lambdalabs.com
+    size: mid
+    domain: AI/ML
+
+  - name: Vast.ai
+    website: https://vast.ai
+    size: startup
+    domain: AI/ML
+
+  - name: Cerebras
+    website: https://cerebras.net
+    size: mid
+    domain: AI/ML
+
+  - name: SambaNova
+    website: https://sambanova.ai
+    size: mid
+    domain: AI/ML
+
+  # ── FinTech ───────────────────────────────────────────────────────────────
+  - name: Stripe
+    website: https://stripe.com
+    size: large
+    domain: FinTech
+
+  - name: Plaid
+    website: https://plaid.com
+    size: mid
+    domain: FinTech
+
+  - name: Brex
+    website: https://www.brex.com
+    size: scaleup
+    domain: FinTech
+
+  - name: Ramp
+    website: https://ramp.com
+    size: scaleup
+    domain: FinTech
+
+  - name: Mercury
+    website: https://mercury.com
+    size: scaleup
+    domain: FinTech
+
+  - name: Chime
+    website: https://www.chime.com
+    size: mid
+    domain: FinTech
+
+  - name: Robinhood
+    website: https://robinhood.com
+    size: large
+    domain: FinTech
+
+  - name: Coinbase
+    website: https://www.coinbase.com
+    size: large
+    domain: FinTech
+
+  - name: Kraken
+    website: https://www.kraken.com
+    size: large
+    domain: FinTech
+
+  - name: Ripple
+    website: https://ripple.com
+    size: mid
+    domain: FinTech
+
+  - name: Marqeta
+    website: https://www.marqeta.com
+    size: large
+    domain: FinTech
+
+  - name: Klarna
+    website: https://www.klarna.com
+    size: large
+    domain: FinTech
+
+  - name: Affirm
+    website: https://www.affirm.com
+    size: large
+    domain: FinTech
+
+  - name: SoFi
+    website: https://www.sofi.com
+    size: large
+    domain: FinTech
+
+  - name: Blend
+    website: https://blend.com
+    size: mid
+    domain: FinTech
+
+  - name: Navan
+    website: https://navan.com
+    size: scaleup
+    domain: FinTech
+
+  - name: Carta
+    website: https://carta.com
+    size: mid
+    domain: FinTech
+
+  # ── Security ──────────────────────────────────────────────────────────────
+  - name: CrowdStrike
+    website: https://www.crowdstrike.com
+    size: large
+    domain: Security
+
+  - name: SentinelOne
+    website: https://www.sentinelone.com
+    size: large
+    domain: Security
+
+  - name: Wiz
+    website: https://www.wiz.io
+    size: scaleup
+    domain: Security
+
+  - name: Orca Security
+    website: https://orca.security
+    size: mid
+    domain: Security
+
+  - name: Snyk
+    website: https://snyk.io
+    size: mid
+    domain: Security
+
+  - name: Lacework
+    website: https://www.lacework.com
+    size: mid
+    domain: Security
+
+  # ── SaaS / Enterprise ─────────────────────────────────────────────────────
+  - name: MongoDB
+    website: https://www.mongodb.com
+    size: large
+    domain: Data Infrastructure
+
+  - name: Elastic
+    website: https://www.elastic.co
+    size: large
+    domain: Data Infrastructure
+
+  - name: Redis
+    website: https://redis.com
+    size: mid
+    domain: Data Infrastructure
+
+  - name: Twilio
+    website: https://www.twilio.com
+    size: large
+    domain: Developer Tools
+
+  - name: Segment
+    website: https://segment.com
+    size: large
+    domain: Data Infrastructure
+
+  - name: Amplitude
+    website: https://amplitude.com
+    size: large
+    domain: Developer Tools
+
+  - name: Mixpanel
+    website: https://mixpanel.com
+    size: mid
+    domain: Developer Tools
+
+  - name: Braze
+    website: https://www.braze.com
+    size: large
+    domain: Developer Tools
+
+  - name: Iterable
+    website: https://iterable.com
+    size: mid
+    domain: Developer Tools
+
+  - name: Klaviyo
+    website: https://www.klaviyo.com
+    size: mid
+    domain: FinTech
+
+  - name: Sendgrid
+    website: https://sendgrid.com
+    size: large
+    domain: Developer Tools
+
+  - name: Postman
+    website: https://www.postman.com
+    size: mid
+    domain: Developer Tools
+
+  - name: Okta
+    website: https://www.okta.com
+    size: large
+    domain: Security
+
+  - name: Auth0
+    website: https://auth0.com
+    size: large
+    domain: Security
+
+  - name: Stytch
+    website: https://stytch.com
+    size: startup
+    domain: Security
+
+  - name: WorkOS
+    website: https://workos.com
+    size: startup
+    domain: Developer Tools
+
+  - name: Rippling
+    website: https://www.rippling.com
+    size: mid
+    domain: FinTech
+
+  - name: Lattice
+    website: https://lattice.com
+    size: mid
+    domain: FinTech
+
+  - name: Notion
+    website: https://www.notion.so
+    size: mid
+    domain: Developer Tools
+
+  - name: Linear
+    website: https://linear.app
+    size: startup
+    domain: Developer Tools
+
+  - name: Retool
+    website: https://retool.com
+    size: mid
+    domain: Developer Tools
+
+  - name: Airtable
+    website: https://www.airtable.com
+    size: mid
+    domain: Developer Tools
+
+  - name: Monday.com
+    website: https://monday.com
+    size: large
+    domain: Developer Tools
+
+  - name: Asana
+    website: https://asana.com
+    size: large
+    domain: Developer Tools
+
+  # ── Healthcare Tech ───────────────────────────────────────────────────────
+  - name: Health Catalyst
+    website: https://www.healthcatalyst.com
+    size: mid
+    domain: Healthcare Tech
+
+  - name: Veeva Systems
+    website: https://www.veeva.com
+    size: large
+    domain: Healthcare Tech
+
+  - name: Epic Systems
+    website: https://www.epic.com
+    size: large
+    domain: Healthcare Tech
+
+  - name: Tempus AI
+    website: https://www.tempus.com
+    size: mid
+    domain: Healthcare Tech
+
+  - name: Flatiron Health
+    website: https://flatiron.com
+    size: mid
+    domain: Healthcare Tech
+
+  - name: Komodo Health
+    website: https://www.komodohealth.com
+    size: mid
+    domain: Healthcare Tech
+
+  - name: Carbon Health
+    website: https://carbonhealth.com
+    size: mid
+    domain: Healthcare Tech
+
+  - name: Cityblock Health
+    website: https://www.cityblock.com
+    size: mid
+    domain: Healthcare Tech
+
+  - name: Cedar
+    website: https://www.cedar.com
+    size: mid
+    domain: Healthcare Tech
+
+  - name: Medallion
+    website: https://medallion.co
+    size: startup
+    domain: Healthcare Tech
+
+  # ── Big Tech (for senior/staff roles) ─────────────────────────────────────
+  - name: Apple
+    website: https://www.apple.com
+    size: large
+    domain: AI/ML
+
+  - name: Meta
+    website: https://www.meta.com
+    size: large
+    domain: AI/ML
+
+  - name: Google
+    website: https://www.google.com
+    size: large
+    domain: AI/ML
+
+  - name: Microsoft
+    website: https://www.microsoft.com
+    size: large
+    domain: AI/ML
+
+  - name: Amazon
+    website: https://www.amazon.com
+    size: large
+    domain: AI/ML
+
+  - name: Netflix
+    website: https://www.netflix.com
+    size: large
+    domain: Developer Tools
+
+  - name: Uber
+    website: https://www.uber.com
+    size: large
+    domain: Developer Tools
+
+  - name: Lyft
+    website: https://www.lyft.com
+    size: large
+    domain: Developer Tools
+
+  - name: DoorDash
+    website: https://www.doordash.com
+    size: large
+    domain: Developer Tools
+
+  - name: Airbnb
+    website: https://www.airbnb.com
+    size: large
+    domain: Developer Tools
+
+  - name: Shopify
+    website: https://www.shopify.com
+    size: large
+    domain: Developer Tools
+
+  - name: Twitch
+    website: https://www.twitch.tv
+    size: large
+    domain: Developer Tools
+
+  - name: Spotify
+    website: https://www.spotify.com
+    size: large
+    domain: Developer Tools
+
+  - name: Pinterest
+    website: https://www.pinterest.com
+    size: large
+    domain: Developer Tools
+
+  - name: Snap
+    website: https://www.snap.com
+    size: large
+    domain: Developer Tools
+
+  - name: Palantir
+    website: https://www.palantir.com
+    size: large
+    domain: Data Infrastructure
+
+  - name: Salesforce
+    website: https://www.salesforce.com
+    size: large
+    domain: Developer Tools
+
+  - name: ServiceNow
+    website: https://www.servicenow.com
+    size: large
+    domain: Developer Tools
+
+  - name: Workday
+    website: https://www.workday.com
+    size: large
+    domain: Developer Tools
+
+  - name: Oracle
+    website: https://www.oracle.com
+    size: large
+    domain: Data Infrastructure
+
+  - name: IBM
+    website: https://www.ibm.com
+    size: large
+    domain: AI/ML
+
+  # ── Emerging AI Startups ──────────────────────────────────────────────────
+  - name: Imbue
+    website: https://imbue.com
+    size: startup
+    domain: AI/ML
+
+  - name: xAI
+    website: https://x.ai
+    size: startup
+    domain: AI/ML
+
+  - name: Aleph Alpha
+    website: https://aleph-alpha.com
+    size: scaleup
+    domain: AI/ML
+
+  - name: AI21 Labs
+    website: https://www.ai21.com
+    size: scaleup
+    domain: AI/ML
+
+  - name: Twelve Labs
+    website: https://twelvelabs.io
+    size: startup
+    domain: AI/ML
+
+  - name: Perplexity AI
+    website: https://www.perplexity.ai
+    size: startup
+    domain: AI/ML
+
+  - name: You.com
+    website: https://you.com
+    size: startup
+    domain: AI/ML
+
+  - name: Synthesia
+    website: https://www.synthesia.io
+    size: scaleup
+    domain: AI/ML
+
+  - name: Tavus
+    website: https://www.tavus.io
+    size: startup
+    domain: AI/ML
+
+  - name: HeyGen
+    website: https://www.heygen.com
+    size: startup
+    domain: AI/ML
+
+  - name: Jasper AI
+    website: https://www.jasper.ai
+    size: mid
+    domain: AI/ML
+
+  - name: Writer
+    website: https://writer.com
+    size: scaleup
+    domain: AI/ML
+
+  - name: Harvey AI
+    website: https://www.harvey.ai
+    size: startup
+    domain: AI/ML
+
+  - name: Glean
+    website: https://www.glean.com
+    size: scaleup
+    domain: AI/ML
+
+  - name: Guru Technologies
+    website: https://www.getguru.com
+    size: mid
+    domain: AI/ML
+
+  - name: Kore.ai
+    website: https://kore.ai
+    size: mid
+    domain: AI/ML
+
+  - name: Observe AI
+    website: https://www.observe.ai
+    size: mid
+    domain: AI/ML
+
+  - name: Cresta
+    website: https://cresta.com
+    size: mid
+    domain: AI/ML
+
+  - name: Sierra AI
+    website: https://sierra.ai
+    size: startup
+    domain: AI/ML
+
+  - name: Cognition AI
+    website: https://www.cognition.ai
+    size: startup
+    domain: AI/ML
+
+  - name: Magic AI
+    website: https://magic.dev
+    size: startup
+    domain: AI/ML
+
+  - name: Poolside
+    website: https://poolside.ai
+    size: startup
+    domain: AI/ML
+
+  - name: Etched
+    website: https://etched.com
+    size: startup
+    domain: AI/ML
+
+  - name: Contextual AI
+    website: https://contextual.ai
+    size: startup
+    domain: AI/ML
+
+  - name: Gradient AI
+    website: https://gradient.ai
+    size: startup
+    domain: AI/ML
+
+  - name: Nomic AI
+    website: https://nomic.ai
+    size: startup
+    domain: AI/ML
+
+  - name: Cohere for AI
+    website: https://cohere.com
+    size: scaleup
+    domain: AI/ML
+
+  - name: Jina AI
+    website: https://jina.ai
+    size: startup
+    domain: AI/ML
+
+  - name: LlamaIndex
+    website: https://www.llamaindex.ai
+    size: startup
+    domain: AI/ML
+
+  - name: Unstructured IO
+    website: https://unstructured.io
+    size: startup
+    domain: AI/ML
+
+  - name: BoundaryML
+    website: https://boundaryml.com
+    size: startup
+    domain: AI/ML
+
+  - name: Axflow
+    website: https://axflow.dev
+    size: startup
+    domain: AI/ML
+
+  - name: Orq.ai
+    website: https://orq.ai
+    size: startup
+    domain: AI/ML
+
+  - name: Humanloop
+    website: https://humanloop.com
+    size: startup
+    domain: AI/ML
+
+  - name: Parea AI
+    website: https://www.parea.ai
+    size: startup
+    domain: AI/ML
+
+  - name: PromptLayer
+    website: https://promptlayer.com
+    size: startup
+    domain: AI/ML
