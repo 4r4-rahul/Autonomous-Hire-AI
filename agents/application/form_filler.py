@@ -3498,7 +3498,7 @@ async def _fill_workday(page: Page, profile: dict, resume_pdf: Path, job: JobLis
                 interactive = _g_mode == "interactive"
                 if interactive:
                     logger.info("workday_google_login_wait",
-                                note="Sign into Google (4r4rahul@gmail.com) in the popup window")
+                                note="Sign into Google (the applicant Gmail account) in the popup window")
                 # auto: a generous-enough window for the Google OAuth round-trip +
                 # Workday redirect (15s occasionally timed out → spurious needs_auth).
                 max_wait, waited, signed = (300 if interactive else 30), 0, False
@@ -5056,7 +5056,7 @@ def gmail_token_healthy() -> bool:
 
 async def _fetch_greenhouse_verification_code(not_before: float | None = None) -> str | None:
     """
-    Poll 4r4rahul@gmail.com for a Greenhouse 8-char security code.
+    Poll the applicant Gmail account for a Greenhouse 8-char security code.
     Uses OAuth2 refresh token from Settings. Returns code string or None.
     not_before: Unix timestamp; skip emails received before this time (avoids reusing codes from prior apps).
     """
@@ -5360,7 +5360,7 @@ async def _phase_submit(
                             logger.warning(
                                 "email_verification_required",
                                 url=url_after,
-                                note="Greenhouse sent a verification code to 4r4rahul@gmail.com — attempting auto-fetch.",
+                                note="Greenhouse sent a verification code to the applicant Gmail account — attempting auto-fetch.",
                             )
                             # Attempt to auto-fetch the code from Gmail and enter it
                             # Subtract 30s buffer: email arrives ~0-5s after submit click,
@@ -5411,7 +5411,7 @@ async def _phase_submit(
                             else:
                                 logger.warning("greenhouse_code_not_found",
                                                note="Code not in Gmail within 30s — marking pending_manual_submit. "
-                                                    "Check 4r4rahul@gmail.com for the 8-char code and re-run, "
+                                                    "Check the applicant Gmail account for the 8-char code and re-run, "
                                                     "or set GMAIL_REFRESH_TOKEN/CLIENT_ID/CLIENT_SECRET in .env.")
                                 # Code not entered → application NOT actually submitted
                                 return False, "email_verification_pending"

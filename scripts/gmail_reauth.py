@@ -3,7 +3,7 @@ Non-interactive Gmail re-auth: refreshes GMAIL_REFRESH_TOKEN in .env.
 
 Reuses the existing GMAIL_CLIENT_ID / GMAIL_CLIENT_SECRET from settings (no stdin
 prompts). Opens the Google consent page in the browser and catches the redirect on
-localhost:8765. The human just signs in to the APPLICANT account (4r4rahul@gmail.com)
+localhost:8765. The human just signs in to the APPLICANT account (the applicant Gmail account)
 and clicks Allow.
 
 Run:
@@ -68,7 +68,7 @@ def main() -> None:
     threading.Thread(target=server.serve_forever, daemon=True).start()
 
     _emit("<<AUTH_URL>> " + auth_url)
-    _emit("<<WAITING>> Sign in as 4r4rahul@gmail.com and click Allow (up to 5 min)…")
+    _emit("<<WAITING>> Sign in as the applicant Gmail account and click Allow (up to 5 min)…")
     try:
         webbrowser.open(auth_url)
     except Exception:

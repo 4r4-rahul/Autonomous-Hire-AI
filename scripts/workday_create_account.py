@@ -7,7 +7,7 @@ Replicates the exact DOM-proven sequence for a Workday career site:
   (native click fires Workday's trusted-event validation; JS .checked does not) →
   Create Account submit → poll Gmail for the verification LINK → open it.
 
-Creates an account with 4r4rahul@gmail.com + the stored password so the
+Creates an account with the applicant Gmail account + the stored password so the
 application wizard can sign in later. Generalizes to any *.myworkdayjobs.com site.
 
 Usage:
