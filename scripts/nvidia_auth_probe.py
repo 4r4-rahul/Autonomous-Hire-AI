@@ -62,7 +62,7 @@ async def main():
         import yaml as _yaml
         _defs = (_yaml.safe_load(open("data/user_profile.yaml")).get("application_defaults", {})
                  if __import__("os").path.exists("data/user_profile.yaml") else {})
-        EMAIL = _defs.get("workday_email") or "candidate@example.com"
+        EMAIL = _defs.get("workday_email") or _defs.get("email") or ""
         PW = _gs().workday_password or _defs.get("workday_password", "")
         try:
             await page.locator("[data-automation-id='email']").first.fill(EMAIL)
