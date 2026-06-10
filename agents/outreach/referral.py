@@ -54,7 +54,9 @@ async def build_referral_kit(app_id: str = "", *, draft: bool = True) -> dict:
         return {"error": "application not found"}
     company, role = app.get("company_name", ""), app.get("role_title", "")
     jl = {j.get("id"): j for j in state.get("job_listings", [])}
-    job_url = (jl.get(app.get("job_id")) or {}).get("apply_url", "")
+    jobrec = jl.get(app.get("job_id")) or {}
+    job_url = jobrec.get("apply_url", "")
+    jd = jobrec.get("description", "")
     kit = {"company": company, "role": role, "job_url": job_url,
            "search_urls": search_urls(company, role),
            "connect_note": "", "referral_ask": "", "why_me": "", "mutual_intro": ""}
@@ -99,9 +101,25 @@ async def build_referral_kit(app_id: str = "", *, draft: bool = True) -> dict:
         'paste into the internal "why refer them" box.\n'
         '  "mutual_intro": 2 short sentences to a MUTUAL ('"'"'[Mutual]'"'"') asking for an intro to '
         "someone at the company.")
+    # Lead with the facts that match THIS role's domain (data-platform vs AI/ML), not always AI.
+    try:
+        from agents.application.resume_tailor import role_domain as _rd
+        domain = _rd(role, jd)
+    except Exception:
+        domain = "general"
+    emphasis = {
+        "data_platform": "This is a DATA-PLATFORM / data-engineering role. Lead with the candidate's "
+            "data-platform work (pipelines, streaming, orchestration, warehouse/lakehouse, scale). Do "
+            "NOT lead with LLM/RAG/AI — mention AI only if it's clearly relevant, briefly.",
+        "ai_ml": "This is an AI/ML role. Lead with the candidate's AI/ML/LLM/MLOps work (RAG, model "
+            "serving, multi-agent, MLOps).",
+        "hybrid": "This role blends data infra and ML. Balance the two as the role implies.",
+        "general": "Lead with whatever in the candidate's background most directly matches this role.",
+    }[domain]
     user = (f"CANDIDATE (the sender): {name} — currently at {cur_co}.\n"
             f"Candidate background: {summary}\nCandidate core skills: {skills}\n"
             f"Target company: {company} · Target role: {role}\nJob link: {job_url}\n"
+            f"EMPHASIS: {emphasis}\n"
             "Write the four messages now, in the candidate's voice.")
     try:
         raw = await llm.chat(system, [{"role": "user", "content": user}], max_tokens=700, temperature=0.6)

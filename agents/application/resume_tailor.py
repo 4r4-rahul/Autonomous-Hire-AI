@@ -151,6 +151,54 @@ async def _extract_ats_keywords(jd_text: str, llm) -> list[str]:
 
 # ── Step 3: Tailoring ─────────────────────────────────────────────────────
 
+_AI_TERMS = ("machine learning", "ml engineer", "ai engineer", "ai/ml", " ml ", "llm", "genai",
+             "gen ai", "generative", "mlops", "ml platform", "ai platform", "ai infrastructure",
+             "deep learning", "applied scientist", "nlp", "computer vision", "model serving", "rag",
+             "fine-tun", "inference", "embeddings", "vector database")
+_DATA_TERMS = ("data platform", "data engineer", "data infrastructure", "data pipeline", "etl", "elt",
+               "analytics engineer", "data warehouse", "data lake", "lakehouse", "streaming", "spark",
+               "kafka", "flink", "airflow", "dagster", "dbt", "snowflake", "databricks", "bigquery",
+               "data modeling", "data quality", "data governance", "ingestion", "iceberg", "delta lake")
+
+
+def role_domain(title: str, jd: str) -> str:
+    """Classify a role as 'ai_ml', 'data_platform', 'hybrid', or 'general' from its title + JD.
+    Title counts double (strongest signal); JD breaks ties. Drives how the résumé is weighted."""
+    t, j = (title or "").lower(), (jd or "").lower()
+    ai = sum(2 for k in _AI_TERMS if k in t) + sum(1 for k in _AI_TERMS if k in j)
+    data = sum(2 for k in _DATA_TERMS if k in t) + sum(1 for k in _DATA_TERMS if k in j)
+    if ai == 0 and data == 0:
+        return "general"
+    if ai >= data * 1.3:
+        return "ai_ml"
+    if data >= ai * 1.3:
+        return "data_platform"
+    return "hybrid"
+
+
+def _emphasis_directive(domain: str) -> tuple[str, bool]:
+    """(directive text, projects_first). The directive is the DOMINANT per-job instruction — it
+    overrides the résumé's default AI lean so emphasis mirrors what THIS JD actually asks for."""
+    if domain == "ai_ml":
+        return ("ROLE EMPHASIS = AI/ML. Weight the résumé ~70% toward AI/ML/LLM/MLOps work (RAG, model "
+                "serving, multi-agent, vector DBs, MLOps, training/inference infra). Lead the summary "
+                "and every section with AI impact, in the JD's exact terms. AI Projects come first.", True)
+    if domain == "data_platform":
+        return ("ROLE EMPHASIS = DATA PLATFORM / DATA ENGINEERING. Weight the résumé ~70% toward "
+                "data-platform work: batch + streaming pipelines, orchestration (Airflow/dbt), "
+                "warehouse/lakehouse, data modeling, data quality/governance, reliability and scale, in "
+                "the JD's exact tooling terms. Lead the summary and every section with DATA-PLATFORM "
+                "impact. Keep AI/ML to AT MOST one brief mention, and ONLY if this JD asks for it — do "
+                "NOT lead with RAG/LLM/agents. Professional Experience comes before projects. Include "
+                "ONLY what this JD asks for, nothing extra.", False)
+    if domain == "hybrid":
+        return ("ROLE EMPHASIS = HYBRID (data + ML, e.g. ML-platform). Mirror the JD's own ratio of "
+                "data-infrastructure vs ML/MLOps; lead with whichever the JD names first/most. Balance "
+                "roughly evenly unless the JD clearly leans one way.", False)
+    return ("ROLE EMPHASIS = match the JD exactly. Lead with the skills/experience THIS JD asks for and "
+            "include only what is relevant. Do NOT force an AI angle onto a non-AI role.", False)
+
+
 async def _tailor_resume(
     job: JobListing,
     fit_score: FitScore,
@@ -179,8 +227,15 @@ CANDIDATE AI/ML SKILLS TO DRAW FROM (use aggressively for AI roles):
 CANDIDATE AI SYSTEMS SKILLS (production AI patterns):
 {json.dumps(profile.get('skills', {}).get('ai_systems', []))}""".strip()
 
+    # Role-matched emphasis — the dominant instruction for THIS job. Mirrors the JD's actual focus
+    # (data-platform vs AI/ML) instead of always leading with AI.
+    _domain = role_domain(job.get("title", ""), job.get("description", ""))
+    _directive, _projects_first = _emphasis_directive(_domain)
+
     # VARIABLE block — changes per job, never cached.
-    variable_block = f"""JOB TITLE: {job['title']}
+    variable_block = f"""*** {_directive} ***
+
+JOB TITLE: {job['title']}
 COMPANY: {job['company_name']}
 LOCATION: {job['location']} | Remote: {job['remote']}
 
@@ -201,8 +256,9 @@ FIT SCORE: {fit_score['score']}/100
 MATCH HIGHLIGHTS: {json.dumps(fit_score.get('highlights', fit_score.get('match_highlights', [])))}
 GAPS TO ADDRESS: {json.dumps(fit_score.get('missing_keywords', fit_score.get('missing_skills', [])))}
 
-IS AI ROLE: {any(kw in job['title'].lower() for kw in ['ai', 'ml', 'llm', 'genai', 'machine learning', 'mlops', 'platform'])}
-If IS AI ROLE is true: projects section MUST appear before professional experience in the output JSON (add "projects_first": true).""".strip()
+ROLE DOMAIN: {_domain}
+SECTION ORDER: {'AI Projects BEFORE Professional Experience' if _projects_first else 'Professional Experience BEFORE projects'} — set "projects_first": {str(_projects_first).lower()} in the output JSON.
+Follow the ROLE EMPHASIS at the top: keep the résumé lean and matched to THIS JD — include only what it asks for.""".strip()
 
     messages = [{
         "role": "user",
