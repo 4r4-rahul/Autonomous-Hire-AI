@@ -166,6 +166,7 @@ Produce a tailored resume as a JSON object:
 
 Rules:
 - NEVER fabricate experience, titles, companies, or metrics
+- Job TITLES, EMPLOYERS, and DATES are immutable — copy them VERBATIM from the base résumé. Even for an AI/ML target, do NOT re-title a role (e.g. the JPMorgan role stays "Senior Software Engineer, Data Platforms"; never rename it to an AI/ML title). Reframe the BULLETS, never the title.
 - ONLY reframe real experience using the company's language
 - Keep all factual claims truthful — reorder, re-emphasize, re-phrase, but never invent
 - Include 4-6 bullets per role (not more)
