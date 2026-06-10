@@ -15,6 +15,7 @@ No LinkedIn automation, no account risk — the user sends from their own sessio
 from __future__ import annotations
 
 import json
+import re
 from urllib.parse import quote
 from pathlib import Path
 
@@ -75,31 +76,49 @@ async def build_referral_kit(app_id: str = "", *, draft: bool = True) -> dict:
     # referrer can paste into the internal referral form, and a warm-intro template for 2nd-degree.
     llm = get_llm("referral", model="claude-haiku-4-5")
     system = (
-        "The CANDIDATE is the SENDER. Write every message in the first person AS the candidate, "
-        "addressed to a TARGET EMPLOYEE at the company (use '[Name]' for that employee). NEVER "
-        "address the candidate by name or praise the candidate as if they're the recipient — the "
-        "candidate is writing these, describing THEIR OWN background. Peer-to-peer, specific, never "
-        "needy or salesy. NO fabrication — use only the candidate facts given. Return STRICT JSON:\n"
-        '  "connect_note": <=280 chars LinkedIn connection note FROM the candidate TO [Name]. Lead '
-        "with who the candidate is (their own background) + ONE genuine reason to connect, including "
-        "a literal '[their work/post]' slot to personalize. NO ask, NO mention of referral/applying.\n"
-        '  "referral_ask": 3-5 sentences FROM the candidate TO [Name], to send AFTER they accept. '
-        "State ONE concrete accomplishment of the candidate, then a low-pressure optional referral "
-        "ask that makes yes effortless (offer to send résumé + a ready blurb, ~2 min, 'totally fine "
-        "if not — even a pointer helps').\n"
-        '  "why_me": exactly 2 sentences ABOUT the candidate (third person) that [Name] can paste '
-        'into the internal "why are you referring them" box.\n'
-        '  "mutual_intro": 2 sentences FROM the candidate TO a MUTUAL connection ('"'"'[Mutual]'"'"'), '
-        "asking them to introduce the candidate to someone at the company.")
+        "The CANDIDATE is the SENDER. Write every message in first person AS the candidate, to a "
+        "TARGET EMPLOYEE (use '[Name]'). Never address the candidate by name or praise them as the "
+        "recipient. Use ONLY the facts given — no fabrication.\n\n"
+        "VOICE — this is the whole point: write like a real, busy senior engineer typing on their "
+        "phone. Plain, direct, a little understated. Short sentences. Contractions. Confident, not "
+        "eager. Every word earns its place. It must NOT read like AI or a template.\n"
+        "HARD BANS (these are dead giveaways — never use any): 'I hope this finds you well', 'I came "
+        "across/stumbled on your profile', 'caught my eye', 'stood out', 'I'd love to connect', 'I'm "
+        "reaching out', 'passionate about', 'excited about the opportunity', 'thrilled', 'genuinely', "
+        "'truly', 'really' (as filler), 'leverage', 'utilize', 'synergy', 'spearheaded', 'robust', "
+        "'cutting-edge', 'deep dive', 'Looking forward to...', 'As a ___ with X years'. NO em-dashes "
+        "or en-dashes (use commas/periods). NO smart quotes. NO three-item parallel lists. Don't open "
+        "with 'Hi [Name], I hope'. Mention ONE concrete specific, not a resume dump.\n\n"
+        "Return STRICT JSON:\n"
+        '  "connect_note": <=280 chars connection note. Who the candidate is in a few words + ONE real '
+        "reason to connect, with a literal '[their work/post]' slot to personalize. NO ask.\n"
+        '  "referral_ask": 3-4 short sentences to send AFTER they accept. One concrete thing the '
+        "candidate built, then a low-pressure ask that makes yes easy (offer resume + a ready blurb, "
+        "couple minutes, fine if not, even a pointer helps).\n"
+        '  "why_me": exactly 2 plain sentences ABOUT the candidate (third person) the employee can '
+        'paste into the internal "why refer them" box.\n'
+        '  "mutual_intro": 2 short sentences to a MUTUAL ('"'"'[Mutual]'"'"') asking for an intro to '
+        "someone at the company.")
     user = (f"CANDIDATE (the sender): {name} — currently at {cur_co}.\n"
             f"Candidate background: {summary}\nCandidate core skills: {skills}\n"
             f"Target company: {company} · Target role: {role}\nJob link: {job_url}\n"
             "Write the four messages now, in the candidate's voice.")
     try:
-        raw = await llm.chat(system, [{"role": "user", "content": user}], max_tokens=700, temperature=0.5)
+        raw = await llm.chat(system, [{"role": "user", "content": user}], max_tokens=700, temperature=0.6)
         data = json.loads(raw[raw.find("{"): raw.rfind("}") + 1])
         for k in ("connect_note", "referral_ask", "why_me", "mutual_intro"):
-            kit[k] = data.get(k, "")
+            kit[k] = _humanize(data.get(k, ""))
     except Exception as e:
         logger.warning("referral_draft_failed", company=company, error=str(e)[:90])
     return kit
+
+
+def _humanize(t: str) -> str:
+    """Strip the visual AI tells the model still leaks: em/en-dashes and smart quotes → plain. Keeps
+    the text reading like something a person typed, not generated."""
+    if not t:
+        return t
+    for a, b in (("—", ", "), ("–", "-"), ("’", "'"), ("‘", "'"),
+                 ("“", '"'), ("”", '"'), ("…", "...")):
+        t = t.replace(a, b)
+    return re.sub(r"\s+,", ",", re.sub(r" {2,}", " ", t)).strip()
