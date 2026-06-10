@@ -52,29 +52,54 @@ async def build_referral_kit(app_id: str = "", *, draft: bool = True) -> dict:
     if not app:
         return {"error": "application not found"}
     company, role = app.get("company_name", ""), app.get("role_title", "")
-    kit = {"company": company, "role": role, "search_urls": search_urls(company, role),
-           "connect_note": "", "referral_ask": ""}
+    jl = {j.get("id"): j for j in state.get("job_listings", [])}
+    job_url = (jl.get(app.get("job_id")) or {}).get("apply_url", "")
+    kit = {"company": company, "role": role, "job_url": job_url,
+           "search_urls": search_urls(company, role),
+           "connect_note": "", "referral_ask": "", "why_me": "", "mutual_intro": ""}
     if not draft:
         return kit
 
     profile = yaml.safe_load(_PROFILE.read_text()) if _PROFILE.exists() else {}
     pers = profile.get("personal", {}) or {}
     name = pers.get("name") or pers.get("full_name") or ""
-    summary = (profile.get("summary") or "")[:400]
-    llm = get_llm("referral", model="claude-haiku-4-5")   # cheap; not the on-demand-tailor exemption
+    summary = (profile.get("summary") or "")[:500]
+    skills = ", ".join((profile.get("skills", {}) or {}).get("primary", [])[:8]) \
+        if isinstance(profile.get("skills"), dict) else ""
+    wh = profile.get("work_history") or []
+    current = (wh[0] if wh else {}) if isinstance(wh, list) else {}
+    cur_co = current.get("company") or (profile.get("application_defaults", {}) or {}).get("current_company", "")
+
+    # The EXPERT flow: a connect note with NO ask (leading with an ask lowers acceptance), a
+    # separate post-accept referral ask that makes the YES effortless, a 2-line "why me" the
+    # referrer can paste into the internal referral form, and a warm-intro template for 2nd-degree.
+    llm = get_llm("referral", model="claude-haiku-4-5")
     system = (
-        "You write concise, genuine LinkedIn outreach for a job seeker. No fluff, no buzzwords, "
-        "no fabrication. Return STRICT JSON: {\"connect_note\": str (<=280 chars, a connection "
-        "request note), \"referral_ask\": str (3-4 sentences, a polite referral-ask DM referencing "
-        "the specific role)}. Warm, specific, respectful of their time.")
-    user = (f"Candidate: {name}. Background: {summary}\n"
-            f"Target role: {role} at {company}.\n"
-            "Write outreach to a current employee/recruiter at the company.")
+        "The CANDIDATE is the SENDER. Write every message in the first person AS the candidate, "
+        "addressed to a TARGET EMPLOYEE at the company (use '[Name]' for that employee). NEVER "
+        "address the candidate by name or praise the candidate as if they're the recipient — the "
+        "candidate is writing these, describing THEIR OWN background. Peer-to-peer, specific, never "
+        "needy or salesy. NO fabrication — use only the candidate facts given. Return STRICT JSON:\n"
+        '  "connect_note": <=280 chars LinkedIn connection note FROM the candidate TO [Name]. Lead '
+        "with who the candidate is (their own background) + ONE genuine reason to connect, including "
+        "a literal '[their work/post]' slot to personalize. NO ask, NO mention of referral/applying.\n"
+        '  "referral_ask": 3-5 sentences FROM the candidate TO [Name], to send AFTER they accept. '
+        "State ONE concrete accomplishment of the candidate, then a low-pressure optional referral "
+        "ask that makes yes effortless (offer to send résumé + a ready blurb, ~2 min, 'totally fine "
+        "if not — even a pointer helps').\n"
+        '  "why_me": exactly 2 sentences ABOUT the candidate (third person) that [Name] can paste '
+        'into the internal "why are you referring them" box.\n'
+        '  "mutual_intro": 2 sentences FROM the candidate TO a MUTUAL connection ('"'"'[Mutual]'"'"'), '
+        "asking them to introduce the candidate to someone at the company.")
+    user = (f"CANDIDATE (the sender): {name} — currently at {cur_co}.\n"
+            f"Candidate background: {summary}\nCandidate core skills: {skills}\n"
+            f"Target company: {company} · Target role: {role}\nJob link: {job_url}\n"
+            "Write the four messages now, in the candidate's voice.")
     try:
-        raw = await llm.chat(system, [{"role": "user", "content": user}], max_tokens=400, temperature=0.5)
+        raw = await llm.chat(system, [{"role": "user", "content": user}], max_tokens=700, temperature=0.5)
         data = json.loads(raw[raw.find("{"): raw.rfind("}") + 1])
-        kit["connect_note"] = data.get("connect_note", "")
-        kit["referral_ask"] = data.get("referral_ask", "")
+        for k in ("connect_note", "referral_ask", "why_me", "mutual_intro"):
+            kit[k] = data.get(k, "")
     except Exception as e:
         logger.warning("referral_draft_failed", company=company, error=str(e)[:90])
     return kit
