@@ -151,52 +151,89 @@ async def _extract_ats_keywords(jd_text: str, llm) -> list[str]:
 
 # ── Step 3: Tailoring ─────────────────────────────────────────────────────
 
-_AI_TERMS = ("machine learning", "ml engineer", "ai engineer", "ai/ml", " ml ", "llm", "genai",
-             "gen ai", "generative", "mlops", "ml platform", "ai platform", "ai infrastructure",
-             "deep learning", "applied scientist", "nlp", "computer vision", "model serving", "rag",
-             "fine-tun", "inference", "embeddings", "vector database")
-_DATA_TERMS = ("data platform", "data engineer", "data infrastructure", "data pipeline", "etl", "elt",
-               "analytics engineer", "data warehouse", "data lake", "lakehouse", "streaming", "spark",
-               "kafka", "flink", "airflow", "dagster", "dbt", "snowflake", "databricks", "bigquery",
-               "data modeling", "data quality", "data governance", "ingestion", "iceberg", "delta lake")
+# Keyword sets per target category. Title hits count double (strongest signal); JD breaks ties.
+_DOMAIN_TERMS = {
+    # ML modeling / training / serving / MLOps
+    "ai_ml": ("machine learning", "ml engineer", "ml platform", "mlops", "model serving", "model training",
+              "applied scientist", "deep learning", "fine-tun", "inference", "recommendation", "ranking"),
+    # LLM/GenAI APPLICATION building, prompt eng, agents, Claude/Anthropic, AI coding tools
+    "ai_engineer": ("ai engineer", "prompt engineer", "prompt engineering", "genai", "gen ai", "generative ai",
+                    "llm", "rag", "retrieval-augmented", "agent", "agentic", "claude", "anthropic", "openai",
+                    "vector database", "embeddings", "ai application", "ai product", "copilot", "ai coding",
+                    "developer tool", "developer experience", "devrel", "developer advocate", "mcp", "tool-use"),
+    # Data infrastructure (home turf)
+    "data_platform": ("data platform", "data engineer", "data infrastructure", "data pipeline", "etl", "elt",
+                      "analytics engineer", "data warehouse", "data lake", "lakehouse", "streaming", "spark",
+                      "kafka", "flink", "airflow", "dagster", "dbt", "snowflake", "databricks", "bigquery",
+                      "data modeling", "data quality", "data governance", "ingestion", "iceberg", "delta lake"),
+    # Solutions / sales / forward-deployed / customer-facing technical
+    "solutions_eng": ("solutions engineer", "solution engineer", "sales engineer", "solutions architect",
+                      "pre-sales", "presales", "forward deployed", "forward-deployed", "field engineer",
+                      "implementation engineer", "customer engineer", "technical account", "deployment strategist",
+                      "professional services", "integration engineer"),
+    # Systems / infra / platform / distributed / backend / reliability
+    "systems_eng": ("systems engineer", "infrastructure engineer", "platform engineer", "distributed systems",
+                    "backend engineer", "backend software", "site reliability", "reliability engineer",
+                    "kubernetes", "terraform", "scalability", "high availability", "observability", "cloud engineer"),
+}
+_DOMAIN_ORDER = ("ai_engineer", "ai_ml", "data_platform", "solutions_eng", "systems_eng")
 
 
 def role_domain(title: str, jd: str) -> str:
-    """Classify a role as 'ai_ml', 'data_platform', 'hybrid', or 'general' from its title + JD.
-    Title counts double (strongest signal); JD breaks ties. Drives how the résumé is weighted."""
+    """Classify a role into one of the target categories (ai_engineer / ai_ml / data_platform /
+    solutions_eng / systems_eng), or 'hybrid'/'general'. Title hits count double; JD breaks ties.
+    Drives which specialized résumé emphasis is used."""
     t, j = (title or "").lower(), (jd or "").lower()
-    ai = sum(2 for k in _AI_TERMS if k in t) + sum(1 for k in _AI_TERMS if k in j)
-    data = sum(2 for k in _DATA_TERMS if k in t) + sum(1 for k in _DATA_TERMS if k in j)
-    if ai == 0 and data == 0:
+    scores = {d: sum(2 for k in terms if k in t) + sum(1 for k in terms if k in j)
+              for d, terms in _DOMAIN_TERMS.items()}
+    top = max(scores.values())
+    if top == 0:
         return "general"
-    if ai >= data * 1.3:
-        return "ai_ml"
-    if data >= ai * 1.3:
-        return "data_platform"
-    return "hybrid"
+    winners = [d for d in _DOMAIN_ORDER if scores[d] == top]
+    if len(winners) > 1:
+        return "hybrid"
+    return winners[0]
 
 
 def _emphasis_directive(domain: str) -> tuple[str, bool]:
     """(directive text, projects_first). The directive is the DOMINANT per-job instruction — it
-    overrides the résumé's default AI lean so emphasis mirrors what THIS JD actually asks for."""
-    if domain == "ai_ml":
-        return ("ROLE EMPHASIS = AI/ML. Weight the résumé ~70% toward AI/ML/LLM/MLOps work (RAG, model "
-                "serving, multi-agent, vector DBs, MLOps, training/inference infra). Lead the summary "
-                "and every section with AI impact, in the JD's exact terms. AI Projects come first.", True)
-    if domain == "data_platform":
-        return ("ROLE EMPHASIS = DATA PLATFORM / DATA ENGINEERING. Weight the résumé ~70% toward "
-                "data-platform work: batch + streaming pipelines, orchestration (Airflow/dbt), "
-                "warehouse/lakehouse, data modeling, data quality/governance, reliability and scale, in "
-                "the JD's exact tooling terms. Lead the summary and every section with DATA-PLATFORM "
-                "impact. Keep AI/ML to AT MOST one brief mention, and ONLY if this JD asks for it — do "
-                "NOT lead with RAG/LLM/agents. Professional Experience comes before projects. Include "
-                "ONLY what this JD asks for, nothing extra.", False)
-    if domain == "hybrid":
-        return ("ROLE EMPHASIS = HYBRID (data + ML, e.g. ML-platform). Mirror the JD's own ratio of "
-                "data-infrastructure vs ML/MLOps; lead with whichever the JD names first/most. Balance "
-                "roughly evenly unless the JD clearly leans one way.", False)
-    return ("ROLE EMPHASIS = match the JD exactly. Lead with the skills/experience THIS JD asks for and "
-            "include only what is relevant. Do NOT force an AI angle onto a non-AI role.", False)
+    selects which specialized résumé to produce so emphasis mirrors THIS JD's category."""
+    D = {
+        "ai_ml": ("ROLE EMPHASIS = AI/ML (modeling, training, serving, MLOps). Weight ~70% toward model "
+                  "serving, MLOps, training/inference infra, feature pipelines, evaluation. Lead with AI/ML "
+                  "impact in the JD's exact terms. AI Projects come first.", True),
+        "ai_engineer": ("ROLE EMPHASIS = AI ENGINEER (building LLM/GenAI applications — incl. prompt "
+                        "engineering, agents, Claude/Anthropic, AI dev tools). Weight ~70% toward SHIPPING "
+                        "real LLM systems: RAG pipelines, multi-agent systems, prompt engineering + "
+                        "evaluation, LLM API integration (Claude/Anthropic, GPT-4), tool-use/function "
+                        "calling, vector search, human-in-the-loop. Lead with the candidate's shipped AI "
+                        "systems (the 20-agent autonomous platform on LangGraph + Claude + RAG, and the "
+                        "production RAG system). This is APPLICATION/systems building with LLMs, NOT model "
+                        "training. AI Projects come first.", True),
+        "data_platform": ("ROLE EMPHASIS = DATA PLATFORM / DATA ENGINEERING. Weight ~70% toward batch + "
+                          "streaming pipelines, orchestration (Airflow/dbt), warehouse/lakehouse, data "
+                          "modeling, data quality/governance, reliability and scale, in the JD's exact "
+                          "terms. Lead with DATA-PLATFORM impact. Keep AI/ML to at most one brief mention, "
+                          "and only if the JD asks. Professional Experience before projects. Lean — only "
+                          "what the JD asks for.", False),
+        "solutions_eng": ("ROLE EMPHASIS = SOLUTIONS / SALES / FORWARD-DEPLOYED ENGINEERING (customer-facing "
+                          "technical). Weight ~70% toward turning complex systems into business value: "
+                          "stakeholder-facing delivery, integrations/implementations, technical "
+                          "communication, breadth across the stack, and partnering with teams/customers. "
+                          "Lead with cross-functional, delivery, and impact-on-others bullets (e.g. "
+                          "'partnered with 8 downstream teams to ship X'). Show you both BUILD and "
+                          "COMMUNICATE; keep deep internals brief. Professional Experience before projects.", False),
+        "systems_eng": ("ROLE EMPHASIS = SYSTEMS / INFRASTRUCTURE / PLATFORM ENGINEERING. Weight ~70% "
+                        "toward distributed systems, scale, reliability, infrastructure (Kubernetes, cloud, "
+                        "Terraform/IaC), backend services, performance and operational excellence. Lead with "
+                        "systems-level impact (throughput, latency, uptime, scale) in the JD's terms. Keep "
+                        "AI/ML brief unless the JD asks. Professional Experience before projects.", False),
+        "hybrid": ("ROLE EMPHASIS = HYBRID. Mirror the JD's own balance across the relevant areas; lead with "
+                   "whichever it names first/most. Don't over-index on AI if the JD doesn't.", False),
+    }
+    return D.get(domain, (
+        "ROLE EMPHASIS = match the JD exactly. Lead with the skills/experience THIS JD asks for; include "
+        "only what is relevant. Do NOT force an AI angle onto a non-AI role.", False))
 
 
 async def _tailor_resume(

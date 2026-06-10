@@ -29,22 +29,33 @@ _BOARD_SPONSORS = _ROOT / "data" / "board_sponsors.json"
 _SPONSORS = _ROOT / "data" / "h1b_sponsors.json"
 _CURSOR = _ROOT / "data" / "board_scan_cursor.json"
 
-# Titles worth tailoring for — Rahul: data / ML / platform / backend / SWE. At least one must hit.
+# Titles worth tailoring for — Rahul's target categories: data-platform, ML, AI-engineer (LLM apps/
+# prompt/Claude), solutions-eng, systems-eng, platform/backend. At least one must hit.
 _TITLE_INCLUDE = (
     "data engineer", "machine learning", "ml engineer", "mlops", "ai engineer", "ai/ml",
     "platform engineer", "software engineer", "software developer", "backend", "back end",
     "back-end", "data platform", "data infrastructure", "infrastructure engineer", "devops",
     "site reliability", "sre", "cloud engineer", "applied scientist", "full stack", "fullstack",
     "genai", "llm", "distributed systems",
+    # AI-engineer / prompt / Claude-code / dev-tools side
+    "prompt engineer", "ai/ml engineer", "generative ai", "developer tool", "developer experience",
+    "developer advocate", "devrel", "agent", "rag", "applied ai",
+    # Solutions / forward-deployed side
+    "solutions engineer", "solution engineer", "forward deployed", "forward-deployed",
+    "sales engineer", "implementation engineer", "customer engineer", "integration engineer",
+    "deployment strategist", "professional services", "field engineer",
+    # Systems side
+    "systems engineer", "reliability engineer",
 )
 # Obvious non-fits even if a title keyword slips through (seniority / discipline mismatch).
 _TITLE_EXCLUDE = (
-    # NOTE: "principal"/"staff " are NOT excluded — they're stated target roles (Staff Engineer).
+    # NOTE: "principal"/"staff " are targets (Staff Engineer). Solutions/sales/forward-deployed
+    # ENGINEER titles are now TARGETS too (candidate wants the solutions-engineering side) — only
+    # pure non-engineering sales roles stay excluded.
     "intern", "manager", "director", " vp ", "vp,", "head of", "lead ",
-    "sales", "marketing", "recruit", "designer", "ios", "android", "mobile",
-    "forward deployed", "solutions engineer", "solutions architect", "pre-sales", "presales",
-    "sales engineer", "account executive", "customer success", "support engineer", "qa ",
-    "test engineer", "security engineer", "hardware", "firmware", "embedded",
+    "marketing", "recruit", "designer", "ios", "android", "mobile",
+    "account executive", "sales development", "sales representative", "sdr ", "bdr ",
+    "qa ", "test engineer", "security engineer", "hardware", "firmware", "embedded",
 )
 
 
