@@ -5,6 +5,7 @@ import { api, type Application } from "@/lib/api";
 import { fmtRelative, STATUS_LABEL } from "@/lib/utils";
 import { Eye, Check, X, ExternalLink, Sparkles, Users } from "lucide-react";
 import { ProofModal } from "@/components/ProofModal";
+import { ReferralModal } from "@/components/ReferralModal";
 import { ScoreBadge } from "@/components/ScoreBadge";
 
 const PENDING_KEY = ["apps-pending-approvals"];
@@ -22,6 +23,7 @@ function PostedBadge({ postedAt }: { postedAt: string | null }) {
 
 export default function ApprovalsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [referralApp, setReferralApp] = useState<Application | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const qc = useQueryClient();
 
@@ -84,19 +86,6 @@ export default function ApprovalsPage() {
   const openApply = (app: Application) => {
     if (app.ats_url) window.open(app.ats_url, "_blank", "noopener");
   };
-  // Referral: find your 1st/2nd-degree connections at the company on LinkedIn (biggest callback
-  // lever). Opens the people-search immediately; no LLM needed.
-  const findReferral = async (app: Application) => {
-    try {
-      const kit = await api.referralKit(app.id, false);
-      const url = kit.search_urls?.your_connections || kit.search_urls?.recruiters;
-      if (url) window.open(url, "_blank", "noopener");
-    } catch {
-      window.open(
-        "https://www.linkedin.com/search/results/people/?keywords=" + encodeURIComponent(app.company_name || ""),
-        "_blank", "noopener");
-    }
-  };
 
   const busyId = decide.isPending ? decide.variables?.id : null;
 
@@ -154,8 +143,8 @@ export default function ApprovalsPage() {
                 Open &amp; Apply <ExternalLink className="w-3.5 h-3.5" />
               </button>
               <button
-                onClick={() => findReferral(app)}
-                title="Find your connections / recruiters at this company on LinkedIn"
+                onClick={() => setReferralApp(app)}
+                title="Find connections + get ready-to-send referral notes"
                 className="flex items-center gap-1.5 bg-amber-600/15 hover:bg-amber-600/30 border border-amber-500/40 text-amber-300 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
               >
                 <Users className="w-3.5 h-3.5" /> Referral
@@ -236,6 +225,15 @@ export default function ApprovalsPage() {
             decide.mutate({ id: selectedId, action, reason });
             setSelectedId(null);
           }}
+        />
+      )}
+
+      {referralApp && (
+        <ReferralModal
+          appId={referralApp.id}
+          company={referralApp.company_name || ""}
+          role={referralApp.role_title || ""}
+          onClose={() => setReferralApp(null)}
         />
       )}
     </div>
