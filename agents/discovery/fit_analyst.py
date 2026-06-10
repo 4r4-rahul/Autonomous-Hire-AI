@@ -161,17 +161,13 @@ _EXCLUDE_TITLE_PATTERNS: list[str] = [
     # Original non-tech blocklist
     "sales", "marketing", "recruiter", "finance", "legal",
     "customer success", "account executive", "business development",
-    # Learned from 1,073 scored jobs — 0% pass rate
-    "forward deployed",   # Cloudflare FDE roles
-    "solutions engineer", # pre-sales, not engineering
-    "solutions architect",
-    " manager",           # eng managers, product managers
+    # NOTE: "forward deployed", "solutions engineer/architect", "site reliability"/"sre" are NO
+    # LONGER excluded — they're now stated TARGETS (solutions-engineering + systems-engineering
+    # sides). "infrastructure engineer" also kept (AI Infra / Platform Engineer is a target). Let
+    # Haiku score these rather than hard-excluding the candidate's own targets.
+    " manager",           # eng managers, product managers (still excluded — IC candidate)
     "product manager",
-    "security engineer",  # infosec, not data/ml
-    # NOTE: "infrastructure engineer" REMOVED — it's a stated target (AI Infrastructure Engineer /
-    # Platform Engineer). Let Haiku score these rather than hard-excluding the candidate's targets.
-    "site reliability",
-    "sre",
+    "security engineer",  # infosec — not a stated target
     "full-stack", "full stack",
     "front-end", "frontend",
     "java developer",

@@ -108,14 +108,22 @@ async def build_referral_kit(app_id: str = "", *, draft: bool = True) -> dict:
     except Exception:
         domain = "general"
     emphasis = {
-        "data_platform": "This is a DATA-PLATFORM / data-engineering role. Lead with the candidate's "
-            "data-platform work (pipelines, streaming, orchestration, warehouse/lakehouse, scale). Do "
-            "NOT lead with LLM/RAG/AI — mention AI only if it's clearly relevant, briefly.",
-        "ai_ml": "This is an AI/ML role. Lead with the candidate's AI/ML/LLM/MLOps work (RAG, model "
-            "serving, multi-agent, MLOps).",
-        "hybrid": "This role blends data infra and ML. Balance the two as the role implies.",
+        "data_platform": "DATA-PLATFORM / data-engineering role. Lead with the candidate's data-platform "
+            "work (pipelines, streaming, orchestration, warehouse/lakehouse, scale). Do NOT lead with "
+            "LLM/RAG/AI; mention AI only if clearly relevant, briefly.",
+        "ai_ml": "AI/ML modeling role. Lead with the candidate's ML/MLOps work (model serving, training "
+            "infra, MLOps).",
+        "ai_engineer": "AI ENGINEER role (building LLM apps / prompt eng / agents / Claude-based). Lead "
+            "with the candidate's shipped LLM systems: the multi-agent autonomous platform and the "
+            "production RAG system, prompt engineering, Claude/API integration.",
+        "solutions_eng": "SOLUTIONS / forward-deployed / customer-facing technical role. Lead with the "
+            "candidate's ability to turn complex systems into business value, integrations, and working "
+            "across teams, not just deep internals.",
+        "systems_eng": "SYSTEMS / infrastructure / platform role. Lead with distributed systems, scale, "
+            "reliability, and infrastructure (Kubernetes, cloud, Terraform).",
+        "hybrid": "Blended role. Balance the relevant areas as the role implies.",
         "general": "Lead with whatever in the candidate's background most directly matches this role.",
-    }[domain]
+    }.get(domain, "Lead with whatever most directly matches this role.")
     user = (f"CANDIDATE (the sender): {name} — currently at {cur_co}.\n"
             f"Candidate background: {summary}\nCandidate core skills: {skills}\n"
             f"Target company: {company} · Target role: {role}\nJob link: {job_url}\n"
