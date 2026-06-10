@@ -20,9 +20,17 @@ Generic (forgettable): "Built RAG system with sub-2s latency at 1K+ queries/day"
 Differentiated (memorable): "Vector search was the bottleneck at 1K+ daily queries, so I
 precomputed embeddings and added a reranking cache, cutting p95 latency from ~6s to under 2s"
 The second proves the candidate found WHERE the problem was and made a real call.
-Rule: at least the first bullet of each role/project must convey a decision, tradeoff, or
-insight specific to how THIS candidate solved it, never a line any engineer could claim.
-Where truthful, name what didn't work first ("the off-the-shelf X couldn't handle Y, so...").
+Rule: the FIRST TWO bullets of every role/project must each convey a distinct decision, tradeoff,
+insight, or hard constraint specific to HOW this candidate solved it, never a line any engineer
+could claim. Remaining bullets stay concrete (what + scale + measurable impact). Where truthful,
+name what didn't work first ("the off-the-shelf X couldn't handle Y, so...").
+TARGET-AWARE: pick the unique-approach angle that maps to THIS JD's hardest problem — if the JD
+stresses scale, lead with the scale decision; if reliability, the failure-mode call; if latency,
+the bottleneck you found. Mirror the JD's hard problem with the candidate's matching real decision.
+TRUTH GUARD: only surface a "how" the source material actually supports. NEVER invent a tradeoff,
+constraint, metric, or technique the base résumé/profile doesn't contain — a fabricated insight is
+worse than an honest plain bullet. If the source lacks a differentiated angle for a bullet, keep it
+concrete and factual rather than manufacturing one.
 (Use plain punctuation only, per the formatting rule below.)
 
 ### 2. Mirror the company's exact language
