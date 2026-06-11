@@ -130,11 +130,13 @@ def test_budget_accumulates_and_caps(budget):
 
 
 def test_budget_isolated_by_day(budget):
+    from datetime import date
     budget.record(3.9)
     d = json.loads(budget._FILE.read_text())
-    # backdate today's key to yesterday → today reads 0 again
-    y = str((datetime.now(timezone.utc) - timedelta(days=1)).date())
-    json.loads  # noqa
+    # backdate today's key to yesterday → today reads 0 again. Use the SAME clock the code uses
+    # (budget._today() -> local date.today()); computing 'yesterday' off UTC flakes near midnight
+    # UTC, when local date and UTC date differ and the backdated key collides with today's.
+    y = str(date.today() - timedelta(days=1))
     budget._FILE.write_text(json.dumps({y: 3.9}))
     assert budget.spent_today() == 0 and not budget.over_budget()
 
