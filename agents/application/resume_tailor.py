@@ -29,6 +29,40 @@ logger = get_logger("resume_tailor")
 
 _SYSTEM_PROMPT    = Path("prompts/system/resume_tailor.txt").read_text()
 _BASE_RESUME      = Path("data/resume_base.md").read_text()
+
+
+def _load_experience_bank() -> str:
+    """Real, differentiated engineering stories mined from the candidate's repos
+    (data/experience_bank.yaml). The tailor draws JD-matched bullets from these so every
+    bullet shows a non-obvious decision (the 'how'), grounded in true work. Empty/missing
+    file is fine — the tailor falls back to the base résumé alone. Rendered compactly."""
+    p = Path("data/experience_bank.yaml")
+    if not p.exists():
+        return ""
+    try:
+        data = yaml.safe_load(p.read_text()) or {}
+    except Exception:
+        return ""
+    out: list[str] = []
+    for ent in data.get("entries", []) or []:
+        src = ent.get("source", "")
+        tech = ", ".join(ent.get("tech", []) or [])
+        out.append(f"### {src}" + (f"  [tech: {tech}]" if tech else ""))
+        for s in ent.get("stories", []) or []:
+            shows = ", ".join(s.get("shows", []) or [])
+            parts = [
+                f"  - PROBLEM: {s.get('problem','')}",
+                f"    TRIED→FAILED: {s.get('what_didnt_work','')}" if s.get("what_didnt_work") else "",
+                f"    DECISION: {s.get('decision','')}",
+                f"    TRADEOFF: {s.get('tradeoff','')}" if s.get("tradeoff") and s.get("tradeoff") != "n/a" else "",
+                f"    IMPACT: {s.get('impact','')}",
+                f"    SHOWS: {shows}" if shows else "",
+            ]
+            out.append("\n".join(x for x in parts if x))
+    return "\n".join(out).strip()
+
+
+_EXPERIENCE_BANK  = _load_experience_bank()
 _PROFILE_PATH     = Path("data/user_profile.yaml")
 _RESUME_DIR       = Path("data/resumes")
 _RESUME_DIR.mkdir(parents=True, exist_ok=True)
@@ -255,6 +289,15 @@ async def _tailor_resume(
     # skills). Marked cache_control:ephemeral so calls 2..N in a batch read it from cache
     # ($0.50/Mtok) instead of paying full input ($5/Mtok on Opus). Zero quality impact —
     # same content, just a cache breakpoint. (System prompt is already cached in core/llm.)
+    bank_block = (f"""
+
+EXPERIENCE BANK — REAL, DEFENSIBLE ENGINEERING STORIES (mined from the candidate's actual repos).
+These are the SOURCE OF TRUTH for differentiated bullets: each is a real problem → the non-obvious
+decision → the tradeoff → the measured impact. Draw the bullets that map to THIS job's hardest
+problem from here. Never copy a story verbatim — reframe it for the JD. NEVER use a story whose
+facts the base résumé/profile don't support.
+{_EXPERIENCE_BANK}""" if _EXPERIENCE_BANK else "")
+
     stable_block = f"""BASE RESUME:
 {_BASE_RESUME}
 
@@ -262,7 +305,7 @@ CANDIDATE AI/ML SKILLS TO DRAW FROM (use aggressively for AI roles):
 {json.dumps(ai_skills)}
 
 CANDIDATE AI SYSTEMS SKILLS (production AI patterns):
-{json.dumps(profile.get('skills', {}).get('ai_systems', []))}""".strip()
+{json.dumps(profile.get('skills', {}).get('ai_systems', []))}{bank_block}""".strip()
 
     # Role-matched emphasis — the dominant instruction for THIS job. Mirrors the JD's actual focus
     # (data-platform vs AI/ML) instead of always leading with AI.
@@ -295,7 +338,12 @@ GAPS TO ADDRESS: {json.dumps(fit_score.get('missing_keywords', fit_score.get('mi
 
 ROLE DOMAIN: {_domain}
 SECTION ORDER: {'AI Projects BEFORE Professional Experience' if _projects_first else 'Professional Experience BEFORE projects'} — set "projects_first": {str(_projects_first).lower()} in the output JSON.
-Follow the ROLE EMPHASIS at the top: keep the résumé lean and matched to THIS JD — include only what it asks for.""".strip()
+Follow the ROLE EMPHASIS at the top: keep the résumé lean and matched to THIS JD — include only what it asks for.
+
+USE THE EXPERIENCE BANK: for the roles/projects that matter to THIS JD, lead with the bank story whose
+SHOWS-tags best match the JD's hardest problem (e.g. JD stresses scale → pick the scale story; latency →
+the latency story). Reframe it into a crisp bullet (decision + tradeoff + impact). If no bank story fits a
+role, keep the base résumé bullet — never invent a 'how' that isn't in the bank or base résumé.""".strip()
 
     messages = [{
         "role": "user",
