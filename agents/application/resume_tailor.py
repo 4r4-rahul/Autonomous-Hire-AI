@@ -31,38 +31,101 @@ _SYSTEM_PROMPT    = Path("prompts/system/resume_tailor.txt").read_text()
 _BASE_RESUME      = Path("data/resume_base.md").read_text()
 
 
-def _load_experience_bank() -> str:
-    """Real, differentiated engineering stories mined from the candidate's repos
-    (data/experience_bank.yaml). The tailor draws JD-matched bullets from these so every
-    bullet shows a non-obvious decision (the 'how'), grounded in true work. Empty/missing
-    file is fine — the tailor falls back to the base résumé alone. Rendered compactly."""
+def _load_bank_entries() -> list[dict]:
+    """Parse the experience bank (data/experience_bank.yaml) into entries of real,
+    differentiated engineering stories mined from the candidate's repos. Empty/missing file
+    is fine — the tailor falls back to the base résumé alone."""
     p = Path("data/experience_bank.yaml")
     if not p.exists():
-        return ""
+        return []
     try:
-        data = yaml.safe_load(p.read_text()) or {}
+        return (yaml.safe_load(p.read_text()) or {}).get("entries", []) or []
     except Exception:
+        return []
+
+
+_BANK_ENTRIES = _load_bank_entries()
+
+
+def _render_story(s: dict, indent: str = "  ") -> str:
+    """Compact, prompt-friendly rendering of a single bank story."""
+    shows = ", ".join(s.get("shows", []) or [])
+    tradeoff = s.get("tradeoff", "")
+    parts = [
+        f"{indent}- PROBLEM: {s.get('problem','')}",
+        f"{indent}  TRIED-FAILED: {s.get('what_didnt_work','')}" if s.get("what_didnt_work") else "",
+        f"{indent}  DECISION: {s.get('decision','')}",
+        f"{indent}  TRADEOFF: {tradeoff}" if tradeoff and tradeoff != "n/a" else "",
+        f"{indent}  IMPACT: {s.get('impact','')}",
+        f"{indent}  SHOWS: {shows}" if shows else "",
+    ]
+    return "\n".join(x for x in parts if x)
+
+
+_TOK_RE = re.compile(r"[a-z0-9+]+")
+
+
+def _tokens(*texts: str) -> set[str]:
+    out: set[str] = set()
+    for t in texts:
+        out |= {w for w in _TOK_RE.findall((t or "").lower()) if len(w) >= 3}
+    return out
+
+
+def _score_story(story: dict, jd_tokens: set[str]) -> float:
+    """How well a bank story matches THIS JD. shows-tags and tech weigh most (they encode the
+    story's theme); a little credit for problem/decision token overlap. Deterministic, free."""
+    score = 0.0
+    for tag in story.get("shows", []) or []:
+        tw = _tokens(tag)
+        if tw and tw <= jd_tokens:            # whole tag present (e.g. "data integrity")
+            score += 3.0
+        elif tw & jd_tokens:
+            score += 1.5
+    for tech in story.get("tech", []) or []:
+        if _tokens(tech) & jd_tokens:
+            score += 2.0
+    overlap = len(_tokens(story.get("problem", ""), story.get("decision", "")) & jd_tokens)
+    score += min(overlap, 6) * 0.5
+    return score
+
+
+def _select_bank_stories(job: dict, ats_keywords: list[str], *,
+                         per_source: int = 3, total_cap: int = 9) -> str:
+    """Score every bank story against THIS JD, pick the top matches per source (so every role
+    gets developed) under a global cap, and render them ranked for the per-job prompt block.
+    Returns '' when the bank is empty so the writer falls back to the base résumé."""
+    if not _BANK_ENTRIES:
         return ""
-    out: list[str] = []
-    for ent in data.get("entries", []) or []:
+    jd_tokens = _tokens(job.get("title", ""), job.get("description", "")) | {
+        w for k in (ats_keywords or []) for w in _tokens(k)
+    }
+    blocks: list[tuple[float, str]] = []
+    for ent in _BANK_ENTRIES:
+        scored = sorted(((_score_story(s, jd_tokens), s) for s in ent.get("stories", []) or []),
+                        key=lambda x: x[0], reverse=True)
+        top = [s for sc, s in scored[:per_source] if sc > 0] or [scored[0][1]] if scored else []
+        if not top:
+            continue
+        best = scored[0][0] if scored else 0.0
         src = ent.get("source", "")
         tech = ", ".join(ent.get("tech", []) or [])
-        out.append(f"### {src}" + (f"  [tech: {tech}]" if tech else ""))
-        for s in ent.get("stories", []) or []:
-            shows = ", ".join(s.get("shows", []) or [])
-            parts = [
-                f"  - PROBLEM: {s.get('problem','')}",
-                f"    TRIED→FAILED: {s.get('what_didnt_work','')}" if s.get("what_didnt_work") else "",
-                f"    DECISION: {s.get('decision','')}",
-                f"    TRADEOFF: {s.get('tradeoff','')}" if s.get("tradeoff") and s.get("tradeoff") != "n/a" else "",
-                f"    IMPACT: {s.get('impact','')}",
-                f"    SHOWS: {shows}" if shows else "",
-            ]
-            out.append("\n".join(x for x in parts if x))
-    return "\n".join(out).strip()
+        rendered = f"### {src}" + (f"  [tech: {tech}]" if tech else "") + "\n" + \
+            "\n".join(_render_story(s) for s in top)
+        blocks.append((best, rendered))
+    blocks.sort(key=lambda x: x[0], reverse=True)
+    # Trim to the global cap by dropping lowest-scored individual stories isn't needed — per_source
+    # already bounds it; cap the number of SOURCES rendered if it ever grows large.
+    chosen = [b for _, b in blocks][: max(2, total_cap // per_source + 1)]
+    return "\n\n".join(chosen).strip()
 
 
-_EXPERIENCE_BANK  = _load_experience_bank()
+# Full bank (all stories) kept for the cached reference block; per-JD selection is built per call.
+_EXPERIENCE_BANK = "\n\n".join(
+    (f"### {e.get('source','')}" + (f"  [tech: {', '.join(e.get('tech', []) or [])}]" if e.get("tech") else "")
+     + "\n" + "\n".join(_render_story(s) for s in e.get("stories", []) or []))
+    for e in _BANK_ENTRIES
+).strip()
 _PROFILE_PATH     = Path("data/user_profile.yaml")
 _RESUME_DIR       = Path("data/resumes")
 _RESUME_DIR.mkdir(parents=True, exist_ok=True)
@@ -312,6 +375,26 @@ CANDIDATE AI SYSTEMS SKILLS (production AI patterns):
     _domain = role_domain(job.get("title", ""), job.get("description", ""))
     _directive, _projects_first = _emphasis_directive(_domain)
 
+    # Per-JD story development: score the bank against THIS JD and surface the top matches per role
+    # right here in the (uncached) per-job block, so every tailoring run DEVELOPS bullets from the
+    # most relevant real stories rather than hoping the writer digs them out of the cached bank.
+    _selected = _select_bank_stories(job, ats_keywords)
+    _bank_directive = (f"""
+
+DEVELOP BULLETS FROM THE EXPERIENCE BANK — every tailoring must mine the bank, not the base résumé's
+generic lines. The stories below are the deterministically-ranked BEST matches for THIS JD (most
+relevant first); develop each role's lead bullets from them — reframe into a crisp bullet (the
+non-obvious decision + tradeoff + measured impact) in the JD's language, strongest match as the role's
+first bullet. You MAY instead use a different story from the full EXPERIENCE BANK above if it fits a role
+better — but a real bank story must drive the lead bullets. Never copy verbatim; never add a fact the
+story doesn't contain.
+
+PRE-RANKED MATCHES FOR THIS JD:
+{_selected}""" if _selected else """
+
+USE THE EXPERIENCE BANK above: for each role, lead with the story whose SHOWS-tags best match this JD's
+hardest problem, reframed into a crisp bullet. If no story fits a role, keep the base-résumé bullet.""")
+
     # VARIABLE block — changes per job, never cached.
     variable_block = f"""*** {_directive} ***
 
@@ -339,11 +422,7 @@ GAPS TO ADDRESS: {json.dumps(fit_score.get('missing_keywords', fit_score.get('mi
 ROLE DOMAIN: {_domain}
 SECTION ORDER: {'AI Projects BEFORE Professional Experience' if _projects_first else 'Professional Experience BEFORE projects'} — set "projects_first": {str(_projects_first).lower()} in the output JSON.
 Follow the ROLE EMPHASIS at the top: keep the résumé lean and matched to THIS JD — include only what it asks for.
-
-USE THE EXPERIENCE BANK: for the roles/projects that matter to THIS JD, lead with the bank story whose
-SHOWS-tags best match the JD's hardest problem (e.g. JD stresses scale → pick the scale story; latency →
-the latency story). Reframe it into a crisp bullet (decision + tradeoff + impact). If no bank story fits a
-role, keep the base résumé bullet — never invent a 'how' that isn't in the bank or base résumé.""".strip()
+{_bank_directive}""".strip()
 
     messages = [{
         "role": "user",
