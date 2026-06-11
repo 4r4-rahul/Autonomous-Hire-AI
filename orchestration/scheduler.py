@@ -12,7 +12,7 @@ Schedule (approximate — all intervals have ±20% jitter):
   [LIVE]  linkedin_scanner        every 4 hours  — discover new LinkedIn job postings
   [SLEEP] contact_finder          every 6 hours  — find HMs/recruiters for target companies
   [SLEEP] outreach_runner         every 2 hours  — advance cadence for due contacts
-  [LIVE]  apply_pipeline          once daily     — score → tailor → fill → PARK for approval
+  [LIVE]  apply_pipeline          every 3 hours  — score → park (cheap) for approval; tailor on-demand
   [LIVE]  email_monitor           every 30 min   — capture outcomes → learning loop → insights
 """
 from __future__ import annotations
@@ -316,7 +316,7 @@ _JOB_SPECS = {
     "contact_finder":  (job_contact_finder,  21600, "LinkedIn Contact Finder",                300),
     "outreach_runner": (job_outreach_runner, 7200,  "LinkedIn Outreach Runner",               120),
     "board_scanner":   (job_board_scan,      7200,  "Board Scanner (off-LinkedIn discovery, 2h)", 600),
-    "apply_pipeline":  (job_apply_pipeline,  28800, "Apply Pipeline (score+park cheap, 8h)",   600),
+    "apply_pipeline":  (job_apply_pipeline,  10800, "Apply Pipeline (score+park cheap, 3h)",   600),
     "auto_submit":     (job_auto_submit,     43200, "Auto-Submit Safe Apps (opt-in)",         600),
     "email_monitor":   (job_email_monitor,   7200,  "Gmail Email Monitor (2h)",               120),
     "digest":          (job_digest,          86400, "Daily Health + Activity Digest",          600),
