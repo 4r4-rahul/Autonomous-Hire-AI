@@ -143,7 +143,14 @@ def _mark_as_read(service, msg_id: str) -> None:
             body={"removeLabelIds": ["UNREAD"]},
         ).execute()
     except HttpError as e:
-        logger.warning("gmail_mark_read_failed", msg_id=msg_id, error=str(e))
+        # Expected when the token is read-only (gmail.readonly) by design — marking read needs the
+        # gmail.modify scope we deliberately don't request. That 403 is not an error; stay silent.
+        # The monitor scans read mail too, so dedup doesn't depend on marking read. Warn only on
+        # genuinely unexpected failures.
+        status = getattr(getattr(e, "resp", None), "status", None)
+        if status == 403 or "insufficient" in str(e).lower():
+            return
+        logger.warning("gmail_mark_read_failed", msg_id=msg_id, error=str(e)[:160])
 
 
 # ── Categorization ─────────────────────────────────────────────────────────────

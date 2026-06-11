@@ -58,9 +58,16 @@ def system_health(probe_llm: bool = True) -> dict:
         return True, "Anthropic API reachable (credits OK)"
 
     def _gmail():
-        from agents.monitoring.email_monitor import _build_gmail_service
-        prof = _build_gmail_service().users().getProfile(userId="me").execute()
-        return True, f"Gmail read OK ({prof.get('emailAddress','?')})"
+        try:
+            from agents.monitoring.email_monitor import _build_gmail_service
+            prof = _build_gmail_service().users().getProfile(userId="me").execute()
+            return True, f"Gmail read OK ({prof.get('emailAddress','?')})"
+        except Exception as e:
+            # Self-documenting failure: callback detection is blind until re-auth. Tell the user the
+            # exact fix so a stale token never silently swallows interview replies again.
+            return False, ("Gmail token DOWN — callback detection blind. "
+                           "Fix: python scripts/gmail_reauth.py  "
+                           f"({str(e)[:50]})")
 
     def _linkedin():
         from agents.monitoring.linkedin_health import is_auto_paused
@@ -205,6 +212,13 @@ def build_digest(write: bool = True) -> dict:
 def _render_digest(d: dict, health: dict) -> str:
     p = d["pipeline"]
     L = [f"# AutonomousHire — Daily Digest ({d['date']})", ""]
+    # Callback detection (Gmail) — always shown, because a blind inbox silently hides interview
+    # replies. When down, the line carries the one-command fix.
+    _gm = next((c for c in health["checks"] if c["name"] == "gmail"), None)
+    if _gm is not None:
+        L += [(f"Callback detection (Gmail): 🟢 live"
+               if _gm["status"] == "ok"
+               else "Callback detection (Gmail): 🔴 DOWN — run `python scripts/gmail_reauth.py`"), ""]
     warn = [c for c in health["checks"] if c["status"] != "ok"]
     if warn:
         L += ["## ⚠️ Needs attention"]
