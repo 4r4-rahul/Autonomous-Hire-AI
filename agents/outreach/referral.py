@@ -111,10 +111,10 @@ async def build_referral_kit(app_id: str = "", *, draft: bool = True) -> dict:
         "couple minutes, fine if not, even a pointer helps).\n"
         '  "why_me": exactly 2 plain sentences ABOUT the candidate (third person) the employee can '
         'paste into the internal "why refer them" box.\n'
-        '  "mutual_intro": 2 short sentences, STILL first-person AS the candidate, to a MUTUAL '
-        "('"'"'[Mutual]'"'"') asking the mutual to introduce the candidate to someone at the company. "
-        "Do NOT write it as a third party describing the candidate by name; the candidate is asking "
-        "their OWN contact for help (e.g. 'Hey [Mutual], could you intro me to someone on the X team?').")
+        '  "mutual_intro": 2 short sentences, STILL first-person AS the candidate, asking a MUTUAL '
+        "(addressed as [Mutual]) to introduce the candidate to someone at the company. Do NOT write "
+        "it as a third party describing the candidate by name; the candidate is asking their OWN "
+        "contact for help. Start with Hey [Mutual], and ask them to intro YOU to the team.")
     # Lead with the facts that match THIS role's domain (data-platform vs AI/ML), not always AI —
     # and ground the specifics in the candidate's REAL experience bank (production work), not the
     # generic AI-heavy summary that made referrals overclaim side projects.
@@ -139,9 +139,11 @@ async def build_referral_kit(app_id: str = "", *, draft: bool = True) -> dict:
             "data work (pipelines, orchestration, warehouse, data integrity, scale) from REAL EXPERIENCE. "
             "Do NOT lead with LLM/RAG/AI; if you mention AI projects at all, one phrase, clearly as a "
             "personal side project.",
-        "ai_ml": "AI/ML platform role. Lead with the candidate's real production ML/MLOps and data-platform "
-            "work (feature pipelines, model-serving infra, drift monitoring) from REAL EXPERIENCE; the "
-            "personal LLM projects support but don't lead, and are labeled as personal projects.",
+        "ai_ml": "AI/ML modeling role. Lead with the candidate's REAL data-platform/infra production work "
+            "from REAL EXPERIENCE (the data foundation ML runs on: pipelines, orchestration, scale). Do "
+            "NOT claim model serving, training, fine-tuning, or drift unless REAL EXPERIENCE shows it — if "
+            "the candidate hasn't done core ML, be honest: strong data/infra foundation, moving toward ML. "
+            "Personal LLM projects support, labeled as side projects.",
         "ai_engineer": "AI/LLM-engineering role. HERE the AI projects ARE relevant - lead with the "
             "multi-agent platform and the RAG system, but call them PERSONAL projects (never 'production', "
             "never 'at scale'), and pair them with the candidate's real production engineering for "
