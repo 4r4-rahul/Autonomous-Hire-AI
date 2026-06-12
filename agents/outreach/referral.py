@@ -40,7 +40,8 @@ def search_urls(company: str, role: str) -> dict:
     """LinkedIn people-search links (no LLM, instant)."""
     return {
         "your_connections": _people_search(company, network=["F", "S"]),   # 1st + 2nd degree at company
-        "recruiters": _people_search(f"{company} recruiter talent"),
+        "recruiters": _people_search(f"{company} technical recruiter talent acquisition"),
+        "hiring_managers": _people_search(f"{company} engineering manager director"),
         "team": _people_search(f"{company} {role}"),
     }
 
@@ -59,7 +60,8 @@ async def build_referral_kit(app_id: str = "", *, draft: bool = True) -> dict:
     jd = jobrec.get("description", "")
     kit = {"company": company, "role": role, "job_url": job_url,
            "search_urls": search_urls(company, role),
-           "connect_note": "", "referral_ask": "", "why_me": "", "mutual_intro": ""}
+           "connect_note": "", "referral_ask": "", "why_me": "", "mutual_intro": "",
+           "recruiter_note": "", "hiring_manager_note": ""}
     if not draft:
         return kit
 
@@ -114,7 +116,17 @@ async def build_referral_kit(app_id: str = "", *, draft: bool = True) -> dict:
         '  "mutual_intro": 2 short sentences, STILL first-person AS the candidate, asking a MUTUAL '
         "(addressed as [Mutual]) to introduce the candidate to someone at the company. Do NOT write "
         "it as a third party describing the candidate by name; the candidate is asking their OWN "
-        "contact for help. Start with Hey [Mutual], and ask them to intro YOU to the team.")
+        "contact for help. Start with Hey [Mutual], and ask them to intro YOU to the team.\n"
+        '  "recruiter_note": a DIRECT note to a RECRUITER / talent-acquisition person (not a referral '
+        "ask). 3-4 short sentences: the candidate already applied for THIS role, ONE concrete proof "
+        "point that maps to it, and a soft ask (worth a quick screen?). Recruiters skim for role+level "
+        "fit and signal, so lead with the single most relevant thing. Do NOT mention visa/sponsorship "
+        "here. Address as [Name].\n"
+        '  "hiring_manager_note": a DIRECT note to the HIRING MANAGER who owns the team (not a referral '
+        "ask). 3-4 short sentences, a notch more technical: the candidate applied for THIS role, ONE "
+        "specific thing they built that maps to the team's hardest problem (from REAL EXPERIENCE), why "
+        "it's relevant, and a low-key offer to share more. Manager-to-engineer tone, concrete, no fluff. "
+        "Address as [Name].")
     # Lead with the facts that match THIS role's domain (data-platform vs AI/ML), not always AI —
     # and ground the specifics in the candidate's REAL experience bank (production work), not the
     # generic AI-heavy summary that made referrals overclaim side projects.
@@ -176,9 +188,10 @@ async def build_referral_kit(app_id: str = "", *, draft: bool = True) -> dict:
             f"EMPHASIS: {emphasis}\n"
             "Write the four messages now, in the candidate's voice.")
     try:
-        raw = await llm.chat(system, [{"role": "user", "content": user}], max_tokens=700, temperature=0.6)
+        raw = await llm.chat(system, [{"role": "user", "content": user}], max_tokens=1100, temperature=0.6)
         data = json.loads(raw[raw.find("{"): raw.rfind("}") + 1])
-        for k in ("connect_note", "referral_ask", "why_me", "mutual_intro"):
+        for k in ("connect_note", "referral_ask", "why_me", "mutual_intro",
+                  "recruiter_note", "hiring_manager_note"):
             kit[k] = _humanize(data.get(k, ""))
     except Exception as e:
         logger.warning("referral_draft_failed", company=company, error=str(e)[:90])

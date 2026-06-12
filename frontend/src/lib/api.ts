@@ -157,6 +157,7 @@ export const api = {
     company: string; role: string; job_url: string;
     search_urls: Record<string, string>;
     connect_note: string; referral_ask: string; why_me: string; mutual_intro: string;
+    recruiter_note: string; hiring_manager_note: string;
   }>(`/applications/${id}/referral-kit?draft=${draft}`, { method: "POST" }),
   decideApp:       (id: string, action: "approve" | "reject", reason?: string) =>
     req<{ ok: boolean }>(`/applications/${id}/decide`, {
