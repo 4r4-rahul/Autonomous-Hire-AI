@@ -39,6 +39,12 @@ def _enrich(app: Application) -> ApplicationOut:
         out.company_name = app.job.company_name
         out.role_title   = app.job.title
         out.posted_at    = app.job.posted_at
+        # Multi-location roles (US + foreign) show the US office first + a flag, so the candidate
+        # applies to the US location and isn't alarmed by a foreign city shown first.
+        from agents.discovery.apply_url_resolver import us_first_location
+        disp, multi = us_first_location(app.job.location or "")
+        out.location = disp
+        out.multi_location = multi
     return out
 
 

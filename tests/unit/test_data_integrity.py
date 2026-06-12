@@ -284,3 +284,15 @@ def test_dead_listing_redirect_detection():
         "https://job-boards.greenhouse.io/airbnb/jobs/7955579",
         "https://careers.airbnb.com/positions/7955579/?gh_jid=7955579"]) is False
     assert _redirected_to_dead_listing(["https://jobs.lever.co/acme/abc-123"]) is False
+
+
+def test_us_first_location_multi_location():
+    """A role offered in both a US and a foreign city must display the US office first and flag
+    multi-location, so a US-only candidate applies to the US location (the Riot Dublin+LA case)."""
+    from agents.discovery.apply_url_resolver import us_first_location
+    disp, multi = us_first_location("Dublin, Ireland; Los Angeles, USA")
+    assert multi is True and disp.startswith("Los Angeles, USA") and "Dublin" in disp
+    # pure-US multi-city or single locations are untouched, not flagged
+    assert us_first_location("San Francisco, CA; Seattle, WA") == ("San Francisco, CA; Seattle, WA", False)
+    assert us_first_location("Los Angeles, USA") == ("Los Angeles, USA", False)
+    assert us_first_location("Remote") == ("Remote", False)

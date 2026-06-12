@@ -438,6 +438,24 @@ def loc_is_us_ok(text: str, *, strict: bool = True) -> bool:
     return c == "us" if strict else c != "foreign"
 
 
+def us_first_location(text: str) -> tuple[str, bool]:
+    """For a multi-location string that mixes US and foreign offices (e.g. 'Dublin, Ireland; Los
+    Angeles, USA'), return (display, is_multi_foreign) where display LEADS with the US office(s) and
+    notes the foreign one(s) — so a US-only candidate sees/applies to the US location, not the foreign
+    one shown first. Single-location or US-only strings pass through unchanged with False."""
+    raw = (text or "").strip()
+    parts = [p.strip() for p in re.split(r"\s*[;|\n]\s*|\s+/\s+", raw) if p.strip()]
+    if len(parts) <= 1:
+        return raw, False
+    us = [p for p in parts if _loc_class(p) == "us"]
+    foreign = [p for p in parts if _loc_class(p) == "foreign"]
+    other = [p for p in parts if _loc_class(p) not in ("us", "foreign")]
+    if us and foreign:
+        lead = "; ".join(us + other)
+        return f"{lead}  (also offered abroad: {'; '.join(foreign)})", True
+    return raw, False
+
+
 async def resolve_ats_for(company: str, title: str, *, us_only: bool = False) -> dict | None:
     """KEYSTONE of 'discover on LinkedIn, apply on the company ATS': company + role title →
     the real per-job application URL + JD, by querying the company's ATS PUBLIC API directly

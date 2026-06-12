@@ -44,6 +44,8 @@ class ApplicationOut(BaseModel):
     company_name: Optional[str] = None
     role_title: Optional[str] = None
     posted_at: Optional[datetime] = None
+    location: Optional[str] = None          # US-first display for multi-location roles
+    multi_location: bool = False            # true when also offered abroad (apply to the US office)
 
     class Config:
         from_attributes = True
