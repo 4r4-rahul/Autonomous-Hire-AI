@@ -378,17 +378,19 @@
   let resumeViewUrl = null;
   try {
     const fileInputs = [...document.querySelectorAll("input[type='file']")];
-    const looksResume = (el) => {
-      const s = ((el.name || "") + " " + (el.id || "") + " " +
-        (el.getAttribute("aria-label") || "") + " " + (labelFor(el) || "") + " " +
-        (el.accept || "")).toLowerCase();
-      return /resume|cv|curriculum/.test(s);
-    };
+    const fieldText = (el) => ((el.name || "") + " " + (el.id || "") + " " +
+      (el.getAttribute("aria-label") || "") + " " + (labelFor(el) || "") + " " +
+      (el.accept || "")).toLowerCase();
+    const looksCover = (el) => /cover.?letter|coverletter|motivation/.test(fieldText(el));
+    const looksResume = (el) => /resume|cv|curriculum/.test(fieldText(el));
     const acceptsDoc = (el) => {
       const a = (el.accept || "").toLowerCase();
       return a === "" || a.includes("pdf") || a.includes("doc");
     };
-    const resumeInput = fileInputs.find(looksResume) || fileInputs.find(acceptsDoc);
+    const coverInput = fileInputs.find(looksCover);
+    // Never let the résumé land in the cover-letter slot (the acceptsDoc fallback could).
+    const resumeCandidates = fileInputs.filter((el) => el !== coverInput && !looksCover(el));
+    const resumeInput = resumeCandidates.find(looksResume) || resumeCandidates.find(acceptsDoc);
     if (resumeInput && !(resumeInput.files && resumeInput.files.length)) {
       let r = await chrome.runtime.sendMessage({
         type: "resume", url: location.href, referrer: document.referrer,
@@ -469,7 +471,52 @@
     resumeStatus = "✋ Resume attach failed: " + (e && e.message ? e.message : e);
   }
 
-  showOverlay(data, notes, resumeStatus, resumeViewUrl, blanks);
+  // ── Attach the reviewed cover letter PDF to a cover-letter file input ─────────
+  let coverStatus = null;
+  try {
+    if (coverInput && !(coverInput.files && coverInput.files.length)) {
+      const r = await chrome.runtime.sendMessage({
+        type: "cover", url: location.href, referrer: document.referrer,
+      });
+      if (r && r.ok && r.base64) {
+        const bytes = Uint8Array.from(atob(r.base64), (c) => c.charCodeAt(0));
+        const file = new File([bytes], r.filename || "cover_letter.pdf", { type: "application/pdf" });
+        const dt = new DataTransfer(); dt.items.add(file);
+        try { coverInput.files = dt.files; } catch (e) {}
+        coverInput.dispatchEvent(new Event("input", { bubbles: true }));
+        coverInput.dispatchEvent(new Event("change", { bubbles: true }));
+        if (!(coverInput.files && coverInput.files.length)) {
+          const zone = coverInput.closest("[class*='dropzone' i],[class*='upload' i],[class*='drop' i]");
+          if (zone) {
+            const dt2 = new DataTransfer(); dt2.items.add(file);
+            for (const type of ["dragenter", "dragover", "drop"]) {
+              let ev;
+              try { ev = new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt2 }); }
+              catch (e) {
+                ev = new DragEvent(type, { bubbles: true, cancelable: true });
+                try { Object.defineProperty(ev, "dataTransfer", { value: dt2 }); } catch (_) {}
+              }
+              zone.dispatchEvent(ev);
+            }
+          }
+        }
+        await sleep(350);
+        const hasFile = !!(coverInput.files && coverInput.files.length);
+        const box = coverInput.closest("[class*='field'],[class*='cover'],fieldset,div") || coverInput;
+        if (box && box.style) { box.style.outline = "2px solid " + (hasFile ? "#22c55e" : "#eab308"); box.style.outlineOffset = "1px"; }
+        coverStatus = hasFile
+          ? "✅ Cover letter attached — " + (r.filename || "cover_letter.pdf")
+          : "⚠️ Cover letter may not have attached — verify (open via link)";
+      } else if (r && r.status === 404) {
+        coverStatus = "ℹ️ No tailored cover letter for this role — write one or skip";
+      }
+    }
+  } catch (e) {
+    coverStatus = "✋ Cover letter attach failed: " + (e && e.message ? e.message : e);
+  }
+
+  const attachMsg = [resumeStatus, coverStatus].filter(Boolean).join("\n");
+  showOverlay(data, notes, attachMsg, resumeViewUrl, blanks);
   } catch (err) {
     try {
       if (document.body) {

@@ -25,15 +25,16 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
 
-  if (msg && msg.type === "resume") {
+  if (msg && (msg.type === "resume" || msg.type === "cover")) {
     const qs = new URLSearchParams({ url: msg.url || "", referrer: msg.referrer || "" });
-    fetch(`${BASE}/resume?${qs.toString()}`)
+    const fallbackName = msg.type === "cover" ? "cover_letter.pdf" : "resume.pdf";
+    fetch(`${BASE}/${msg.type}?${qs.toString()}`)
       .then(async (r) => {
         if (!r.ok) return sendResponse({ ok: false, status: r.status });
         const buf = await r.arrayBuffer();
         const cd = r.headers.get("content-disposition") || "";
         const m = cd.match(/filename="?([^"]+)"?/);
-        sendResponse({ ok: true, base64: bufToBase64(buf), filename: m ? m[1] : "resume.pdf" });
+        sendResponse({ ok: true, base64: bufToBase64(buf), filename: m ? m[1] : fallbackName });
       })
       .catch((e) => sendResponse({ ok: false, error: String(e) }));
     return true;

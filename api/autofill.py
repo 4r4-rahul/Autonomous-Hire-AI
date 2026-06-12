@@ -708,6 +708,32 @@ def _cover_md_for_job(job_id: str) -> Optional[str]:
         return None
 
 
+def _cover_pdf_for_job(job_id: str) -> Optional[Path]:
+    """Render the reviewed cover letter as a clean business-letter PDF (letterhead + date + body)
+    so it's presentable as a file attachment. Returns the PDF path, or None if no letter exists."""
+    body = _cover_md_for_job(job_id)
+    if not body:
+        return None
+    P = _load_profile()
+    per = P.get("personal", {}) or {}
+    name = per.get("name") or "Rahul Varikuppala"
+    contact = "  |  ".join(x for x in (
+        per.get("location", ""), per.get("phone", ""), per.get("email", ""),
+        (per.get("linkedin_url", "") or "").replace("https://", "").replace("http://", ""),
+    ) if x)
+    from datetime import datetime
+    today = datetime.now().strftime("%B %d, %Y")
+    letter_md = f"# {name}\n{contact}\n\n{today}\n\n{body}\n"
+    out_md = _ROOT / "data" / "cover_letters" / f"{job_id}_letter.md"
+    out_md.write_text(letter_md, encoding="utf-8")
+    try:
+        from agents.application.form_filler import markdown_to_pdf
+        return markdown_to_pdf(out_md)
+    except Exception as e:
+        logger.warning("cover_pdf_render_failed", job_id=job_id, error=str(e)[:90])
+        return None
+
+
 @router.post("/resolve")
 async def resolve(body: ResolveIn) -> dict:
     P = _load_profile()
@@ -814,3 +840,21 @@ def resume(url: str = "", referrer: str = ""):
     # submits whatever the extension attached — this is the same bytes).
     return FileResponse(str(pdf), media_type="application/pdf",
                         filename=f"{safe}_Resume.pdf", content_disposition_type="inline")
+
+
+@router.get("/cover")
+def cover(url: str = "", referrer: str = ""):
+    """Serve the reviewed cover letter as a formatted PDF for the job matching `url`/`referrer`.
+    The extension attaches it to a cover-letter file input (same bytes the form submits)."""
+    from fastapi import HTTPException
+    from fastapi.responses import FileResponse
+    job = _match_job(url, referrer)
+    if not job:
+        raise HTTPException(404, "no job matched this URL")
+    pdf = _cover_pdf_for_job(job["id"])
+    if not pdf:
+        raise HTTPException(404, "no cover letter for this job")
+    P = _load_profile()
+    safe = (P.get("personal", {}).get("name", "Cover") or "Cover").replace(" ", "_")
+    return FileResponse(str(pdf), media_type="application/pdf",
+                        filename=f"{safe}_Cover_Letter.pdf", content_disposition_type="inline")
