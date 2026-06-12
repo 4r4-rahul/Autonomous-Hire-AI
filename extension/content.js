@@ -472,8 +472,14 @@
     resumeStatus = "✋ Resume attach failed: " + (e && e.message ? e.message : e);
   }
 
-  // ── Attach the reviewed cover letter PDF to a cover-letter file input ─────────
+  // ── Cover letter: attach PDF to a file input, or confirm the text-field fill ──
+  // Always expose a "View cover letter" link when this job has one (data.has_cover), so you can
+  // see exactly what's being attached/filled — regardless of field type.
   let coverStatus = null;
+  let coverViewUrl = data.has_cover
+    ? "http://localhost:8000/api/v1/autofill/cover?url=" +
+        encodeURIComponent(location.href) + "&referrer=" + encodeURIComponent(document.referrer)
+    : null;
   try {
     if (coverInput && !(coverInput.files && coverInput.files.length)) {
       const r = await chrome.runtime.sendMessage({
@@ -510,14 +516,17 @@
           : "⚠️ Cover letter may not have attached — verify (open via link)";
       } else if (r && r.status === 404) {
         coverStatus = "ℹ️ No tailored cover letter for this role — write one or skip";
+        coverViewUrl = null;
       }
+    } else if (data.has_cover) {
+      // No cover-letter FILE input (it's a text field we already filled, or none on this form).
+      coverStatus = "✅ Cover letter ready — filled / view to copy";
     }
   } catch (e) {
     coverStatus = "✋ Cover letter attach failed: " + (e && e.message ? e.message : e);
   }
 
-  const attachMsg = [resumeStatus, coverStatus].filter(Boolean).join("\n");
-  showOverlay(data, notes, attachMsg, resumeViewUrl, blanks);
+  showOverlay(data, notes, resumeStatus, resumeViewUrl, blanks, coverStatus, coverViewUrl);
   } catch (err) {
     try {
       if (document.body) {
@@ -563,7 +572,7 @@
     el.title = "AutonomousHire: " + (note || "please complete");
   }
 
-  function showOverlay(data, notes, resumeStatus, resumeViewUrl, blanks) {
+  function showOverlay(data, notes, resumeStatus, resumeViewUrl, blanks, coverStatus, coverViewUrl) {
     document.getElementById("ah-overlay")?.remove();
     const s = data.summary || {};
     const box = document.createElement("div");
@@ -589,7 +598,15 @@
         const link = resumeViewUrl
           ? ` <a href="${resumeViewUrl}" target="_blank" style="color:#60a5fa;text-decoration:underline">View attached resume ↗</a>`
           : "";
-        html += `<div style="color:${c};font-size:12px;margin-bottom:10px">${resumeStatus}${link}</div>`;
+        html += `<div style="color:${c};font-size:12px;margin-bottom:6px">${resumeStatus}${link}</div>`;
+      }
+      if (coverStatus || coverViewUrl) {
+        const cc = (coverStatus || "").startsWith("✅") ? "#22c55e"
+          : (coverStatus || "").startsWith("ℹ️") ? "#94a3b8" : "#eab308";
+        const clink = coverViewUrl
+          ? ` <a href="${coverViewUrl}" target="_blank" style="color:#60a5fa;text-decoration:underline">View cover letter ↗</a>`
+          : "";
+        html += `<div style="color:${cc};font-size:12px;margin-bottom:10px">${coverStatus || "Cover letter"}${clink}</div>`;
       }
       if (notes.length) {
         html += `<div style="border-top:1px solid #1e293b;padding-top:8px;max-height:240px;overflow:auto">`;
