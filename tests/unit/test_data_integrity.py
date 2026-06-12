@@ -266,3 +266,21 @@ def test_open_ended_detection_catches_how_and_short_questions():
     for q in ("email address", "first name", "linkedin url", "portfolio url?"):
         assert _is_open_ended(q, "text") is False, f"should NOT be open-ended: {q!r}"
     assert _is_open_ended("anything", "textarea") is True   # textarea always essay
+
+
+def test_dead_listing_redirect_detection():
+    """Regression: a closed posting that 302s to a generic listing (still 200) must read as DEAD,
+    not live. Airbnb's filled job redirected via '?error=true' to careers.airbnb.com/positions/ and
+    the old check thought it was alive."""
+    from agents.application.url_refresher import _redirected_to_dead_listing
+    # closed: error=true marker and/or bare listing landing
+    assert _redirected_to_dead_listing([
+        "https://job-boards.greenhouse.io/airbnb/jobs/7988010",
+        "https://job-boards.greenhouse.io/airbnb?error=true",
+        "https://careers.airbnb.com/positions/"]) is True
+    assert _redirected_to_dead_listing(["https://careers.x.com/positions"]) is True
+    # live: final URL keeps a job-id segment
+    assert _redirected_to_dead_listing([
+        "https://job-boards.greenhouse.io/airbnb/jobs/7955579",
+        "https://careers.airbnb.com/positions/7955579/?gh_jid=7955579"]) is False
+    assert _redirected_to_dead_listing(["https://jobs.lever.co/acme/abc-123"]) is False

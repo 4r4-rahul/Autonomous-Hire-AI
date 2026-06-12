@@ -16,6 +16,7 @@ Used by scripts/refresh_apply_urls.py (CLI) and the scheduler's periodic refresh
 from __future__ import annotations
 
 import asyncio
+import re
 
 import httpx
 
@@ -36,14 +37,35 @@ def _same_role(orig_title: str, matched_title: str) -> bool:
     return len(inter) >= max(2, len(ka) - 2) or len(inter) / len(ka) >= 0.6
 
 
+def _redirected_to_dead_listing(chain: list[str]) -> bool:
+    """A filled/removed posting often 302s to a GENERIC listing page that still returns 200, so a
+    plain status check thinks it's live. Detect that: an 'error=true' marker anywhere in the redirect
+    chain, OR a final URL that is a bare listing (…/positions, …/jobs, …/openings) with no job-id
+    segment after it. Live job URLs keep an id (…/positions/7955579, …/jobs/7755758)."""
+    if not chain:
+        return False
+    if any("error=true" in u.lower() for u in chain):
+        return True
+    final = chain[-1].split("#")[0]
+    path = re.sub(r"https?://[^/]+", "", final).split("?")[0]   # path only
+    # bare listing/search page with nothing meaningful after the section
+    if re.search(r"/(positions|jobs|openings|opportunities|search|careers)/?$", path, re.I):
+        return True
+    return False
+
+
 async def _alive(client, url: str) -> bool:
-    """True only if the stored branded URL still serves the job (HTTP 200). Used ONLY on stored
-    URLs — never on board-API results, since some ATS hosts block plain GETs (false negatives)."""
+    """True only if the stored branded URL still serves THE job. Used ONLY on stored URLs — never on
+    board-API results, since some ATS hosts block plain GETs (false negatives). Beyond HTTP 200, we
+    reject closed-job redirects that land on a generic listing page (the Airbnb '?error=true' case)."""
     if not url:
         return False
     try:
         r = await client.get(url, follow_redirects=True, timeout=10)
-        return r.status_code == 200
+        if r.status_code != 200:
+            return False
+        chain = [str(h.url) for h in r.history] + [str(r.url)]
+        return not _redirected_to_dead_listing(chain)
     except Exception:
         return False
 
