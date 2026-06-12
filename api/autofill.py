@@ -485,16 +485,27 @@ def _resolve_one(f: FieldIn, P: dict) -> FillOut:
 
 
 def _is_open_ended(ll: str, ftype: str) -> bool:
-    """True if this is a free-text question we should draft an answer for."""
+    """True if this is a free-text question we should draft an answer for. By the time we reach
+    here the field is NOT a choice and NOT a standard structured field (name/email/phone/links are
+    handled earlier), so a question-form prompt is almost always a free-text essay."""
     if ftype == "textarea":
         return True
     if "cover letter" in ll or len(ll) > 70:
+        return True
+    # Any reasonably-long question-form prompt ('?' anywhere, not a tiny "URL?" field) is free-text.
+    # Catches "How has AI changed the way you approach your work?", "What would you build?", etc.
+    if "?" in ll and len(ll.strip()) > 18:
         return True
     return any(k in ll for k in (
         "why are you interested", "why do you want", "why this", "why are you applying",
         "why join", "why work", "tell us about", "tell us why", "what makes you",
         "what excites you", "what interests you", "describe your", "what attracts",
         "good fit", "right fit", "best fit", "in your own words", "motivat",
+        # broader open-ended stems (incl. 'how' questions and prompt-style asks)
+        "how has", "how do you", "how would you", "how have you", "how did you",
+        "what is your", "what are your", "what's your", "describe a", "describe an",
+        "share an", "share a", "give an example", "walk us through", "experience with",
+        "approach to", "your approach", "thoughts on", "perspective on", "elaborate", "explain",
     ))
 
 
