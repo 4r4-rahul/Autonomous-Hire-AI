@@ -244,22 +244,23 @@ async def job_apply_pipeline() -> None:
 
 
 async def job_board_scan() -> None:
-    """Off-LinkedIn DISCOVERY — scan sponsor-company public ATS boards (Greenhouse/Lever/Ashby/
-    Workable) directly for fresh fitting roles and intake them (resolve→tailor→park). Zero
-    browser, zero LinkedIn — pure board-API requests, so it refuels the apply queue even while
-    the LinkedIn radar is blocked. Rotates through the curated board-friendly sponsor list."""
+    """Off-LinkedIn DISCOVERY — every cycle, scan ALL sponsor-company public ATS boards (Greenhouse/
+    Lever/Ashby/Workable) and cheap-park EVERY fresh, US, on-target, NON-DUPLICATE role that passes
+    the gates. Unbounded parking lot (no target), dedup-protected. Zero browser, zero LinkedIn —
+    pure board-API requests, so it refuels the queue even while the LinkedIn radar is blocked."""
     try:
-        from core import budget_guard
-        if budget_guard.over_budget():
-            logger.info("board_scan_skipped_budget", spent=round(budget_guard.spent_today(), 2))
-            return
-        from agents.discovery.board_scanner import topup
-        # Maintain a healthy pool of FRESH cheap-parked roles (Haiku-only, race-safe locked merge —
-        # persists internally, so we do NOT _save_state a stale snapshot here). The freshness gate
-        # drops ~85% stale, so topup keeps scanning batches until the target is met or boards dry up.
-        # Target raised to 30 so fresh roles keep flowing as the user drains the queue (a target of 12
-        # stalled discovery whenever the queue held applied-but-not-yet-marked roles).
-        summary = await topup(target=30, batch=35, tailor=False)
+        # No budget gate here: discovery scoring is Haiku-only (pennies) and is exempt from the cap
+        # in core/llm.py, so the queue keeps refreshing even on an Opus-heavy day.
+        from core.state_store import load_state
+        from agents.discovery.board_scanner import run
+        from agents.application.dedup_ledger import reconcile_with_state
+        # CONTINUOUS unbounded discovery (the user's model): every cycle, scan ALL sponsor boards and
+        # cheap-park EVERY fresh, US, on-target role that passes the gates — no target/cap on the
+        # parking lot. The dedup ledger guarantees no role is ever added twice (skipped_dup). Haiku-
+        # only scoring (tailor=False), so an unbounded lot is cheap; Opus tailoring stays on-demand.
+        state = load_state()
+        reconcile_with_state(state)              # self-heal the dedup ledger so 'no duplicates' holds
+        _, summary = await run(state, max_companies=200, intake_limit=400, tailor=False, persist=True)
         await _sync_db()
         logger.info("scheduled_board_scan_done", **summary)
     except Exception as e:
