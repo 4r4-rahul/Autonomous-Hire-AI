@@ -65,7 +65,7 @@ export function ReferralModal({ appId, company, role, onClose }: Props) {
         <div className="sticky top-0 z-10 bg-[#0a1628] border-b border-slate-700 px-6 py-4 flex items-center justify-between">
           <div className="min-w-0">
             <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
-              <Users className="w-4 h-4 text-amber-400" /> Get a referral
+              <Users className="w-4 h-4 text-amber-400" /> Referral &amp; outreach
             </h2>
             <p className="text-xs text-slate-500 truncate mt-0.5">{company} — {role}</p>
           </div>
@@ -87,6 +87,10 @@ export function ReferralModal({ appId, company, role, onClose }: Props) {
                 className="flex-1 flex items-center justify-center gap-1.5 bg-slate-700/40 hover:bg-slate-700 border border-slate-600 text-slate-300 text-xs px-3 py-2 rounded-lg disabled:opacity-40">
                 Recruiters <ExternalLink className="w-3.5 h-3.5" />
               </button>
+              <button onClick={() => open(kit?.search_urls?.hiring_managers)} disabled={!kit?.search_urls?.hiring_managers}
+                className="flex-1 flex items-center justify-center gap-1.5 bg-slate-700/40 hover:bg-slate-700 border border-slate-600 text-slate-300 text-xs px-3 py-2 rounded-lg disabled:opacity-40">
+                Hiring managers <ExternalLink className="w-3.5 h-3.5" />
+              </button>
               <button onClick={() => open(kit?.search_urls?.team)} disabled={!kit?.search_urls?.team}
                 className="flex-1 flex items-center justify-center gap-1.5 bg-slate-700/40 hover:bg-slate-700 border border-slate-600 text-slate-300 text-xs px-3 py-2 rounded-lg disabled:opacity-40">
                 The team <ExternalLink className="w-3.5 h-3.5" />
@@ -107,6 +111,26 @@ export function ReferralModal({ appId, company, role, onClose }: Props) {
           )}
           {kit && !isLoading && (
             <>
+              {/* ── Direct outreach: recruiter + hiring manager (often the fastest path) ── */}
+              <div className="mb-2 flex items-center gap-2">
+                <span className="text-sm font-bold text-amber-300">Direct outreach</span>
+                <span className="text-xs text-slate-500">— message the recruiter or hiring manager who owns this req</span>
+              </div>
+              <CopyBox
+                label="✉️ To the recruiter / HR"
+                text={kit.recruiter_note}
+                hint="You already applied — this puts you on the recruiter's radar. Find them via 'Recruiters' above. Replace [Name]."
+              />
+              <CopyBox
+                label="✉️ To the hiring manager"
+                text={kit.hiring_manager_note}
+                hint="More technical — goes to the person who owns the team. Find them via 'Hiring managers' above. Replace [Name]."
+              />
+
+              {/* ── Referral via a peer connection ── */}
+              <div className="mt-6 mb-2 flex items-center gap-2">
+                <span className="text-sm font-bold text-slate-300">Referral via a connection</span>
+              </div>
               <div className="text-xs text-slate-500 mb-3 leading-relaxed">
                 Expert flow: <strong className="text-slate-400">1)</strong> connect with no ask ·{" "}
                 <strong className="text-slate-400">2)</strong> after they accept, send the ask ·{" "}
