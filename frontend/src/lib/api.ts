@@ -67,6 +67,8 @@ export interface Application {
   company_name: string | null;
   role_title: string | null;
   posted_at: string | null;
+  location: string | null;
+  multi_location: boolean;
 }
 
 export interface PipelineRun {

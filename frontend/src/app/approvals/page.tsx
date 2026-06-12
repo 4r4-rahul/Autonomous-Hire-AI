@@ -119,6 +119,16 @@ export default function ApprovalsPage() {
               <div className="min-w-0">
                 <div className="text-sm font-semibold text-slate-100 truncate">{app.company_name}</div>
                 <div className="text-xs text-slate-400 truncate mt-0.5">{app.role_title}</div>
+                {app.location && (
+                  <div className="text-[11px] text-slate-500 truncate mt-0.5">
+                    📍 {app.location}
+                    {app.multi_location && (
+                      <span className="ml-1 text-amber-400" title="Offered in the US and abroad — apply to the US office">
+                        · multi-location, apply to US office
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
               <ScoreBadge score={app.quality_score} />
               <PostedBadge postedAt={app.posted_at} />
