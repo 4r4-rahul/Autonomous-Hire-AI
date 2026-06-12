@@ -320,6 +320,17 @@ _FOREIGN_LOC = (
     "wales", "cardiff", "cyprus", "malta", "croatia", "zagreb", "slovenia", "ljubljana",
     "czech", "prague", "greece", "athens", "turkey", "istanbul", "south africa", "nigeria",
     "kenya", "argentina", "colombia", "chile", "peru", "costa rica", "new zealand", "auckland",
+    # India tech hubs — 'gurgaon' was renamed 'gurugram' (2016); most of these were missing,
+    # so India-located roles leaked through as 'unknown'. Chosen to avoid US-namesake collisions.
+    "gurugram", "noida", "new delhi", "mumbai", "navi mumbai", "chennai", "kolkata", "ahmedabad",
+    "chandigarh", "coimbatore", "kochi", "mysuru", "nagpur", "indore", "vadodara", "visakhapatnam",
+    "bhubaneswar", "gandhinagar", "thiruvananthapuram", "jaipur", "kanpur", "lucknow",
+    # other clearly-foreign hubs frequently seen on tech boards (country names + unambiguous cities)
+    "bangkok", "thailand", "kuala lumpur", "malaysia", "taipei", "osaka", "frankfurt", "stuttgart",
+    "rotterdam", "eindhoven", "gothenburg", "wroclaw", "wrocław", "gdansk", "gdańsk", "budapest",
+    "hungary", "sofia", "bulgaria", "belgrade", "serbia", "tallinn", "riga", "vilnius", "bratislava",
+    "brno", "ottawa", "calgary", "guadalajara", "monterrey", "bogota", "bogotá", "buenos aires",
+    "cairo", "egypt", "nairobi", "lagos", "riyadh", "doha", "amman", "casablanca",
 )
 _US_LOC = (
     "united states", "usa", "us", "u.s", "americas", "north america", "nationwide",

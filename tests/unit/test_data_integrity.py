@@ -222,3 +222,17 @@ def test_ledger_job_id_extraction():
     assert job_id_from_url("https://x.com/apply?gh_jid=12345") == "12345"
     assert job_id_from_url("https://jobs.lever.co/x/abcdef01-2345-6789-abcd-ef0123456789") \
         == "abcdef01-2345-6789-abcd-ef0123456789"
+
+
+def test_loc_class_foreign_cities_not_unknown():
+    """Regression: foreign CITY names (no country word) must classify 'foreign', not leak as
+    'unknown' (kept by the US-only filter). 'Gurugram' once slipped a real India role into the
+    queue because the list had only the old 'gurgaon' spelling and was missing most India hubs."""
+    from agents.discovery.apply_url_resolver import _loc_class
+    for foreign in ("Gurugram", "Mumbai", "Chennai", "Noida", "New Delhi", "Bengaluru",
+                    "Kolkata", "Frankfurt", "Bangkok", "Taipei", "Ottawa"):
+        assert _loc_class(foreign) == "foreign", f"{foreign} should be foreign"
+    # US signal still wins, and real US hubs/states stay US
+    for us in ("Austin, TX", "New York", "San Francisco", "Dallas, Texas", "Remote - US"):
+        assert _loc_class(us) == "us", f"{us} should be us"
+    assert _loc_class("") == "unknown"
