@@ -206,7 +206,7 @@ export default function ApprovalsPage() {
           </h2>
           <div className="space-y-2 mb-8">
             {sent.map((app) => (
-              <ReadonlyRow key={app.id} app={app} onProof={() => setSelectedId(app.id)} tone="teal" />
+              <ReadonlyRow key={app.id} app={app} onProof={() => setSelectedId(app.id)} onReferral={() => setReferralApp(app)} tone="teal" />
             ))}
           </div>
         </>
@@ -218,7 +218,7 @@ export default function ApprovalsPage() {
       </h2>
       <div className="space-y-2">
         {(submitted ?? []).map((app) => (
-          <ReadonlyRow key={app.id} app={app} onProof={() => setSelectedId(app.id)} tone="green" />
+          <ReadonlyRow key={app.id} app={app} onProof={() => setSelectedId(app.id)} onReferral={() => setReferralApp(app)} tone="green" />
         ))}
         {!submitted?.length && (
           <div className="text-center py-10 text-slate-600">
@@ -250,7 +250,7 @@ export default function ApprovalsPage() {
   );
 }
 
-function ReadonlyRow({ app, onProof, tone }: { app: Application; onProof: () => void; tone: "teal" | "green" }) {
+function ReadonlyRow({ app, onProof, onReferral, tone }: { app: Application; onProof: () => void; onReferral?: () => void; tone: "teal" | "green" }) {
   const dot = tone === "teal" ? "bg-teal-400" : "bg-green-400";
   return (
     <div className="bg-slate-800/50 border border-slate-700 rounded-xl px-5 py-4 flex items-center justify-between hover:bg-slate-700/30 transition-colors">
@@ -265,12 +265,23 @@ function ReadonlyRow({ app, onProof, tone }: { app: Application; onProof: () => 
           {STATUS_LABEL[app.status] ?? app.status} · {fmtRelative(app.submitted_at ?? app.updated_at)}
         </span>
       </div>
-      <button
-        onClick={onProof}
-        className="flex items-center gap-2 bg-blue-600/20 hover:bg-blue-600/40 border border-blue-500/40 text-blue-400 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors shrink-0 ml-4"
-      >
-        <Eye className="w-3.5 h-3.5" /> View Proof
-      </button>
+      <div className="flex items-center gap-2 shrink-0 ml-4">
+        {onReferral && (
+          <button
+            onClick={onReferral}
+            title="Get ready-to-send referral notes + find connections — the biggest callback lever after applying"
+            className="flex items-center gap-1.5 bg-amber-600/15 hover:bg-amber-600/30 border border-amber-500/40 text-amber-300 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <Users className="w-3.5 h-3.5" /> Referral
+          </button>
+        )}
+        <button
+          onClick={onProof}
+          className="flex items-center gap-2 bg-blue-600/20 hover:bg-blue-600/40 border border-blue-500/40 text-blue-400 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+        >
+          <Eye className="w-3.5 h-3.5" /> View Proof
+        </button>
+      </div>
     </div>
   );
 }
