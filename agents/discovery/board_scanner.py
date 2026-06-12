@@ -17,7 +17,7 @@ import json
 from pathlib import Path
 
 from core.logger import get_logger
-from agents.discovery.apply_url_resolver import _fetch_company_postings, _loc_class
+from agents.discovery.apply_url_resolver import _fetch_company_postings, loc_is_us_ok
 from agents.application.ats_intake import intake_jobs
 
 logger = get_logger("board_scanner")
@@ -141,10 +141,11 @@ async def run(state, *, max_companies: int = 25, intake_limit: int = 10, tailor:
     for company, postings in boards:
         if not postings:
             continue
-        # Title must fit AND the posting must not be foreign-only (strict US — drop France/EMEA/etc.
-        # right at discovery so foreign roles never reach the queue). _loc_class keeps US + unknown.
+        # Title must fit AND the posting must have a POSITIVE US signal (strict US — drop France/
+        # EMEA/India/etc. right at discovery). loc_is_us_ok(strict) rejects 'unknown' too, so an
+        # unlisted foreign city can't leak through as 'unknown' (e.g. the Gurugram case).
         hits = [p for p in postings
-                if _title_ok(p.get("title")) and _loc_class(p.get("location", "")) != "foreign"]
+                if _title_ok(p.get("title")) and loc_is_us_ok(p.get("location", ""))]
         if hits:
             companies_with_jobs += 1
         for p in hits:

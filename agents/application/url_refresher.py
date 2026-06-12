@@ -68,9 +68,10 @@ async def refresh_pending_urls(state: dict, *, apply: bool = True) -> tuple[dict
                 report["unresolved"] += 1
                 return
 
-            # STRICT US enforcement: a queued role whose location is foreign must be re-pointed
-            # to its US variant, or dropped if no US posting exists.
-            if _loc_class(((job or {}).get("location") or "") + " " + title) == "foreign":
+            # STRICT US enforcement: a queued role without a POSITIVE US signal (foreign OR
+            # unconfirmed 'unknown') must be re-pointed to its US variant, or dropped if no US
+            # posting exists — so an unlisted foreign city can't survive as 'unknown'.
+            if _loc_class(((job or {}).get("location") or "") + " " + title) != "us":
                 async with sem:
                     try:
                         res = await resolve_ats_for(company, title, us_only=True)
