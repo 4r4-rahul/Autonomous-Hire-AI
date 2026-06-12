@@ -254,10 +254,12 @@ async def job_board_scan() -> None:
             logger.info("board_scan_skipped_budget", spent=round(budget_guard.spent_today(), 2))
             return
         from agents.discovery.board_scanner import topup
-        # Top up the queue to >=12 FRESH cheap-parked roles (Haiku-only, race-safe locked merge —
+        # Maintain a healthy pool of FRESH cheap-parked roles (Haiku-only, race-safe locked merge —
         # persists internally, so we do NOT _save_state a stale snapshot here). The freshness gate
         # drops ~85% stale, so topup keeps scanning batches until the target is met or boards dry up.
-        summary = await topup(target=12, batch=35, tailor=False)
+        # Target raised to 30 so fresh roles keep flowing as the user drains the queue (a target of 12
+        # stalled discovery whenever the queue held applied-but-not-yet-marked roles).
+        summary = await topup(target=30, batch=35, tailor=False)
         await _sync_db()
         logger.info("scheduled_board_scan_done", **summary)
     except Exception as e:
