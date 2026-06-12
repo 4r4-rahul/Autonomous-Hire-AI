@@ -56,11 +56,14 @@ class LLMClient:
         """Send a chat request. Returns the text content of the first message block."""
         global _total_cost_usd, _total_calls
 
-        # Hard daily spend cap — refuse to start a new call once the day's budget is used up.
-        # EXEMPT on-demand tailoring: that's the user's deliberate "real one" apply (self-limiting),
-        # which must never be blocked. The cap restrains SPECULATIVE/scheduled work only.
+        # Hard daily spend cap — restrains EXPENSIVE speculative work only. Exemptions:
+        #   • on-demand tailoring (the user's deliberate "real one" apply — never block it), and
+        #   • cheap Haiku calls — discovery scoring, fit scoring, email classification (pennies each,
+        #     and the core discovery loop). Capping these froze the whole pipeline once an Opus-heavy
+        #     day hit the limit, so the queue stopped refreshing. Only Opus-tier work is gated.
         from core import budget_guard
-        if self._agent != "on_demand_tailor" and budget_guard.over_budget():
+        _cheap = "haiku" in (self._model or "").lower()
+        if self._agent != "on_demand_tailor" and not _cheap and budget_guard.over_budget():
             logger.warning("llm_daily_budget_exceeded", agent=self._agent,
                            spent=round(budget_guard.spent_today(), 2), cap=budget_guard.daily_cap())
             raise budget_guard.BudgetExceededError(
