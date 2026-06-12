@@ -376,6 +376,7 @@
   // DataTransfer. We fetch the per-job tailored PDF from the backend and attach it.
   let resumeStatus = null;
   let resumeViewUrl = null;
+  let coverInput = null;   // hoisted: the cover-letter attach block below also needs it
   try {
     const fileInputs = [...document.querySelectorAll("input[type='file']")];
     const fieldText = (el) => ((el.name || "") + " " + (el.id || "") + " " +
@@ -387,7 +388,7 @@
       const a = (el.accept || "").toLowerCase();
       return a === "" || a.includes("pdf") || a.includes("doc");
     };
-    const coverInput = fileInputs.find(looksCover);
+    coverInput = fileInputs.find(looksCover);
     // Never let the résumé land in the cover-letter slot (the acceptsDoc fallback could).
     const resumeCandidates = fileInputs.filter((el) => el !== coverInput && !looksCover(el));
     const resumeInput = resumeCandidates.find(looksResume) || resumeCandidates.find(acceptsDoc);
