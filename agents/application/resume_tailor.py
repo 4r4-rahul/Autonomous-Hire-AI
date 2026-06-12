@@ -133,30 +133,62 @@ _COVER_DIR        = Path("data/cover_letters")
 _COVER_DIR.mkdir(parents=True, exist_ok=True)
 
 
-async def _cover_letter(job: dict, profile: dict, llm) -> str:
-    """A short, truthful, role-matched cover letter (Haiku). Proactively frames work authorization
-    — for a sponsorship-needing candidate, surfacing 'US-authorized, needs H1B transfer' up front
-    preempts the silent auto-reject and is a genuine callback lever. Never fabricates."""
+def _cover_letter_decision(job: dict, fit_score: dict, profile: dict) -> tuple[bool, str]:
+    """Decide whether a cover letter is WORTH writing for this role (quality lever, not blanket).
+    Modes (application_defaults.cover_letter): 'never' off, 'always' every role, 'auto' (default)
+    = smart/when-necessary. Returns (needed, human-readable reason)."""
+    mode = (profile.get("application_defaults", {}) or {}).get("cover_letter", "auto")
+    if mode == "never":
+        return False, ""
+    if mode == "always":
+        return True, "configured to always include one"
+    # 'auto' — include only when it genuinely improves the application:
+    desc = (job.get("description") or "").lower()
+    title = (job.get("title") or "").lower()
+    score = (fit_score or {}).get("score", 0) or 0
+    if "cover letter" in desc or "cover letter" in title:
+        return True, "the posting asks for a cover letter"
+    if score >= 78:
+        return True, f"strong fit ({score}) — a tailored pitch is worth it"
+    dom = role_domain(job.get("title", ""), job.get("description", ""))
+    if dom == "solutions_eng":
+        return True, "customer-facing role — motivation and communication carry weight"
+    if any(k in desc for k in ("early-stage", "early stage", "seed stage", "series a", "series b",
+                               "founding", "join us early", "small team", "0 to 1", "0-to-1")):
+        return True, "early-stage role — motivation and proactive sponsorship framing help"
+    return False, ""
+
+
+async def _cover_letter(job: dict, profile: dict, llm, ats_keywords: list[str] | None = None) -> str:
+    """A short, truthful, role-matched cover letter — GROUNDED in the candidate's real experience-bank
+    stories (reframed, not copied) and tied to THIS JD's hardest problem, so it reads like the
+    candidate wrote it, not a template. Proactively frames work authorization (a callback lever for a
+    sponsorship-needing candidate). Never fabricates."""
     wa = profile.get("work_authorization", {}) or {}
     pers = profile.get("personal", {}) or {}
     name = pers.get("name") or pers.get("full_name") or "the candidate"
-    summary = (profile.get("summary") or "")[:600]
     skills = ", ".join((profile.get("skills", {}) or {}).get("primary", [])[:8]) \
         if isinstance(profile.get("skills"), dict) else ""
     sponsor_line = ("I am authorized to work in the U.S. and will require H1B sponsorship/transfer."
                     if wa.get("requires_sponsorship") else "I am authorized to work in the U.S.")
+    # The single most JD-relevant real story to anchor the letter (reframed, never copied verbatim).
+    stories = _select_bank_stories(job, ats_keywords or [])[:1400]
     system = (
-        "Write a concise, professional cover letter (120-170 words, 3 short paragraphs). "
-        "Truthful — use ONLY the candidate facts provided; never invent experience, employers, or "
-        "metrics. Plain text, no markdown headers. Tone: direct, senior, specific to the role. "
-        "Include exactly one sentence stating work authorization verbatim as given.")
+        "Write a concise, senior cover letter (140-180 words, 3 short paragraphs) that sounds like a "
+        "real engineer wrote it in one focused sitting — specific, a little understated, never "
+        "templated. Truthful: use ONLY the facts provided; never invent experience, employers, or "
+        "metrics. Lead with ONE concrete accomplishment that maps to this role's hardest problem "
+        "(reframe a provided story in your own words; do not copy it). Plain text, no markdown, no "
+        "clichés ('excited to apply', 'team player', 'proven track record', 'fast-paced'). Mirror the "
+        "JD's language where it fits. Include exactly one sentence stating work authorization verbatim.")
     user = (
-        f"Candidate: {name}\nBackground: {summary}\nCore skills: {skills}\n"
-        f"Work authorization (use this sentence): {sponsor_line}\n\n"
+        f"Candidate: {name}\nCore skills: {skills}\n"
+        f"Work authorization (use this sentence verbatim): {sponsor_line}\n\n"
+        f"Real accomplishments to draw from (reframe for this role, never copy):\n{stories}\n\n"
         f"Role: {job.get('title')} at {job.get('company_name')}\n"
-        f"Job description (for matching only):\n{(job.get('description') or '')[:1500]}\n\n"
+        f"Job description (match to its hardest problem):\n{(job.get('description') or '')[:1500]}\n\n"
         "Write the cover letter now.")
-    return await llm.chat(system, [{"role": "user", "content": user}], max_tokens=500, temperature=0.4)
+    return await llm.chat(system, [{"role": "user", "content": user}], max_tokens=600, temperature=0.45)
 
 
 def _load_profile() -> dict:
@@ -684,16 +716,19 @@ async def tailor_one(
     resume_path = _RESUME_DIR / f"{job['id']}.md"
     resume_path.write_text(md, encoding="utf-8")
 
-    # Cover letter (cheap, Haiku) — only when configured 'auto'. Proactively frames work
-    # authorization (a callback lever for a sponsorship-needing candidate) and the role fit.
+    # Cover letter — ONLY when it genuinely improves the application (posting asks, strong fit,
+    # customer-facing, or early-stage). Grounded in real bank stories. Uses the stronger model
+    # since it's now selective. Proactively frames work authorization (a sponsorship callback lever).
     cover_path = None
-    if (profile.get("application_defaults", {}) or {}).get("cover_letter") == "auto":
+    need_cover, cover_reason = _cover_letter_decision(job, fit_score, profile)
+    if need_cover:
         try:
-            cover_md = await _cover_letter(job, profile, llm_cheap)
+            cover_md = await _cover_letter(job, profile, llm, ats_keywords)
             if cover_md:
                 cp = _COVER_DIR / f"{job['id']}.md"
                 cp.write_text(_clean_md(cover_md), encoding="utf-8")
                 cover_path = str(cp)
+                logger.info("cover_letter_written", company=job.get("company_name"), reason=cover_reason)
         except Exception as e:
             logger.warning("cover_letter_failed", company=job.get("company_name"), error=str(e)[:90])
 
@@ -720,6 +755,7 @@ async def tailor_one(
         "status": "pending_review",
         "tailored_resume_path": str(resume_path),
         "cover_letter_path": cover_path,
+        "cover_letter_reason": cover_reason if cover_path else "",
         "quality_score": 0,
         "quality_report": {},
         "ats_coverage": ats_coverage,
