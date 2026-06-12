@@ -689,14 +689,44 @@ def _resume_path_for_job(job_id: str) -> Optional[Path]:
     return p if p.exists() else None
 
 
+def _cover_md_for_job(job_id: str) -> Optional[str]:
+    """The reviewed, bank-grounded cover letter text for this job's application, if one exists, so
+    the extension fills a cover-letter field with the SAME letter the user saw — not a fresh draft."""
+    try:
+        st = json.loads(_STATE.read_text())
+    except Exception:
+        return None
+    app = next((a for a in st.get("applications", []) if a.get("job_id") == job_id), None)
+    if not app or not app.get("cover_letter_path"):
+        return None
+    p = Path(app["cover_letter_path"])
+    if not p.is_absolute():
+        p = _ROOT / p
+    try:
+        return p.read_text(encoding="utf-8").strip() or None
+    except Exception:
+        return None
+
+
 @router.post("/resolve")
 async def resolve(body: ResolveIn) -> dict:
     P = _load_profile()
     job = _match_job(body.url, body.referrer)
     resolved = [_resolve_one(f, P) for f in body.fields]
 
-    # Draft every open-ended question in one LLM call, grounded in profile + this job.
+    # Cover-letter fields → fill with the REVIEWED bank-grounded letter (the one in the UI), not a
+    # fresh draft, so the form gets exactly what the user approved. Falls back to drafting if none.
+    _label_by_id = {f.id: (f.label or "") for f in body.fields}
+    cover_md = _cover_md_for_job(job["id"]) if job else None
     gen_idx = [i for i, x in enumerate(resolved) if x.kind == "generate"]
+    if cover_md:
+        for i in list(gen_idx):
+            if "cover letter" in _label_by_id.get(resolved[i].id, "").lower():
+                resolved[i] = FillOut(id=resolved[i].id, kind="text", value=cover_md,
+                                      note="your reviewed tailored cover letter — edit if you like")
+                gen_idx.remove(i)
+
+    # Draft every remaining open-ended question in one LLM call, grounded in profile + this job.
     if gen_idx:
         questions = [resolved[i].value for i in gen_idx]
         answers = await _generate_open_ended(questions, job, P)
@@ -753,6 +783,7 @@ async def resolve(body: ResolveIn) -> dict:
     return {
         "job": {"company": job["company"], "title": job["title"]} if job else None,
         "has_resume": has_resume,         # tells the extension a tailored resume is available
+        "has_cover": bool(cover_md),      # a reviewed cover letter was used for a cover-letter field
         "tailoring": tailoring,           # résumé being generated on demand — poll /resume until ready
         "fills": fills,
         "summary": {"total": len(fills), "filled": filled, "needs_you": needs, "blank": blank},
