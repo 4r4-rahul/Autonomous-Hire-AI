@@ -249,3 +249,20 @@ def test_loc_is_us_ok_strict_rejects_unknown():
     assert loc_is_us_ok("Some Unlisted Town") is False     # unknown -> rejected under strict
     assert loc_is_us_ok("Some Unlisted Town", strict=False) is True   # legacy lenient keeps unknown
     assert loc_is_us_ok("Mumbai", strict=False) is False   # foreign dropped even in lenient
+
+
+def test_open_ended_detection_catches_how_and_short_questions():
+    """Regression: short open-ended prompts (incl. 'How ...?') must be detected as essays to draft,
+    not fall through to blank. A real Duolingo question slipped through because it was <70 chars,
+    a 'How' question (not in the stem list), and not a <textarea>."""
+    from api.autofill import _is_open_ended
+    for q in ("how has ai changed the way you approach your work?",
+              "how has ai changed the way you approach your work?*",
+              "what would you build with our api?",
+              "describe a time you solved a hard problem",
+              "why are you interested in duolingo?"):
+        assert _is_open_ended(q, "text") is True, f"should be open-ended: {q!r}"
+    # structured / short fields must NOT be treated as essays
+    for q in ("email address", "first name", "linkedin url", "portfolio url?"):
+        assert _is_open_ended(q, "text") is False, f"should NOT be open-ended: {q!r}"
+    assert _is_open_ended("anything", "textarea") is True   # textarea always essay
