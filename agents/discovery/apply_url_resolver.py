@@ -346,7 +346,26 @@ _US_LOC = (
     "san francisco", "bay area", "nyc", "seattle", "boston", "austin", "denver",
     "chicago", "atlanta", "los angeles", "san jose", "san diego", "dallas", "houston",
     "mountain view", "menlo park", "palo alto", "san mateo", "sunnyvale", "redmond", "bellevue",
+    "raleigh", "durham", "charlotte", "columbus", "nashville", "pittsburgh", "minneapolis",
+    "salt lake city", "phoenix", "tempe", "scottsdale", "portland", "miami", "philadelphia",
+    "washington dc", "washington, d.c", "reston", "herndon", "arlington", "mclean", "tysons",
+    "cambridge", "somerville", "ann arbor", "madison", "boulder", "irvine", "santa clara",
+    "santa monica", "culver city", "cupertino", "fremont", "oakland", "brooklyn", "manhattan",
+    "jersey city", "hoboken", "plano", "irving", "frisco", "richardson", "fort worth",
+    "san antonio", "kansas city", "saint louis", "st. louis", "st louis", "cincinnati",
+    "cleveland", "indianapolis", "tampa", "orlando", "sacramento", "san bruno", "foster city",
+    "south san francisco", "emeryville", "burlingame", "bentonville", "raleigh-durham",
 )
+# US state abbreviations in the conventional "City, ST" form. Matched case-sensitively on the
+# ORIGINAL (un-lowercased) text and only after a comma, so it can't collide with common English
+# words ('in', 'or', 'me', 'pa', 'hi' etc.) — those are lowercase and not comma-prefixed here.
+_US_STATE_ABBR = (
+    "AL", "AK", "AZ", "AR", "CA", "CO", "CT", "DE", "FL", "GA", "HI", "ID", "IL", "IN", "IA",
+    "KS", "KY", "LA", "ME", "MD", "MA", "MI", "MN", "MS", "MO", "MT", "NE", "NV", "NH", "NJ",
+    "NM", "NY", "NC", "ND", "OH", "OK", "OR", "PA", "RI", "SC", "SD", "TN", "TX", "UT", "VT",
+    "VA", "WA", "WV", "WI", "WY", "DC",
+)
+_US_ABBR_RE = re.compile(r",\s*(?:" + "|".join(_US_STATE_ABBR) + r")\b")
 # Word-boundary matching — naive substring matching mis-fires ('usa' inside 'lausanne',
 # 'us' inside 'belarus'). \b ensures whole-word matches only.
 _US_RE = re.compile(r"\b(?:" + "|".join(re.escape(k) for k in _US_LOC) + r")\b")
@@ -398,15 +417,25 @@ def posting_age_days(posted_at: str):
 def _loc_class(text: str) -> str:
     """'us', 'foreign', or 'unknown' for a location/title string. An explicit US signal wins over
     foreign (a 'US; London' multi-loc role counts as US-available); foreign signal beats a bare
-    'remote' (a 'Remote - EMEA' role is foreign); a bare 'remote' at a US-HQ'd company → US."""
-    t = (text or "").lower()
-    if _US_RE.search(t):
+    'remote' (a 'Remote - EMEA' role is foreign); a bare 'remote' at a US-HQ'd company → US.
+    The 'City, ST' state-abbreviation pattern (matched on the original case) also counts as US."""
+    raw = text or ""
+    t = raw.lower()
+    if _US_RE.search(t) or _US_ABBR_RE.search(raw):
         return "us"
     if _FOREIGN_RE.search(t):
         return "foreign"
     if "remote" in t or "anywhere" in t:
         return "us"
     return "unknown"
+
+
+def loc_is_us_ok(text: str, *, strict: bool = True) -> bool:
+    """Gate for whether a location may enter the US-only queue.
+    strict=True (default): require a POSITIVE US signal — 'unknown' is rejected, so an unlisted
+      foreign city can't leak through as 'unknown'. strict=False: legacy lenient (us OR unknown)."""
+    c = _loc_class(text)
+    return c == "us" if strict else c != "foreign"
 
 
 async def resolve_ats_for(company: str, title: str, *, us_only: bool = False) -> dict | None:
@@ -435,7 +464,9 @@ async def resolve_ats_for(company: str, title: str, *, us_only: bool = False) ->
         return None
 
     if us_only:
-        scored = [s for s in scored if s[1] != "foreign"]   # drop foreign variants entirely
+        # STRICT: require a positive US signal — drop foreign AND unknown-location variants, so an
+        # unlisted foreign city can't slip through as 'unknown'.
+        scored = [s for s in scored if s[1] == "us"]
         if not scored:
             return None
     # Prefer: highest title score, then a US posting over an unknown-location one.

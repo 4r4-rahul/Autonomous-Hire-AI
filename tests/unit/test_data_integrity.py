@@ -232,7 +232,20 @@ def test_loc_class_foreign_cities_not_unknown():
     for foreign in ("Gurugram", "Mumbai", "Chennai", "Noida", "New Delhi", "Bengaluru",
                     "Kolkata", "Frankfurt", "Bangkok", "Taipei", "Ottawa"):
         assert _loc_class(foreign) == "foreign", f"{foreign} should be foreign"
-    # US signal still wins, and real US hubs/states stay US
-    for us in ("Austin, TX", "New York", "San Francisco", "Dallas, Texas", "Remote - US"):
+    # US signal still wins, and real US hubs/states (incl. 'City, ST' abbreviations) stay US
+    for us in ("Austin, TX", "New York", "San Francisco", "Dallas, Texas", "Remote - US",
+               "Plano, TX", "Raleigh, NC", "Columbus, OH", "Portland, OR", "Indianapolis, IN"):
         assert _loc_class(us) == "us", f"{us} should be us"
     assert _loc_class("") == "unknown"
+
+
+def test_loc_is_us_ok_strict_rejects_unknown():
+    """Strict gate must require a POSITIVE US signal: 'unknown' is rejected so an unlisted foreign
+    city can't enter the queue as 'unknown'. Lenient mode keeps the legacy us-or-unknown behavior."""
+    from agents.discovery.apply_url_resolver import loc_is_us_ok
+    assert loc_is_us_ok("Austin, TX") is True
+    assert loc_is_us_ok("Remote - US") is True
+    assert loc_is_us_ok("Gurugram") is False              # foreign
+    assert loc_is_us_ok("Some Unlisted Town") is False     # unknown -> rejected under strict
+    assert loc_is_us_ok("Some Unlisted Town", strict=False) is True   # legacy lenient keeps unknown
+    assert loc_is_us_ok("Mumbai", strict=False) is False   # foreign dropped even in lenient
