@@ -87,7 +87,12 @@ async def build_referral_kit(app_id: str = "", *, draft: bool = True) -> dict:
         "    projects. NEVER call a personal project 'production' or claim it runs 'at scale'.\n"
         "  • Lead with the REAL production experience that matches THIS role (see EMPHASIS). Mention\n"
         "    side projects only as side projects, and only when the role is actually about that.\n"
-        "  • Use the candidate's REAL current title accurately; do not invent a different one.\n\n"
+        "  • Use the candidate's REAL current title VERBATIM; NEVER morph it to match the target role\n"
+        "    (don't call them 'Data Engineer' just because the role is one — keep their real title).\n"
+        "  • NEVER invent a number ('hundreds of concurrent jobs', a percentage, a scale figure) that\n"
+        "    isn't in REAL EXPERIENCE.\n"
+        "  • Only claim model serving / training / drift / inference if REAL EXPERIENCE shows it;\n"
+        "    otherwise describe the data-platform / backend / infra work accurately. No ML-depth bluffing.\n\n"
         "VOICE — this is the whole point: write like a real, busy senior engineer typing on their "
         "phone. Plain, direct, a little understated. Short sentences. Contractions. Confident, not "
         "eager. Every word earns its place. It must NOT read like AI or a template.\n"
@@ -106,8 +111,10 @@ async def build_referral_kit(app_id: str = "", *, draft: bool = True) -> dict:
         "couple minutes, fine if not, even a pointer helps).\n"
         '  "why_me": exactly 2 plain sentences ABOUT the candidate (third person) the employee can '
         'paste into the internal "why refer them" box.\n'
-        '  "mutual_intro": 2 short sentences to a MUTUAL ('"'"'[Mutual]'"'"') asking for an intro to '
-        "someone at the company.")
+        '  "mutual_intro": 2 short sentences, STILL first-person AS the candidate, to a MUTUAL '
+        "('"'"'[Mutual]'"'"') asking the mutual to introduce the candidate to someone at the company. "
+        "Do NOT write it as a third party describing the candidate by name; the candidate is asking "
+        "their OWN contact for help (e.g. 'Hey [Mutual], could you intro me to someone on the X team?').")
     # Lead with the facts that match THIS role's domain (data-platform vs AI/ML), not always AI —
     # and ground the specifics in the candidate's REAL experience bank (production work), not the
     # generic AI-heavy summary that made referrals overclaim side projects.
