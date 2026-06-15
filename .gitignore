@@ -36,3 +36,5 @@ frontend/.next/
 .idea/
 .vscode/
 data/llm_costs.jsonl
+data/autofill_reports.jsonl
+data/ah_autofill_debug.json

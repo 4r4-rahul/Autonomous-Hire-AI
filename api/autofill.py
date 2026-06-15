@@ -958,6 +958,59 @@ async def resolve(body: ResolveIn) -> dict:
     }
 
 
+class ReportField(BaseModel):
+    label: str = ""
+    kind: str = ""             # widget kind: text|select|radio|checkbox|react
+    type: str = ""             # scraped field type
+    options_count: int = 0
+    value_kind: str = ""       # resolver fill kind: value|text|skip
+    committed: bool = False
+    reason: str = ""
+
+
+class ReportIn(BaseModel):
+    url: str = ""
+    host: str = ""
+    job: Optional[dict] = None
+    total: int = 0
+    filled: int = 0
+    needs_you: int = 0
+    fields: list[ReportField] = []   # the failures + resolver-skips (committed=False)
+
+
+_REPORTS = _ROOT / "data" / "autofill_reports.jsonl"
+
+
+@router.post("/report")
+async def report(body: ReportIn) -> dict:
+    """Telemetry sink. After filling, the extension VERIFIES each field against the live DOM and
+    posts the outcome here so we can fix CLASSES of forms from data instead of one screenshot at a
+    time. Privacy: only labels / widget kinds / reasons are sent — NEVER the user's filled values.
+    Appended to data/autofill_reports.jsonl (gitignored, 0600)."""
+    from datetime import datetime, timezone
+    rec = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "host": body.host,
+        "url": body.url,
+        "job": body.job,
+        "counts": {"total": body.total, "filled": body.filled, "needs_you": body.needs_you},
+        "failures": [f.model_dump() for f in body.fields],
+    }
+    try:
+        _REPORTS.parent.mkdir(parents=True, exist_ok=True)
+        with _REPORTS.open("a") as fh:
+            fh.write(json.dumps(rec) + "\n")
+        try:
+            os.chmod(_REPORTS, 0o600)
+        except Exception:
+            pass
+    except Exception as e:
+        logger.warning("autofill_report_write_failed", error=str(e)[:120])
+    logger.info("autofill_report", host=body.host, total=body.total, filled=body.filled,
+                needs_you=body.needs_you, failures=len(rec["failures"]))
+    return {"ok": True, "recorded": len(rec["failures"])}
+
+
 @router.get("/resume")
 def resume(url: str = "", referrer: str = ""):
     """Serve the tailored resume PDF for the job whose apply_url matches `url`/`referrer`.
