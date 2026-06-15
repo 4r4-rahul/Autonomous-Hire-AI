@@ -25,6 +25,19 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
 
+  if (msg && msg.type === "report") {
+    // Fire-and-forget telemetry: verified per-field fill outcomes (no user values).
+    fetch(`${BASE}/report`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(msg.report || {}),
+    })
+      .then((r) => r.json())
+      .then((data) => sendResponse({ ok: true, data }))
+      .catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
+
   if (msg && (msg.type === "resume" || msg.type === "cover")) {
     const qs = new URLSearchParams({ url: msg.url || "", referrer: msg.referrer || "" });
     const fallbackName = msg.type === "cover" ? "cover_letter.pdf" : "resume.pdf";

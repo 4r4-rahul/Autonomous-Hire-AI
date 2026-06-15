@@ -397,59 +397,27 @@
   // ── Apply fills ────────────────────────────────────────────────────────────────
   const notes = [];
   const blanks = [];
+  const attempts = [];    // {item, fld, fill} — every value fill; VERIFIED against the live DOM below
+  const skips = [];       // {item, fld, note} — resolver had no confident answer
   const textFills = [];   // {el, value} — re-asserted after a settle delay (Ashby state-drop fix)
   for (const fill of data.fills || []) {
     const item = reg[fill.id];
     if (!item) continue;
     const fld = fields.find((f) => f.id === fill.id) || {};
-    try {
-      if (fill.kind === "blank") {
-        // Deliberately left empty (e.g. a conditional that doesn't apply) — no action.
-        blanks.push({ label: fld.label, note: fill.note });
-        continue;
-      }
-      if (fill.kind === "skip") {
-        markNeedsYou(item, fld.label, fill.note);
-        notes.push({ label: fld.label, note: fill.note || "needs you", status: "skip" });
-        continue;
-      }
-      let ok = false;
-      if (item.kind === "text") { setNative(item.el, fill.value); textFills.push({ el: item.el, value: fill.value }); ok = true; }
-      else if (item.kind === "select") { ok = selectNative(item.el, fill.value); }
-      else if (item.kind === "radio" || item.kind === "checkbox") {
-        // The backend returns the EXACT option text it chose. Match precisely:
-        // exact → option-startswith-want → option-contains-want. NEVER want-contains-option
-        // (reverse match) — "Asian (Not Hispanic or Latino)" contains "Hispanic or Latino",
-        // which would wrongly tick the Hispanic radio. Protected-class data must be exact.
-        const want = clean(fill.value).toLowerCase();
-        const m = item.pairs.find((p) => clean(p.l).toLowerCase() === want)
-          || item.pairs.find((p) => { const pl = clean(p.l).toLowerCase();
-               return pl.length > 2 && (pl.startsWith(want + " ") || pl.startsWith(want + ",") || pl.startsWith(want + " ("));
-             })
-          || item.pairs.find((p) => { const pl = clean(p.l).toLowerCase();
-               return want.length > 3 && pl.includes(want);
-             });
-        if (m) {
-          if (item.kind === "checkbox" && m.r.checked) { ok = true; }
-          else {
-            m.r.click();
-            // Styled control: if clicking the hidden native input didn't take, click its label.
-            if (m.r.checked === false) {
-              const lab = m.r.closest("label")
-                || (m.r.id && document.querySelector(`label[for="${CSS.escape(m.r.id)}"]`));
-              if (lab) lab.click();
-            }
-            ok = true;
-          }
-        }
-      } else if (item.kind === "react") { ok = await fillReactSelect(item.control, fill.value); }
-
-      if (ok) { markFilled(item); }
-      else { markNeedsYou(item, fld.label, "couldn't set — recommended: " + fill.value);
-        notes.push({ label: fld.label, note: "pick: " + fill.value, status: "manual" }); }
-    } catch (e) {
-      markNeedsYou(item, fld.label, "error filling");
+    if (fill.kind === "blank") {
+      // Deliberately left empty (e.g. a conditional that doesn't apply) — no action.
+      blanks.push({ label: fld.label, note: fill.note });
+      continue;
     }
+    if (fill.kind === "skip") {
+      markNeedsYou(item, fld.label, fill.note);
+      notes.push({ label: fld.label, note: fill.note || "needs you", status: "skip" });
+      skips.push({ item, fld, note: fill.note });
+      continue;
+    }
+    try { await applyFill(item, fill); } catch (e) {}
+    if (item.kind === "text") textFills.push({ el: item.el, value: fill.value });
+    attempts.push({ item, fld, fill });
   }
   // ── Re-assert text fields after the form settles ─────────────────────────────
   // Ashby (react-hook-form) can drop a programmatically-set value during a post-mount
@@ -463,6 +431,52 @@
       try { if (el.isConnected) setNative(el, value); } catch (e) {}
     }
   }
+
+  // ── Verify every fill against the live DOM, retry failures, recount from reality ──
+  // The backend's summary counts what it RESOLVED, not what actually COMMITTED — which is how a
+  // dropdown could silently fail while the panel proudly said "Needs you 0". Re-check each field
+  // for real, retry the ones that didn't take, then mark + count from what's actually in the DOM.
+  await sleep(250);
+  const failures = [];
+  for (const a of attempts) {
+    if (!verifyFilled(a.item)) {
+      try { await applyFill(a.item, a.fill); } catch (e) {}
+      await sleep(150);
+    }
+    if (verifyFilled(a.item)) { markFilled(a.item); a.committed = true; }
+    else {
+      a.committed = false;
+      markNeedsYou(a.item, a.fld.label, "couldn't confirm — recommended: " + a.fill.value);
+      notes.push({ label: a.fld.label, note: "verify/pick: " + a.fill.value, status: "manual" });
+      failures.push(a);
+    }
+  }
+  // Recompute the summary from what ACTUALLY committed (overrides the backend's optimistic count).
+  data.summary = {
+    total: attempts.length + skips.length,
+    filled: attempts.filter((a) => a.committed).length,
+    needs_you: failures.length + skips.length,
+    blank: blanks.length,
+  };
+  // ── Telemetry: report the VERIFIED per-field outcome so we fix CLASSES of forms from data ──
+  // (labels / widget kinds / reasons only — NEVER the user's values). Failures + resolver-skips
+  // reveal which widgets and labels still need work, instead of debugging one screenshot at a time.
+  try {
+    const reportFields = [
+      ...failures.map((a) => ({ label: a.fld.label || "", kind: a.item.kind, type: a.fld.type || "",
+        options_count: (a.fld.options || []).length, value_kind: a.fill.kind || "value",
+        committed: false, reason: (a.fill.note || "did not commit").slice(0, 140) })),
+      ...skips.map((s) => ({ label: s.fld.label || "", kind: s.item.kind, type: s.fld.type || "",
+        options_count: (s.fld.options || []).length, value_kind: "skip",
+        committed: false, reason: ("resolver: " + (s.note || "no rule")).slice(0, 140) })),
+    ];
+    chrome.runtime.sendMessage({
+      type: "report",
+      report: { url: location.href, host: location.host, job: data.job || null,
+        total: data.summary.total, filled: data.summary.filled, needs_you: data.summary.needs_you,
+        fields: reportFields },
+    });
+  } catch (e) {}
 
   // ── Attach the tailored resume to the form's file input ──────────────────────
   // A content script can't set a file path, but it CAN attach a real File via
@@ -632,6 +646,47 @@
       }
     } catch (_) {}
     console.error("[AutonomousHire] autofill error:", err);
+  }
+
+  // Apply ONE resolved fill to its widget — shared by the first pass and the verify-retry pass
+  // (single source of truth for how each widget kind is filled).
+  async function applyFill(item, fill) {
+    if (item.kind === "text") { setNative(item.el, fill.value); return true; }
+    if (item.kind === "select") { return selectNative(item.el, fill.value); }
+    if (item.kind === "radio" || item.kind === "checkbox") {
+      // The backend returns the EXACT option text it chose. Match precisely: exact →
+      // option-startswith-want → option-contains-want. NEVER want-contains-option (reverse) —
+      // "Asian (Not Hispanic or Latino)" contains "Hispanic or Latino", which would wrongly
+      // tick the Hispanic radio. Protected-class data must be exact.
+      const want = clean(fill.value).toLowerCase();
+      const m = item.pairs.find((p) => clean(p.l).toLowerCase() === want)
+        || item.pairs.find((p) => { const pl = clean(p.l).toLowerCase();
+             return pl.length > 2 && (pl.startsWith(want + " ") || pl.startsWith(want + ",") || pl.startsWith(want + " (")); })
+        || item.pairs.find((p) => { const pl = clean(p.l).toLowerCase();
+             return want.length > 3 && pl.includes(want); });
+      if (!m) return false;
+      if (item.kind === "checkbox" && m.r.checked) return true;
+      m.r.click();
+      // Styled control: if clicking the hidden native input didn't take, click its label.
+      if (m.r.checked === false) {
+        const lab = m.r.closest("label") || (m.r.id && document.querySelector(`label[for="${CSS.escape(m.r.id)}"]`));
+        if (lab) lab.click();
+      }
+      return true;
+    }
+    if (item.kind === "react") { return await fillReactSelect(item.control, fill.value); }
+    return false;
+  }
+
+  // Did the fill actually land in the live DOM? (Not "did we dispatch events" — the real value.)
+  function verifyFilled(item) {
+    try {
+      if (item.kind === "text") return !!clean(item.el.value);
+      if (item.kind === "select") return !!(item.el.value && !["", "0", "-1"].includes(item.el.value));
+      if (item.kind === "radio" || item.kind === "checkbox") return item.pairs.some((p) => p.r.checked);
+      if (item.kind === "react") return committed(item.control);
+    } catch (e) {}
+    return false;
   }
 
   function selectNative(el, value) {
