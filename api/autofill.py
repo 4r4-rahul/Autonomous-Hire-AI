@@ -1111,3 +1111,56 @@ def cover(url: str = "", referrer: str = ""):
     safe = (P.get("personal", {}).get("name", "Cover") or "Cover").replace(" ", "_")
     return FileResponse(str(pdf), media_type="application/pdf",
                         filename=f"{safe}_Cover_Letter.pdf", content_disposition_type="inline")
+
+
+class CoverGenIn(BaseModel):
+    url: str = ""
+    referrer: str = ""
+
+
+_COVER_IN_FLIGHT: set = set()
+
+
+@router.post("/cover/generate")
+async def cover_generate(body: CoverGenIn) -> dict:
+    """On-demand cover letter. The pipeline only pre-writes one for SOME roles (strong fit / posting
+    asks / customer-facing / early-stage). When a form actually HAS a cover-letter field, that's the
+    strongest signal one is wanted — so generate + persist it now, with the same bank-grounded,
+    truthful writer the pipeline uses. Returns {ok, status: exists|generated|in_progress}."""
+    from fastapi import HTTPException
+    matched = _match_job(body.url, body.referrer)
+    if not matched:
+        raise HTTPException(404, "no job matched this URL")
+    job_id = matched["id"]
+    if _cover_md_for_job(job_id):                       # already have one — nothing to do
+        return {"ok": True, "status": "exists"}
+    if job_id in _COVER_IN_FLIGHT:
+        return {"ok": True, "status": "in_progress"}
+    _COVER_IN_FLIGHT.add(job_id)
+    try:
+        st = json.loads(_STATE.read_text())
+        job = next((j for j in st.get("job_listings", []) if j.get("id") == job_id), None)
+        app = next((a for a in st.get("applications", []) if a.get("job_id") == job_id), None)
+        if not job:
+            raise HTTPException(404, "job listing not found")
+        if not app:
+            raise HTTPException(409, "no application row to attach the cover letter to")
+        from core.llm import get_llm
+        from agents.application.resume_tailor import _cover_letter, _COVER_DIR, _clean_md
+        llm = get_llm("on_demand_tailor")              # exempt from the budget cap (autofill path)
+        cover_md = await _cover_letter(job, _load_profile(), llm, None)
+        if not cover_md:
+            raise HTTPException(500, "cover generation returned nothing")
+        _COVER_DIR.mkdir(parents=True, exist_ok=True)
+        cp = _COVER_DIR / f"{job_id}.md"
+        cp.write_text(_clean_md(cover_md), encoding="utf-8")
+        from core.state_store import mutate_state
+        with mutate_state() as state:
+            a = next((x for x in state.get("applications", []) if x.get("job_id") == job_id), None)
+            if a is not None:
+                a["cover_letter_path"] = str(cp)
+                a["cover_letter_reason"] = "form has a cover-letter field (on-demand)"
+        logger.info("cover_generated_on_demand", job_id=job_id, company=job.get("company_name"))
+        return {"ok": True, "status": "generated"}
+    finally:
+        _COVER_IN_FLIGHT.discard(job_id)

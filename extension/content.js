@@ -609,6 +609,23 @@
         encodeURIComponent(location.href) + "&referrer=" + encodeURIComponent(document.referrer)
     : null;
   try {
+    // On-demand cover letter — the form HAS a cover-letter upload but this role has none yet (the
+    // pipeline only pre-writes one for some roles). The field itself is the strongest signal one is
+    // wanted, so generate it now (mirrors the résumé on-demand flow), then attach below.
+    if (coverInput && !(coverInput.files && coverInput.files.length) && !data.has_cover) {
+      showOverlay(data, notes, resumeStatus, resumeViewUrl, blanks,
+                  "⏳ Writing a cover letter for this role… (~15s)", null);
+      try {
+        const g = await chrome.runtime.sendMessage({
+          type: "cover_generate", url: location.href, referrer: document.referrer,
+        });
+        if (g && g.ok && g.data && (g.data.status === "generated" || g.data.status === "exists")) {
+          data.has_cover = true;
+          coverViewUrl = "http://localhost:8000/api/v1/autofill/cover?url=" +
+            encodeURIComponent(location.href) + "&referrer=" + encodeURIComponent(document.referrer);
+        }
+      } catch (e) {}
+    }
     if (coverInput && !(coverInput.files && coverInput.files.length)) {
       const r = await chrome.runtime.sendMessage({
         type: "cover", url: location.href, referrer: document.referrer,
