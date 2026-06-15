@@ -37,6 +37,11 @@ _JUNK_ATS = ("jometer.com", "jobleads.com", "outlier.ai", "zipapply",
 
 _ACTIVE = ("submitted", "pending_review", "awaiting_confirmation", "approved",
            "pending_manual_submit")
+# The per-company cap counts only roles STILL AWAITING YOUR ACTION (in the queue / in flight),
+# NOT ones already applied to. So once you apply to 3 roles at a company, those slots free up and
+# new matched roles there can surface — you just never see more than 3 at once (the anti-spam point).
+# Dedup still uses _ACTIVE, so a role you've already applied to is never re-queued.
+_CAP_STATUSES = ("pending_review", "pending_manual_submit", "awaiting_confirmation")
 
 # Recruiter red-flag rule: never queue more than this many roles at one company.
 _PER_COMPANY_CAP = 3
@@ -102,10 +107,11 @@ async def intake_jobs(discovered: list[dict], state: JobSearchState,
     active = {(_norm(a.get("company_name")), _norm(a.get("role_title")))
               for a in updated.get("applications", []) if a.get("status") in _ACTIVE}
     existing_urls = {j.get("apply_url") for j in updated.get("job_listings", [])}
-    # Per-company cap: count roles already live at each company (this run adds to it).
+    # Per-company cap: count only roles STILL AWAITING ACTION (not already-applied) at each company,
+    # so applying to your 3 frees the slots for fresh matched roles there (this run adds to it).
     from collections import Counter
     company_counts = Counter(_norm(a.get("company_name"))
-                             for a in updated.get("applications", []) if a.get("status") in _ACTIVE)
+                             for a in updated.get("applications", []) if a.get("status") in _CAP_STATUSES)
     # Reuse the learned quality gates: low-value companies (avg fit < 40 over ≥10 jobs) +
     # zero-pass title patterns (forward deployed, solutions engineer, sales…) + sponsorship
     # knock-outs. Keeps Palantir/Cloudflare/Veeva noise out of the queue.
