@@ -117,6 +117,23 @@ class LLMClient:
                 _total_calls += 1
                 budget_guard.record(cost)   # persist toward the daily cap
 
+                # Append-only per-call cost ledger — survives process restarts and captures EVERY
+                # call from EVERY process (scheduler, API, interactive), so spend is always fully
+                # attributable by agent/model and a real leak is visible within hours.
+                try:
+                    import json as _json
+                    from datetime import datetime as _dt, timezone as _tz
+                    with open("data/llm_costs.jsonl", "a") as _f:
+                        _f.write(_json.dumps({
+                            "ts": _dt.now(_tz.utc).isoformat(),
+                            "agent": self._agent, "model": self._model,
+                            "in": usage.input_tokens, "out": usage.output_tokens,
+                            "cache_read": getattr(usage, "cache_read_input_tokens", 0),
+                            "cost": round(cost, 6),
+                        }) + "\n")
+                except Exception:
+                    pass
+
                 logger.log_decision(
                     action="llm_call",
                     outcome="success",
