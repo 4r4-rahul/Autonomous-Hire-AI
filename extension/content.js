@@ -110,7 +110,8 @@
   }
 
   const committed = (control) =>
-    !!control.querySelector(".select__single-value, [class*='__single-value']");
+    !!control.querySelector(".select__single-value, [class*='__single-value'], " +
+                            ".select__multi-value, [class*='__multi-value']");
 
   // The menu belonging to THIS control — via the input's aria-controls (covers portaled
   // menus) or the menu rendered inside the control's own select wrapper. Scoping this is
@@ -182,26 +183,33 @@
       }
       return null;
     };
+    const clickOpt = (opt) => {
+      opt.scrollIntoView({ block: "nearest" });
+      // React-Select selects on mousedown; dispatch the full sequence to be safe.
+      for (const t of ["pointerdown", "mousedown", "mouseup", "click"])
+        opt.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }));
+    };
     try {
       rsOpen(control);
-      await sleep(400);
-      const opt = pick();
-      if (opt) {
-        opt.scrollIntoView({ block: "nearest" });
-        // React-Select selects on mousedown; dispatch the full sequence to be safe.
-        for (const t of ["pointerdown", "mousedown", "mouseup", "click"])
-          opt.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }));
-        await sleep(180);
-      }
-      // Keyboard fallback: type to filter the list, then Enter selects the focused option.
+      // Poll for options to render — async/lazy menus (and EEO dropdowns far down a long page)
+      // don't paint within a fixed 400ms, which is why race was intermittently left empty.
+      let opt = null;
+      for (let i = 0; i < 10 && !opt; i++) { await sleep(150); opt = pick(); }
+      if (opt) { clickOpt(opt); await sleep(180); }
+      // Keyboard fallback: type to filter the list, then CLICK the matched option (blind Enter
+      // is unreliable when the focused row isn't the one we want). Poll after typing for async lists.
       if (!committed(control) && inp) {
         rsOpen(control);
         await sleep(150);
         inp.focus();
         setInputValue(inp, v.slice(0, 18));
-        await sleep(950);  // geosuggest/async option lists need time to return
-        inp.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode: 13, which: 13, bubbles: true }));
-        await sleep(180);
+        let o2 = null;
+        for (let i = 0; i < 12 && !o2; i++) { await sleep(120); o2 = pick(); }
+        if (o2) { clickOpt(o2); await sleep(160); }
+        else {
+          inp.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode: 13, which: 13, bubbles: true }));
+          await sleep(180);
+        }
         // If still not committed, clear the typed filter text so we don't leave a half-typed
         // value ("6") sitting in an open, filtered menu — the visible "stuck open" symptom.
         if (!committed(control)) { try { setInputValue(inp, ""); } catch (e) {} }
@@ -336,7 +344,13 @@
     .filter((el) => visible(el) && isReactSelect(el) && !el.querySelector("select"));
   for (const ctrl of rsControls) {
     if (ctrl.querySelector(".select__single-value, [class*='__single-value']")) continue; // already chosen
-    const label = labelFor(ctrl);
+    // Don't skip a required dropdown just because its label is awkwardly placed (Greenhouse's
+    // "Please identify your race" sits above a "Definitions" link, which defeats labelFor) —
+    // fall back to the question-wrapper walk, then the input's aria-label / placeholder.
+    const inpEl = ctrl.querySelector("input");
+    const label = labelFor(ctrl) || questionLabel([ctrl])
+      || (inpEl && clean(inpEl.getAttribute("aria-label") || ""))
+      || clean(ctrl.getAttribute("aria-label") || "");
     if (!label) continue;
     const options = await readReactOptions(ctrl);
     const id = nid();
