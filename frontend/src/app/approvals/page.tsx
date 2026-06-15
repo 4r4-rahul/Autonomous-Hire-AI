@@ -3,9 +3,10 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { api, type Application } from "@/lib/api";
 import { fmtRelative, STATUS_LABEL } from "@/lib/utils";
-import { Eye, Check, X, ExternalLink, Sparkles, Users } from "lucide-react";
+import { Eye, Check, X, ExternalLink, Sparkles, Users, MessageSquareText } from "lucide-react";
 import { ProofModal } from "@/components/ProofModal";
 import { ReferralModal } from "@/components/ReferralModal";
+import { FormAnswersModal } from "@/components/FormAnswersModal";
 import { ScoreBadge } from "@/components/ScoreBadge";
 
 const PENDING_KEY = ["apps-pending-approvals"];
@@ -24,6 +25,7 @@ function PostedBadge({ postedAt }: { postedAt: string | null }) {
 export default function ApprovalsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [referralApp, setReferralApp] = useState<Application | null>(null);
+  const [answersApp, setAnswersApp] = useState<Application | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const qc = useQueryClient();
 
@@ -160,6 +162,13 @@ export default function ApprovalsPage() {
                 <Users className="w-3.5 h-3.5" /> Referral
               </button>
               <button
+                onClick={() => setAnswersApp(app)}
+                title="View the saved LLM answers drafted for this role's form questions"
+                className="flex items-center gap-1.5 bg-sky-600/15 hover:bg-sky-600/30 border border-sky-500/40 text-sky-300 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+              >
+                <MessageSquareText className="w-3.5 h-3.5" /> Answers
+              </button>
+              <button
                 onClick={() => setSelectedId(app.id)}
                 className="flex items-center gap-1.5 bg-slate-700/40 hover:bg-slate-700 border border-slate-600 text-slate-300 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
               >
@@ -206,7 +215,7 @@ export default function ApprovalsPage() {
           </h2>
           <div className="space-y-2 mb-8">
             {sent.map((app) => (
-              <ReadonlyRow key={app.id} app={app} onProof={() => setSelectedId(app.id)} onReferral={() => setReferralApp(app)} tone="teal" />
+              <ReadonlyRow key={app.id} app={app} onProof={() => setSelectedId(app.id)} onReferral={() => setReferralApp(app)} onAnswers={() => setAnswersApp(app)} tone="teal" />
             ))}
           </div>
         </>
@@ -218,7 +227,7 @@ export default function ApprovalsPage() {
       </h2>
       <div className="space-y-2">
         {(submitted ?? []).map((app) => (
-          <ReadonlyRow key={app.id} app={app} onProof={() => setSelectedId(app.id)} onReferral={() => setReferralApp(app)} tone="green" />
+          <ReadonlyRow key={app.id} app={app} onProof={() => setSelectedId(app.id)} onReferral={() => setReferralApp(app)} onAnswers={() => setAnswersApp(app)} tone="green" />
         ))}
         {!submitted?.length && (
           <div className="text-center py-10 text-slate-600">
@@ -246,11 +255,20 @@ export default function ApprovalsPage() {
           onClose={() => setReferralApp(null)}
         />
       )}
+
+      {answersApp && (
+        <FormAnswersModal
+          appId={answersApp.id}
+          company={answersApp.company_name || ""}
+          role={answersApp.role_title || ""}
+          onClose={() => setAnswersApp(null)}
+        />
+      )}
     </div>
   );
 }
 
-function ReadonlyRow({ app, onProof, onReferral, tone }: { app: Application; onProof: () => void; onReferral?: () => void; tone: "teal" | "green" }) {
+function ReadonlyRow({ app, onProof, onReferral, onAnswers, tone }: { app: Application; onProof: () => void; onReferral?: () => void; onAnswers?: () => void; tone: "teal" | "green" }) {
   const dot = tone === "teal" ? "bg-teal-400" : "bg-green-400";
   return (
     <div className="bg-slate-800/50 border border-slate-700 rounded-xl px-5 py-4 flex items-center justify-between hover:bg-slate-700/30 transition-colors">
@@ -266,6 +284,15 @@ function ReadonlyRow({ app, onProof, onReferral, tone }: { app: Application; onP
         </span>
       </div>
       <div className="flex items-center gap-2 shrink-0 ml-4">
+        {onAnswers && (
+          <button
+            onClick={onAnswers}
+            title="View the saved LLM answers drafted for this role's form questions"
+            className="flex items-center gap-1.5 bg-sky-600/15 hover:bg-sky-600/30 border border-sky-500/40 text-sky-300 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+          >
+            <MessageSquareText className="w-3.5 h-3.5" /> Answers
+          </button>
+        )}
         {onReferral && (
           <button
             onClick={onReferral}

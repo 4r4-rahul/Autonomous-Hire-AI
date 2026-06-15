@@ -764,6 +764,37 @@ def _cover_pdf_for_job(job_id: str) -> Optional[Path]:
         return None
 
 
+def _saved_answers_for_job(job_id: str) -> dict:
+    """Open-ended answers previously drafted for this job's application, keyed by normalized question
+    text → {question, answer, updated_at}. Lets a re-opened form REUSE the exact answer (no
+    re-generation, no re-pay, identical wording) and gives the user a record of what was drafted."""
+    try:
+        st = json.loads(_STATE.read_text())
+    except Exception:
+        return {}
+    app = next((a for a in st.get("applications", []) if a.get("job_id") == job_id), None)
+    return (app or {}).get("form_answers", {}) or {}
+
+
+def _save_answers_for_job(job_id: str, new_answers: dict) -> None:
+    """Write-through: persist newly drafted answers under the application (race-safe, locked merge)."""
+    if not new_answers:
+        return
+    try:
+        from core.state_store import mutate_state
+        from datetime import datetime, timezone
+        ts = datetime.now(timezone.utc).isoformat()
+        with mutate_state() as st:
+            app = next((a for a in st.get("applications", []) if a.get("job_id") == job_id), None)
+            if app is None:
+                return
+            fa = app.setdefault("form_answers", {})
+            for nq, d in new_answers.items():
+                fa[nq] = {"question": d["question"], "answer": d["answer"], "updated_at": ts}
+    except Exception as e:
+        logger.warning("form_answers_save_failed", job_id=job_id, error=str(e)[:90])
+
+
 @router.post("/resolve")
 async def resolve(body: ResolveIn) -> dict:
     P = _load_profile()
@@ -782,18 +813,38 @@ async def resolve(body: ResolveIn) -> dict:
                                       note="your reviewed tailored cover letter — edit if you like")
                 gen_idx.remove(i)
 
-    # Draft every remaining open-ended question in one LLM call, grounded in profile + this job.
+    # Open-ended questions: REUSE a saved answer if we drafted one for this role before (no
+    # re-generation, no re-pay, identical wording), draft only the uncached ones in a single call,
+    # then SAVE them under the application — so re-opening reuses them and you have a record.
     if gen_idx:
-        questions = [resolved[i].value for i in gen_idx]
-        answers = await _generate_open_ended(questions, job, P)
-        for i, ans in zip(gen_idx, answers):
-            fid = resolved[i].id
-            if ans:
-                resolved[i] = FillOut(id=fid, kind="text", value=ans,
-                                      note="AI-drafted from your profile — review before submitting")
+        saved = _saved_answers_for_job(job["id"]) if job else {}
+        fresh_idx = []
+        for i in gen_idx:
+            nq = _norm_label(resolved[i].value)
+            hit = saved.get(nq) if nq else None
+            if hit and hit.get("answer"):
+                resolved[i] = FillOut(id=resolved[i].id, kind="text", value=hit["answer"],
+                                      note="saved answer (reused) — edit if you like")
             else:
-                resolved[i] = FillOut(id=fid, kind="skip", value="",
-                                      note="open-ended — your call")
+                fresh_idx.append(i)
+        if fresh_idx:
+            questions = [resolved[i].value for i in fresh_idx]
+            answers = await _generate_open_ended(questions, job, P)
+            new_to_save = {}
+            for i, ans in zip(fresh_idx, answers):
+                fid = resolved[i].id
+                q = _label_by_id.get(fid, "") or resolved[i].value   # capture question BEFORE reassign
+                if ans:
+                    resolved[i] = FillOut(id=fid, kind="text", value=ans,
+                                          note="AI-drafted, saved for this role — review before submitting")
+                    nq = _norm_label(q)
+                    if nq:
+                        new_to_save[nq] = {"question": q, "answer": ans}
+                else:
+                    resolved[i] = FillOut(id=fid, kind="skip", value="",
+                                          note="open-ended — your call")
+            if job and new_to_save:
+                _save_answers_for_job(job["id"], new_to_save)
 
     fills = [x.model_dump() for x in resolved]
     filled = sum(1 for x in fills if x["kind"] in ("text", "value"))

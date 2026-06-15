@@ -166,5 +166,6 @@ export const api = {
     }),
   getAppEvents:    (id: string)      => req<AppEvent[]>(`/applications/${id}/events`),
   getAppProof:     (id: string)      => req<AppProof>(`/applications/${id}/proof`),
+  getFormAnswers:  (id: string)      => req<{ count: number; answers: { question: string; answer: string; updated_at: string }[] }>(`/applications/${id}/form-answers`),
   pipelineRuns:    ()                => req<PipelineRun[]>("/pipeline/runs"),
 };

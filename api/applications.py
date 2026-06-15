@@ -182,6 +182,29 @@ async def get_cover_letter(app_id: str):
         return {"cover_letter_md": p.read_text(encoding="utf-8")}
 
 
+@router.get("/{app_id}/form-answers")
+async def get_form_answers(app_id: str):
+    """The open-ended LLM answers drafted + cached for this application's forms (a record of what was
+    filled, reusable across re-opens). Reads the JSON state — the source of truth for form_answers."""
+    import json
+    from pathlib import Path
+    state_path = Path(__file__).resolve().parent.parent / "data" / "pipeline_state.json"
+    try:
+        st = json.loads(state_path.read_text())
+    except Exception:
+        st = {}
+    app = next((a for a in st.get("applications", []) if a.get("id") == app_id), None)
+    if app is None:
+        raise HTTPException(404, "Application not found")
+    fa = app.get("form_answers", {}) or {}
+    items = sorted(
+        ({"question": v.get("question", ""), "answer": v.get("answer", ""),
+          "updated_at": v.get("updated_at", "")} for v in fa.values()),
+        key=lambda x: x["updated_at"], reverse=True,
+    )
+    return {"count": len(items), "answers": items}
+
+
 @router.post("/{app_id}/tailor")
 async def tailor_application_endpoint(app_id: str):
     """Tailor-on-demand: generate the Opus résumé for ONE parked role when the user decides to
