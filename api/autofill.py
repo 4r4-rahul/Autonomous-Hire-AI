@@ -384,6 +384,17 @@ def _resolve_one(f: FieldIn, P: dict) -> FillOut:
         return choose(defs.get("start_date", "Immediately"))
     if any(k in ll for k in ("salary", "compensation", "pay expectation", "desired pay")):
         return text(defs.get("salary_display", "$150,000 – $200,000"))
+    # Relocation / onsite-willingness ("Our HQ is in San Mateo and this role is not remote. Are
+    # you …?") → Yes (open to relocating / working onsite). Gated on a willingness phrasing so it
+    # can't hijack a neutral "is this role remote?" description.
+    if is_choice and any(k in ll for k in (
+            "willing to relocate", "open to relocation", "able to relocate", "relocate",
+            "willing to work onsite", "willing to work on-site", "able to work onsite",
+            "able to work on-site", "comfortable working onsite", "comfortable working in",
+            "willing to commute", "able to commute", "work from the office", "report to the office",
+            "work onsite", "work on-site", "work in-office", "work in the office")) \
+            and any(w in ll for w in ("you", "are you", "willing", "able", "comfortable", "open to")):
+        return choose(defs.get("relocation_answer", "Yes"), "willing to relocate / work onsite: Yes")
     if any(k in ll for k in ("years of experience", "years experience", "years of relevant",
                              "years of professional", "how many years")):
         yrs = int(re.sub(r"\D", "", str(defs.get("years_of_experience", "6"))) or "6")

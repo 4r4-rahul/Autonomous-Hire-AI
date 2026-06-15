@@ -108,6 +108,12 @@
     try { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); } catch (e) {}
     try { control.querySelector("input")?.blur(); } catch (e) {}
   }
+  // Dismiss EVERY open react-select menu — call before opening one so portaled menus can't
+  // stack and cross-contaminate (the "No" option leaking into the Gender dropdown).
+  function closeAllMenus() {
+    try { document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); } catch (e) {}
+    try { const a = document.activeElement; if (a && a.blur) a.blur(); } catch (e) {}
+  }
 
   const committed = (control) =>
     !!control.querySelector(".select__single-value, [class*='__single-value'], " +
@@ -127,7 +133,12 @@
       const m = w.querySelector(".select__menu, [class*='__menu']");
       if (m) return m;
     }
-    return null;
+    // Last resort: Greenhouse portals the open menu to <body> with no aria link back to the
+    // control. Since we close every other menu before opening this one, exactly one menu is
+    // open in the document — that's ours. (If somehow >1 is open, return null rather than risk
+    // grabbing a neighbour's options — the "No" bleeding into the Gender menu bug.)
+    const open = [...document.querySelectorAll(".select__menu, [class*='__menu']")].filter(visible);
+    return open.length === 1 ? open[0] : null;
   }
   function optionEls(control) {
     const menu = menuFor(control);
@@ -138,6 +149,8 @@
   async function readReactOptions(control) {
     try {
       for (let attempt = 0; attempt < 2; attempt++) {
+        closeAllMenus();
+        await sleep(60);
         rsOpen(control);
         await sleep(attempt === 0 ? 420 : 750);
         const opts = optionEls(control).map((o) => clean(o.textContent)).filter(Boolean);
@@ -190,6 +203,8 @@
         opt.dispatchEvent(new MouseEvent(t, { bubbles: true, cancelable: true, view: window }));
     };
     try {
+      closeAllMenus();          // dismiss any neighbour's open menu first (no cross-contamination)
+      await sleep(80);
       rsOpen(control);
       // Poll for options to render — async/lazy menus (and EEO dropdowns far down a long page)
       // don't paint within a fixed 400ms, which is why race was intermittently left empty.
@@ -268,6 +283,13 @@
     if (el.tagName === "INPUT" && !TEXT_TYPES.includes(t)) continue; // skip file/checkbox/radio/etc here
     if (el.disabled || el.readOnly) continue;
     if (el.value && el.value.trim()) continue; // already filled
+    // Skip a react-select's inner <input> — it's handled by the react-select pass below.
+    // Treating it as a text field makes us TYPE the answer ("Man") into the combobox instead
+    // of PICKING the option ("Male"), which filters to "No options" and hangs the menu open.
+    const ctrlAnc = el.closest("[class*='select__control'], [class*='__control']");
+    if ((ctrlAnc && isReactSelect(ctrlAnc)) || el.getAttribute("role") === "combobox"
+        || el.getAttribute("aria-autocomplete") === "list"
+        || /(^|-)react-select-/.test(el.id || "")) continue;
     const label = labelFor(el);
     if (!label) continue;
     const id = nid();
