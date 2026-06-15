@@ -758,32 +758,54 @@ def _match_job(url: str, referrer: str = "") -> Optional[dict]:
         return {"id": j.get("id"), "company": j.get("company_name"), "title": j.get("title"),
                 "description": j.get("description") or ""}
 
+    # The SAME posting can be stored as two listings (e.g. boards. vs job-boards.greenhouse.io),
+    # and only ONE carries the application + tailored résumé. When several listings match, prefer
+    # the candidate that actually has a usable résumé, then any application, then the first — so we
+    # don't return the empty duplicate and 404 the résumé that's sitting right there.
+    apps = {a.get("job_id"): a for a in st.get("applications", [])}
+
+    def _score(j):
+        a = apps.get(j.get("id"))
+        if not a:
+            return 0
+        trp = a.get("tailored_resume_path")
+        if trp:
+            p = Path(trp)
+            if not p.is_absolute():
+                p = _ROOT / p
+            return 3 if p.exists() else 2
+        return 1
+
+    def _best(matches):
+        return _ret(max(matches, key=_score)) if matches else None  # max keeps the FIRST on ties
+
     # 1) PRECISE first: shared gh_jid / job-id token. All roles at one company share the same
     #    URL base (careers.x.com/jobs), so a base match alone returns the WRONG role — the
     #    numeric job id is what pins the exact posting. Must win over the loose base match.
     if tokens:
-        for j in jobs:
-            ja = j.get("apply_url") or ""
-            if tokens & set(re.findall(r"\d{6,}", ja)):
-                return _ret(j)
+        m = [j for j in jobs if tokens & set(re.findall(r"\d{6,}", j.get("apply_url") or ""))]
+        if m:
+            return _best(m)
     # 1b) alphanumeric ATS shortcode (Workable/Lever/Ashby) — the stored URL and the form URL
     #     can differ in slug ("/j/CODE/apply" vs "/slug/j/CODE/apply"); the code pins it.
     if url_alnum:
-        for j in jobs:
-            if url_alnum & _alnum_ids(j.get("apply_url") or ""):
-                return _ret(j)
+        m = [j for j in jobs if url_alnum & _alnum_ids(j.get("apply_url") or "")]
+        if m:
+            return _best(m)
     # 2) exact URL / base equality
-    for j in jobs:
-        ja = j.get("apply_url") or ""
-        jb = ja.split("?")[0]
-        if jb and (jb in cands or jb in bases):
-            return _ret(j)
+    m = [j for j in jobs
+         if (j.get("apply_url") or "").split("?")[0]
+         and ((j.get("apply_url") or "").split("?")[0] in cands
+              or (j.get("apply_url") or "").split("?")[0] in bases)]
+    if m:
+        return _best(m)
     # 3) host + path-prefix match (last resort). NOT bare substring — that attached the WRONG
     #    job's résumé when a short stored URL happened to be a substring of an unrelated form URL.
     #    Require same host AND a non-trivial shared path; otherwise return None so the extension
     #    prompts the user rather than silently attaching a possibly-wrong résumé.
     from urllib.parse import urlparse
     cand_parsed = [urlparse(u) for u in cands if u]
+    m = []
     for j in jobs:
         ja = j.get("apply_url") or ""
         if not ja:
@@ -794,7 +816,10 @@ def _match_job(url: str, referrer: str = "") -> Optional[dict]:
         for pc in cand_parsed:
             if pc.netloc == pj.netloc and (pj.path.startswith(pc.path) or pc.path.startswith(pj.path)) \
                and min(len(pj.path), len(pc.path)) >= 6:
-                return _ret(j)
+                m.append(j)
+                break
+    if m:
+        return _best(m)
     return None
 
 
