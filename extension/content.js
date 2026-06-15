@@ -161,10 +161,26 @@
       const all = optionEls(control);
       // exact → option-contains-value. No reverse (value-contains-option) match — it would
       // pick "Hispanic or Latino" for the value "Asian (Not Hispanic or Latino)".
-      return all.find((o) => clean(o.textContent) === v)
+      const hit = all.find((o) => clean(o.textContent) === v)
         || all.find((o) => { const t = clean(o.textContent); return t.length > 3 && t.includes(v); })
         || (v.length > 6 && all.find((o) => { const t = clean(o.textContent);
              return t.length > 6 && v.startsWith(t); }));
+      if (hit) return hit;
+      // Numeric → range: a bare "6" should select the bucket "6-9 years" rather than typing
+      // "6" into the input (which filters but never commits, leaving the menu hung open).
+      if (/^\d+$/.test(v)) {
+        const n = parseInt(v, 10);
+        return all.find((o) => {
+          const t = clean(o.textContent).toLowerCase();
+          const nums = (t.match(/\d+/g) || []).map(Number);
+          if (!nums.length) return false;
+          if (nums.length >= 2) return n >= nums[0] && n <= nums[1];
+          if (/\+|more than|at least|over|or more/.test(t)) return n >= nums[0];
+          if (/less than|under|fewer|up to|below|or less/.test(t)) return n <= nums[0] - 1;
+          return n === nums[0];
+        });
+      }
+      return null;
     };
     try {
       rsOpen(control);
@@ -186,8 +202,13 @@
         await sleep(950);  // geosuggest/async option lists need time to return
         inp.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", keyCode: 13, which: 13, bubbles: true }));
         await sleep(180);
+        // If still not committed, clear the typed filter text so we don't leave a half-typed
+        // value ("6") sitting in an open, filtered menu — the visible "stuck open" symptom.
+        if (!committed(control)) { try { setInputValue(inp, ""); } catch (e) {} }
       }
       rsClose(control);
+      await sleep(60);
+      if (!committed(control)) rsClose(control);   // belt-and-suspenders: never leave it hanging
       return committed(control);
     } catch (e) {}
     return false;

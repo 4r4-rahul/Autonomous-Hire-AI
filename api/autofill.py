@@ -181,6 +181,30 @@ def _first_option_containing(needle: str, options: list[str]) -> Optional[str]:
     return None
 
 
+def _match_years_range(years: int, options: list[str]) -> Optional[str]:
+    """Map a plain experience count (6) to a RANGE option ('6-9 years', '5+ years', 'More than 5
+    years', 'Less than 1 year'). Picks the bucket whose [low, high] contains `years`. Returns None
+    when the options aren't ranges (caller then falls back to an exact match / typing the number).
+    This is the fix for the react-select that hung open because we typed bare '6' into a field whose
+    only options were ranges like '6-9 years' (the Coalition 'stuck' case)."""
+    for o in options:
+        s = o.lower()
+        nums = [int(n) for n in re.findall(r"\d+", s)]
+        if not nums:
+            continue
+        if len(nums) >= 2:                                              # "6-9 years", "3 to 5 years"
+            lo, hi = nums[0], nums[1]
+        elif any(x in s for x in ("+", "more than", "at least", "over", "greater", "or more")):
+            lo, hi = nums[0], 10**6                                     # "5+ years", "more than 5"
+        elif any(x in s for x in ("less than", "under", "fewer", "up to", "below", "or less")):
+            lo, hi = 0, nums[0] - 1                                     # "less than 1 year"
+        else:
+            lo, hi = nums[0], nums[0]                                   # exact "6 years"
+        if lo <= years <= hi:
+            return o
+    return None
+
+
 def _is_yesno(options: list[str]) -> bool:
     # Strip leading icons/symbols (Workable renders "✓ YES" / "✗ NO" toggle buttons).
     ne = [re.sub(r"^[^a-z0-9]+", "", o.strip().lower()).strip() for o in options if o.strip()]
@@ -190,7 +214,7 @@ def _is_yesno(options: list[str]) -> bool:
 # Sensitive demographic fields — only fill on an exact option match, else leave for the
 # human (never blind-pick a protected-class value).
 _DEMO_KEYS = ("gender", "race", "ethnic", "veteran", "disabilit", "orientation",
-              "hispanic", "latino", "lgbtq")
+              "hispanic", "latino", "lgbtq", "military", "armed forces")
 
 
 def _resolve_one(f: FieldIn, P: dict) -> FillOut:
@@ -360,8 +384,17 @@ def _resolve_one(f: FieldIn, P: dict) -> FillOut:
         return choose(defs.get("start_date", "Immediately"))
     if any(k in ll for k in ("salary", "compensation", "pay expectation", "desired pay")):
         return text(defs.get("salary_display", "$150,000 – $200,000"))
-    if any(k in ll for k in ("years of experience", "years experience")):
-        return text(str(defs.get("years_of_experience", "6")))
+    if any(k in ll for k in ("years of experience", "years experience", "years of relevant",
+                             "years of professional", "how many years")):
+        yrs = int(re.sub(r"\D", "", str(defs.get("years_of_experience", "6"))) or "6")
+        if is_choice and opts:
+            # Range dropdowns ("6-9 years") need the bucket, not the bare number — typing "6"
+            # filters but never commits, leaving the menu hung open.
+            opt = _match_years_range(yrs, opts) or _match_option(str(yrs), opts)
+            if opt:
+                return FillOut(id=f.id, kind="value", value=opt, note="years of experience (range)")
+            return skip(f"years of experience ({yrs}) — pick the matching range")
+        return text(str(yrs))
     if any(k in ll for k in ("current company", "current employer")):
         return text(defs.get("current_company", "JPMorgan Chase & Co."))
     if any(k in ll for k in ("current title", "current role", "current position")):
@@ -395,10 +428,12 @@ def _resolve_one(f: FieldIn, P: dict) -> FillOut:
         elif "hispanic" in ll or "latino" in ll:
             cands = [defs.get("eeoc_hispanic", "No"), "Not Hispanic or Latino",
                      "No, I am not Hispanic or Latino", "No"]
-        elif "veteran" in ll:
+        elif "veteran" in ll or "military" in ll or "armed forces" in ll:
+            # "Have you ever served in the military?" is a veteran self-ID — Rahul has not served.
             cands = ["No, I am not a veteran or active member", "I am not a protected veteran",
                      "Not a protected veteran", "I am not a veteran",
-                     "No, I am not a protected veteran", "No"]
+                     "No, I am not a protected veteran", "No, I have not served",
+                     "Have not served", "No"]
         elif "disabilit" in ll:
             cands = ["No, I do not have a disability and have not had one in the past",
                      "No, I do not have a disability", "No, I don't have a disability", "No"]
@@ -456,6 +491,21 @@ def _resolve_one(f: FieldIn, P: dict) -> FillOut:
                              "employee or contractor at", "current contractor",
                              "related to anyone", "family member", "relative who works")):
         return choose("No")
+
+    # ── Acknowledgment / consent dropdowns ("I acknowledge", "I agree", privacy/data consent) ──
+    # Required gating dropdowns whose affirmative option is worded "I acknowledge" / "I agree",
+    # NOT "Yes" — so we pick by that wording. (Sponsorship/work-auth are handled far above, so this
+    # can't hijack them.) Left unfilled, these hang the form on a "needs you" item.
+    if is_choice and any(k in ll for k in (
+            "acknowledge", "i agree", "agree to", "consent to", "i consent", "i have read",
+            "privacy policy", "privacy notice", "candidate privacy", "data privacy",
+            "data protection", "terms and conditions", "processing of my", "use of my data")):
+        for needle in ("i acknowledge", "acknowledge", "i agree", "i accept", "i consent",
+                       "agree", "accept", "consent", "yes"):
+            opt = _first_option_containing(needle, opts)
+            if opt:
+                return FillOut(id=f.id, kind="value", value=opt, note="acknowledgment/consent: affirmative")
+        return choose("Yes", "acknowledgment/consent")
 
     # ── Self-attestation ("confirm everything is true and your own", "I certify") → Yes ──
     if is_choice and any(k in ll for k in (
