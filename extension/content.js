@@ -222,11 +222,22 @@
   function setNative(el, value) {
     const proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
     const setter = Object.getOwnPropertyDescriptor(proto, "value").set;
-    try { if (el._valueTracker) el._valueTracker.setValue(""); } catch (e) {}
+    const fire = (data, inputType) => {
+      try { el.dispatchEvent(new InputEvent("input", { bubbles: true, data: data == null ? null : String(data), inputType })); }
+      catch (e) { el.dispatchEvent(new Event("input", { bubbles: true })); }
+    };
     try { el.focus(); } catch (e) {}
+    // CLEAR FIRST: Ashby / react-hook-form validate their OWN state, not the DOM. Setting the
+    // value in one shot sometimes doesn't register (form submits as "Missing required field"
+    // though the box visibly shows the value). Forcing an empty→value transition — reset the
+    // valueTracker, set "", fire a delete, then set the real value and fire an insert — makes
+    // React's change detector see a genuine edit and store it.
+    try { if (el._valueTracker) el._valueTracker.setValue("x"); } catch (e) {}
+    setter.call(el, "");
+    fire(null, "deleteContentBackward");
+    try { if (el._valueTracker) el._valueTracker.setValue(""); } catch (e) {}
     setter.call(el, value);
-    try { el.dispatchEvent(new InputEvent("input", { bubbles: true, data: String(value), inputType: "insertText" })); }
-    catch (e) { el.dispatchEvent(new Event("input", { bubbles: true })); }
+    fire(value, "insertText");
     el.dispatchEvent(new Event("change", { bubbles: true }));
     // keyup nudges frameworks that listen for keystrokes; blur marks the field touched so the
     // "required" validation re-runs against the new value and clears the error.
@@ -350,6 +361,7 @@
   // ── Apply fills ────────────────────────────────────────────────────────────────
   const notes = [];
   const blanks = [];
+  const textFills = [];   // {el, value} — re-asserted after a settle delay (Ashby state-drop fix)
   for (const fill of data.fills || []) {
     const item = reg[fill.id];
     if (!item) continue;
@@ -366,7 +378,7 @@
         continue;
       }
       let ok = false;
-      if (item.kind === "text") { setNative(item.el, fill.value); ok = true; }
+      if (item.kind === "text") { setNative(item.el, fill.value); textFills.push({ el: item.el, value: fill.value }); ok = true; }
       else if (item.kind === "select") { ok = selectNative(item.el, fill.value); }
       else if (item.kind === "radio" || item.kind === "checkbox") {
         // The backend returns the EXACT option text it chose. Match precisely:
@@ -403,6 +415,19 @@
       markNeedsYou(item, fld.label, "error filling");
     }
   }
+  // ── Re-assert text fields after the form settles ─────────────────────────────
+  // Ashby (react-hook-form) can drop a programmatically-set value during a post-mount
+  // re-render: the input still SHOWS the text but the form's own state is empty, so submit
+  // fails with "Missing entry for required field: Name/Phone/LinkedIn" even though the box
+  // looks filled. Re-firing the full event sequence after a delay re-registers the value in
+  // React's state. Re-asserting is harmless when the value already stuck.
+  if (textFills.length) {
+    await sleep(500);
+    for (const { el, value } of textFills) {
+      try { if (el.isConnected) setNative(el, value); } catch (e) {}
+    }
+  }
+
   // ── Attach the tailored resume to the form's file input ──────────────────────
   // A content script can't set a file path, but it CAN attach a real File via
   // DataTransfer. We fetch the per-job tailored PDF from the backend and attach it.
