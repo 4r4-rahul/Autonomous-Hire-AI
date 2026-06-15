@@ -384,9 +384,30 @@
   // litter empty panels. Only the frame holding the form proceeds.
   if (!fields.length) return;
 
+  // ── De-duplicate by label ────────────────────────────────────────────────────
+  // New-style Greenhouse (job-boards.greenhouse.io) scrapes the SAME question twice: once as the
+  // react-select's inner <input> (kind text) and once as the real react-select (kind select). The
+  // text twin then gets the wrong treatment (an essay LLM draft on a Yes/No dropdown) and can't
+  // commit. For each label, keep the highest-rank widget (select/react > text > checkbox) and drop
+  // the rest — but keep MULTIPLE same-rank fields (two distinct "If you answered Yes…" texts).
+  const rankOf = (f) => f.type === "select" ? 3 : f.type === "checkbox" ? 1 : 2;
+  const byLabel = new Map();
+  for (const f of fields) {
+    const k = clean(f.label).toLowerCase();
+    if (!byLabel.has(k)) byLabel.set(k, []);
+    byLabel.get(k).push(f);
+  }
+  const dropIds = new Set();
+  for (const grp of byLabel.values()) {
+    if (grp.length < 2) continue;
+    const max = Math.max(...grp.map(rankOf));
+    for (const f of grp) if (rankOf(f) < max) dropIds.add(f.id);
+  }
+  const sendFields = fields.filter((f) => !dropIds.has(f.id));
+
   // ── Ask the backend ──────────────────────────────────────────────────────────
   const resp = await chrome.runtime.sendMessage({
-    type: "resolve", url: location.href, referrer: document.referrer, fields,
+    type: "resolve", url: location.href, referrer: document.referrer, fields: sendFields,
   });
   if (!resp || !resp.ok) {
     showOverlay({ error: (resp && resp.error) || "Backend unreachable — is the API running on :8000?", summary: {} }, []);

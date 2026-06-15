@@ -298,7 +298,10 @@ def _resolve_one(f: FieldIn, P: dict) -> FillOut:
 
     # Conditional follow-ups ("If yes, …") — correctly left blank (the gating answer was
     # No). kind="blank" so the UI shows it as deliberate, not an action item.
-    if ll.startswith("if yes") or ll.startswith("if so") or ll.startswith("if no"):
+    if (ll.startswith("if yes") or ll.startswith("if so") or ll.startswith("if no")
+            or ll.startswith("if you answered") or ll.startswith("if applicable")
+            or ll.startswith("if selected") or "if you answered \"yes\"" in ll
+            or "if you answered yes" in ll or "if you selected yes" in ll):
         return FillOut(id=f.id, kind="blank",
                        note="conditional — correctly left blank (previous answer was No)")
 
@@ -411,7 +414,21 @@ def _resolve_one(f: FieldIn, P: dict) -> FillOut:
     if any(k in ll for k in ("current title", "current role", "current position")):
         return text(defs.get("current_title", "Senior Software Engineer"))
     if "pronoun" in ll:
-        return choose(defs.get("pronouns", "He/Him"))
+        pref = defs.get("pronouns", "He/Him")
+        if is_choice:
+            opt = _match_option(pref, opts)
+            if opt is None:
+                # "He/Him" won't exact/prefix-match "He/Him/His" or "He / Him / His" — match the
+                # masculine option by token (has 'he', not 'she'/'they').
+                for o in opts:
+                    toks = re.findall(r"[a-z]+", o.lower())
+                    if "he" in toks and "she" not in toks and "they" not in toks:
+                        opt = o
+                        break
+            if opt:
+                return FillOut(id=f.id, kind="value", value=opt, note="pronouns: he/him")
+            return skip("pronouns — please pick")
+        return text(pref)
     if any(k in ll for k in ("languages you speak", "languages do you speak",
                              "spoken language", "fluent in", "native language")):
         return text(defs.get("languages", "English, Hindi, Telugu, Urdu"))
@@ -451,6 +468,11 @@ def _resolve_one(f: FieldIn, P: dict) -> FillOut:
         elif "orientation" in ll:
             cands = [defs.get("eeoc_sexual_orientation", "Straight"), "Heterosexual", "Straight",
                      "Heterosexual / Straight"]
+        elif "lgbtq" in ll:
+            # "Do you identify as part of the LGBTQ+ community?" — truthful No; if it's an
+            # orientation picker instead of Yes/No, the straight option matches.
+            cands = ["No", "No, I do not identify", "Not a member",
+                     defs.get("eeoc_sexual_orientation", "Straight"), "Heterosexual", "Straight"]
         if cands and is_choice:
             opt = _match_eeo_option(cands, opts)
             if opt is not None:
@@ -482,6 +504,17 @@ def _resolve_one(f: FieldIn, P: dict) -> FillOut:
         if _match_option("No", opts):
             return choose("No", "export-compliance: none apply")
         return skip("compliance — confirm 'none of the above' applies")
+
+    # ── Conflict-of-interest / outside-activity / government-official disclosures → No ──
+    # Finance-sector forms (Robinhood et al.) ask broad Yes/No conflict & anti-bribery
+    # disclosures. Rahul has none to report — answer No; any "if yes, explain" follow-up is
+    # then correctly left blank by the conditional rule above.
+    if is_choice and any(k in ll for k in (
+            "personal/familial relationship", "personal/ familial", "familial relationship",
+            "outside business activit", "conflict of interest", "intellectual property ownership",
+            "investment that is greater", "government official", "bribery", "corruption",
+            "politically exposed", "public function")):
+        return choose("No", "compliance disclosure: No (nothing to report)")
 
     # ── Prior employment at THIS company (not "ever worked WITH <tech>") ──────
     if (any(k in ll for k in ("previously employed", "former employee", "worked here before",
