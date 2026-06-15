@@ -38,6 +38,19 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
 
+  if (msg && msg.type === "cover_generate") {
+    // On-demand cover letter: the form has a cover field but this role has none yet.
+    fetch(`${BASE}/cover/generate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: msg.url || "", referrer: msg.referrer || "" }),
+    })
+      .then((r) => r.json())
+      .then((data) => sendResponse({ ok: true, data }))
+      .catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
+
   if (msg && (msg.type === "resume" || msg.type === "cover")) {
     const qs = new URLSearchParams({ url: msg.url || "", referrer: msg.referrer || "" });
     const fallbackName = msg.type === "cover" ? "cover_letter.pdf" : "resume.pdf";
