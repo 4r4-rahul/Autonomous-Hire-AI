@@ -194,12 +194,23 @@
   }
 
   // ── Native value setter (React-friendly) ─────────────────────────────────────
+  // Setting .value alone leaves React's internal state stale, so the form still flags the field
+  // "required / missing" even though it looks filled (the Ashby "Missing entry for Name" case).
+  // Fix: (1) reset React's _valueTracker so it detects the change, (2) set via the native setter,
+  // (3) fire input+change, (4) focus/blur so the field is marked "touched" and validation re-runs.
   function setNative(el, value) {
     const proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
     const setter = Object.getOwnPropertyDescriptor(proto, "value").set;
+    try { if (el._valueTracker) el._valueTracker.setValue(""); } catch (e) {}
+    try { el.focus(); } catch (e) {}
     setter.call(el, value);
-    el.dispatchEvent(new Event("input", { bubbles: true }));
+    try { el.dispatchEvent(new InputEvent("input", { bubbles: true, data: String(value), inputType: "insertText" })); }
+    catch (e) { el.dispatchEvent(new Event("input", { bubbles: true })); }
     el.dispatchEvent(new Event("change", { bubbles: true }));
+    // keyup nudges frameworks that listen for keystrokes; blur marks the field touched so the
+    // "required" validation re-runs against the new value and clears the error.
+    try { el.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true, key: "a" })); } catch (e) {}
+    try { el.dispatchEvent(new Event("blur", { bubbles: true })); } catch (e) {}
   }
 
   try {
