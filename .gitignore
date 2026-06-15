@@ -35,3 +35,4 @@ frontend/.next/
 *.swp
 .idea/
 .vscode/
+data/llm_costs.jsonl
