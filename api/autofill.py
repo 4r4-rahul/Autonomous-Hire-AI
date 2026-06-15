@@ -566,6 +566,9 @@ Rules — follow exactly:
   actually does (from the job description) to the candidate's real experience. One genuine
   reason beats three generic ones.
 - 2-4 sentences for "why" questions; a short tight paragraph for cover letters. Be concise.
+- For a short yes/no or one-line factual answer, give JUST the answer with NO trailing period
+  ("Yes", not "Yes."; "No to all three", not "No to all three.") — these often feed dropdowns where
+  a trailing period stops the option from matching.
 - Plain words and punctuation only. No em dashes, no semicolons-as-style, no bullet symbols.
 - BANNED words/phrases (sound AI/templated): leverage, spearheaded, seamless, robust,
   passionate, thrilled, excited to, deeply, unlock, synergy, cutting-edge, fast-paced,
@@ -616,7 +619,15 @@ async def _generate_open_ended(questions: list[str], job: Optional[dict], P: dic
         if not isinstance(answers, list):
             return [""] * len(questions)
         # Pad/truncate to match the question count.
-        answers = [str(a or "").strip() for a in answers]
+        def _tidy(a: str) -> str:
+            a = str(a or "").strip()
+            # Strip a trailing period on SHORT single-statement answers ("Yes." -> "Yes", "No." ->
+            # "No") so they match dropdown options and read naturally. Leave multi-sentence essays
+            # (which contain a mid-string ". ") untouched.
+            if a.endswith(".") and ". " not in a and len(a) <= 64:
+                a = a[:-1].rstrip()
+            return a
+        answers = [_tidy(a) for a in answers]
         answers += [""] * (len(questions) - len(answers))
         return answers[:len(questions)]
     except Exception as e:
