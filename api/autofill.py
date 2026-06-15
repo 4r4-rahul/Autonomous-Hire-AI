@@ -552,8 +552,16 @@ application question. Write the candidate's answer.
 
 Rules — follow exactly:
 - Sound like a real, specific human engineer wrote it in 60 seconds. NOT marketing copy.
-- Ground every claim in the candidate brief. NEVER invent employers, projects, numbers,
-  or skills not in the brief. If you lack a specific fact, stay general but honest.
+- Ground every claim in the candidate brief and REAL EXPERIENCE. NEVER invent employers,
+  projects, numbers, or skills not given. If you lack a specific fact, stay general but honest.
+- For "describe / tell me about / a time when / hardest problem / most interesting / proudest /
+  what have you built" questions: reframe a CONCRETE story from REAL EXPERIENCE (the non-obvious
+  decision + what it solved), never a generic "I have X years and these skills."
+- TRUTH GUARD: distinguish PRODUCTION work (built at the employer, real scale) from PERSONAL/SIDE
+  projects. NEVER call a personal project "production" or claim scale it doesn't have. Do NOT claim
+  ML model training/serving/drift unless REAL EXPERIENCE shows it. A referrer/interviewer will probe.
+- ROLE-MATCH: for data/backend/systems roles lead with production engineering; for AI/LLM roles the
+  agent/RAG projects are relevant (labeled as personal projects).
 - For "why are you interested in <company>": connect something concrete the company/role
   actually does (from the job description) to the candidate's real experience. One genuine
   reason beats three generic ones.
@@ -577,9 +585,20 @@ async def _generate_open_ended(questions: list[str], job: Optional[dict], P: dic
         company = (job or {}).get("company") or "this company"
         title = (job or {}).get("title") or "this role"
         jd = ((job or {}).get("description") or "")[:1500]
+        # Ground answers in the JD-matched experience bank (real, git-verified stories) — the same
+        # source the résumé/cover/referral use — so "describe a hard problem" pulls a concrete story,
+        # not a generic skills recap. Empty/missing bank is fine (falls back to the brief).
+        bank = ""
+        try:
+            from agents.application.resume_tailor import _select_bank_stories
+            bank = (_select_bank_stories({"title": title, "description": jd}, []) or "")[:1800]
+        except Exception:
+            bank = ""
         numbered = "\n".join(f"{i+1}. {q}" for i, q in enumerate(questions))
         user = (
             f"CANDIDATE BRIEF:\n{brief}\n\n"
+            f"REAL EXPERIENCE (production work unless a line says personal/side project — draw "
+            f"concrete specifics from here, do NOT inflate):\n{bank or '(use the brief above)'}\n\n"
             f"COMPANY: {company}\nROLE: {title}\n"
             f"JOB DESCRIPTION (for grounding 'why' answers):\n{jd or '(not available)'}\n\n"
             f"QUESTIONS (answer each, same order):\n{numbered}\n\n"
