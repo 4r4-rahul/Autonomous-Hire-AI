@@ -37,10 +37,12 @@ def _title_key(title: str) -> str:
 
 
 def job_id_from_url(url: str) -> str | None:
-    """Extract the stable ATS job id from an apply URL (gh_jid, /jobs/<id>, lever/ashby uuid)."""
+    """Extract the stable ATS job id from an apply URL (gh_jid, token=, /jobs/<id>, lever/ashby uuid).
+    token= covers the Greenhouse EMBED form (boards.greenhouse.io/embed/job_app?for=co&token=<id>)."""
     if not url:
         return None
-    m = re.search(r"gh_jid=(\d+)", url) or re.search(r"/jobs/(\d+)", url) \
+    m = re.search(r"gh_jid=(\d+)", url) or re.search(r"[?&]token=(\d+)", url) \
+        or re.search(r"/jobs/(\d+)", url) \
         or re.search(r"/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})", url)
     return m.group(1) if m else None
 

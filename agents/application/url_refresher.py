@@ -70,6 +70,33 @@ async def _alive(client, url: str) -> bool:
         return False
 
 
+def _greenhouse_embed_url(url: str) -> str | None:
+    """The canonical Greenhouse EMBED application form for a Greenhouse job URL — it opens the exact
+    role's apply form and BYPASSES any company careers-site redirect. Returns None if `url` isn't a
+    parseable Greenhouse job URL. Accepts /{slug}/jobs/{id}, ?gh_jid=, or an existing embed token."""
+    if not url or "greenhouse.io" not in url:
+        return None
+    slug = re.search(r"greenhouse\.io/([a-z0-9_.-]+)/jobs/", url, re.I) or re.search(r"[?&]for=([a-z0-9_.-]+)", url, re.I)
+    jid = re.search(r"/jobs/(\d+)", url) or re.search(r"[?&](?:gh_jid|token)=(\d+)", url)
+    if slug and jid:
+        return f"https://boards.greenhouse.io/embed/job_app?for={slug.group(1)}&token={jid.group(1)}"
+    return None
+
+
+async def _redirects_off_greenhouse(client, url: str) -> bool:
+    """True if a Greenhouse job URL 302-redirects to a NON-greenhouse host (a company careers SPA) —
+    that's where deep-linking breaks and dumps the user on the listing (the Coalition case)."""
+    try:
+        r = await client.get(url, follow_redirects=False, timeout=8)
+        loc = r.headers.get("location", "")
+        if r.status_code in (301, 302, 303, 307, 308) and loc:
+            host = re.sub(r"^https?://([^/]+).*", r"\1", loc).lower()
+            return "greenhouse.io" not in host
+    except Exception:
+        pass
+    return False
+
+
 async def refresh_pending_urls(state: dict, *, apply: bool = True) -> tuple[dict, dict]:
     """Re-point every pending_review app at a live application form. Mutates `state` when apply.
     Returns (state, report). Never raises on a single bad app."""
@@ -78,7 +105,8 @@ async def refresh_pending_urls(state: dict, *, apply: bool = True) -> tuple[dict
 
     sem = asyncio.Semaphore(8)
     report = {"checked": len(pending), "kept_live": 0, "refreshed": 0,
-              "orphan_fixed": 0, "unresolved": 0, "us_refixed": 0, "dropped_foreign": 0}
+              "orphan_fixed": 0, "unresolved": 0, "us_refixed": 0, "dropped_foreign": 0,
+              "embed_fixed": 0}
 
     async with httpx.AsyncClient(headers={"User-Agent": "Mozilla/5.0"}) as client:
         async def _one(app):
@@ -114,6 +142,20 @@ async def refresh_pending_urls(state: dict, *, apply: bool = True) -> tuple[dict
                         app["status"] = "skipped"
                         app["skip_reason"] = "non-US role — no US-based posting for this role on the ATS board"
                 return
+
+            # Greenhouse-via-company-SPA fix: if the stored Greenhouse URL redirects to the company's
+            # own careers site (whose deep-linking often dumps you on the listing — the Coalition
+            # case), swap to the Greenhouse EMBED form, which always opens the exact role's apply form.
+            if url and "greenhouse.io" in url and "embed/job_app" not in url:
+                embed = _greenhouse_embed_url(url)
+                if embed:
+                    async with sem:
+                        off = await _redirects_off_greenhouse(client, url)
+                    if off:
+                        if apply and job:
+                            job["apply_url"] = embed
+                        report["embed_fixed"] += 1
+                        return
 
             if url:
                 async with sem:

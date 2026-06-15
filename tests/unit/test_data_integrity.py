@@ -296,3 +296,15 @@ def test_us_first_location_multi_location():
     assert us_first_location("San Francisco, CA; Seattle, WA") == ("San Francisco, CA; Seattle, WA", False)
     assert us_first_location("Los Angeles, USA") == ("Los Angeles, USA", False)
     assert us_first_location("Remote") == ("Remote", False)
+
+
+def test_greenhouse_embed_url_and_token_dedup():
+    """Greenhouse roles that redirect through a company careers SPA (Coalition) get swapped to the
+    embed apply form; dedup must still extract the job id from that embed (token=) URL."""
+    from agents.application.url_refresher import _greenhouse_embed_url
+    from agents.application.dedup_ledger import job_id_from_url
+    e = _greenhouse_embed_url("https://job-boards.greenhouse.io/coalition/jobs/4665924005")
+    assert e == "https://boards.greenhouse.io/embed/job_app?for=coalition&token=4665924005"
+    assert _greenhouse_embed_url("https://jobs.lever.co/x/abc") is None
+    assert job_id_from_url(e) == "4665924005"          # token= parses
+    assert job_id_from_url("https://job-boards.greenhouse.io/x/jobs/999") == "999"
