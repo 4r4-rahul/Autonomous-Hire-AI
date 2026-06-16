@@ -256,6 +256,22 @@ async def _fetch_company_postings(company: str) -> list | None:
         return out
 
     WORKABLE = "https://apply.workable.com/api/v1/widget/accounts/{slug}?details=true"
+    SMARTRECRUITERS = "https://api.smartrecruiters.com/v1/companies/{slug}/postings?limit=100"
+
+    def _sr(j, slug=None):
+        out = []
+        for p in (j or {}).get("content", []):
+            loc = p.get("location") or {}
+            loc_str = " ".join(str(x) for x in (loc.get("city"), loc.get("region"),
+                                                loc.get("country")) if x)
+            if loc.get("remote") and "remote" not in loc_str.lower():
+                loc_str = (loc_str + " Remote").strip()
+            pid = p.get("id")
+            url = f"https://jobs.smartrecruiters.com/{slug}/{pid}" if pid else None
+            out.append({"ats": "smartrecruiters", "title": p.get("name"), "url": url,
+                        "location": loc_str, "posted_at": p.get("releasedDate") or "",
+                        "description": ""})
+        return out
 
     def _wk(j, slug=None):
         out = []
@@ -275,14 +291,15 @@ async def _fetch_company_postings(company: str) -> list | None:
             for slug in _slug_variants(company):
                 if not slug:
                     continue
-                gh, lv, ah, wk = await asyncio.gather(
+                gh, lv, ah, wk, sr = await asyncio.gather(
                     c.get(GREENHOUSE_API.format(slug=slug)),
                     c.get(LEVER_API.format(slug=slug)),
                     c.get(ASHBY_API.format(slug=slug)),
                     c.get(WORKABLE.format(slug=slug)),
+                    c.get(SMARTRECRUITERS.format(slug=slug)),
                     return_exceptions=True,
                 )
-                for resp, parse in ((gh, _gh), (lv, _lv), (ah, _ash), (wk, _wk)):
+                for resp, parse in ((gh, _gh), (lv, _lv), (ah, _ash), (wk, _wk), (sr, _sr)):
                     if isinstance(resp, Exception) or getattr(resp, "status_code", 0) != 200:
                         continue
                     try:
