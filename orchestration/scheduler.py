@@ -267,6 +267,22 @@ async def job_board_scan() -> None:
         logger.error("scheduled_board_scan_failed", error=str(e)[:140])
 
 
+async def job_teksystems_scan() -> None:
+    """Off-LinkedIn DISCOVERY for TEKsystems (Phenom, PerimeterX-protected) via its PUBLIC sitemaps +
+    JSON-LD — crawler-facing, so no bot-fight, no browser. Cheap-parks fresh, US, on-target roles
+    (Haiku scoring, tailor=False; Opus tailoring stays on-demand). NOTE: staffing/contract roles —
+    sourced separately from the sponsor boards, and the per-company cap keeps it to a few at a time."""
+    try:
+        from core.state_store import load_state
+        from agents.discovery.teksystems_scanner import run
+        state = load_state()
+        _, summary = await run(state, limit=400, tailor=False, persist=True, max_details=80)
+        await _sync_db()
+        logger.info("scheduled_teksystems_scan_done", **summary)
+    except Exception as e:
+        logger.error("scheduled_teksystems_scan_failed", error=str(e)[:140])
+
+
 async def job_auto_submit() -> None:
     """Auto-submit the safe (gate-passed, CAPTCHA-free) reviewed apps; queue the rest.
     No-ops unless AUTONOMOUSHIRE_AUTO_SUBMIT=1 and no kill-switch — so it's inert until
@@ -310,8 +326,8 @@ async def job_auto_submit() -> None:
 # Which jobs are LIVE. The LinkedIn apply pipeline (scan → fill → park) plus the
 # capture→learn loop. Recruiter-outreach jobs are SLEPT to keep the focus clear —
 # add "contact_finder"/"outreach_runner" back here to wake them.
-_ACTIVE_JOBS = {"linkedin_health", "linkedin_scanner", "board_scanner", "apply_pipeline",
-                "auto_submit", "email_monitor", "digest"}
+_ACTIVE_JOBS = {"linkedin_health", "linkedin_scanner", "board_scanner", "teksystems_scanner",
+                "apply_pipeline", "auto_submit", "email_monitor", "digest"}
 
 # id → (func, base_interval_seconds, display_name, misfire_grace_time)
 _JOB_SPECS = {
@@ -320,6 +336,7 @@ _JOB_SPECS = {
     "contact_finder":  (job_contact_finder,  21600, "LinkedIn Contact Finder",                300),
     "outreach_runner": (job_outreach_runner, 7200,  "LinkedIn Outreach Runner",               120),
     "board_scanner":   (job_board_scan,      3600,  "Board Scanner (off-LinkedIn discovery, 1h)", 600),
+    "teksystems_scanner": (job_teksystems_scan, 21600, "TEKsystems Scanner (sitemap discovery, 6h)", 600),
     "apply_pipeline":  (job_apply_pipeline,  3600,  "Apply Pipeline (score+park cheap, 1h)",   600),
     "auto_submit":     (job_auto_submit,     43200, "Auto-Submit Safe Apps (opt-in)",         600),
     "email_monitor":   (job_email_monitor,   3600,  "Gmail Email Monitor (1h)",               120),
