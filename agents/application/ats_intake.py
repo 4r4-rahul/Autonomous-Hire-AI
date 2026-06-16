@@ -43,8 +43,10 @@ _ACTIVE = ("submitted", "pending_review", "awaiting_confirmation", "approved",
 # Dedup still uses _ACTIVE, so a role you've already applied to is never re-queued.
 _CAP_STATUSES = ("pending_review", "pending_manual_submit", "awaiting_confirmation")
 
-# Recruiter red-flag rule: never queue more than this many roles at one company.
-_PER_COMPANY_CAP = 3
+# Recruiter red-flag rule: never queue more than this many roles at one company. Raised 3→6 to
+# widen reach (release the ~1.2k roles/scan the tighter cap was dropping) while still bounding how
+# many apps land at any single employer.
+_PER_COMPANY_CAP = 6
 
 # Cap-exempt "companies": staffing agencies / marketplaces where every posting is effectively a
 # DIFFERENT client employer, so the anti-spam "≤3 at one company" rule doesn't apply (you're not
