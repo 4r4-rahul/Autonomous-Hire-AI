@@ -46,6 +46,15 @@ _CAP_STATUSES = ("pending_review", "pending_manual_submit", "awaiting_confirmati
 # Recruiter red-flag rule: never queue more than this many roles at one company.
 _PER_COMPANY_CAP = 3
 
+# Cap-exempt "companies": staffing agencies / marketplaces where every posting is effectively a
+# DIFFERENT client employer, so the anti-spam "≤3 at one company" rule doesn't apply (you're not
+# spamming one recruiter). Matched on the normalized company name.
+_CAP_EXEMPT = {"teksystems"}
+
+
+def _cap_for(company: str) -> float:
+    return float("inf") if _norm(company) in _CAP_EXEMPT else _PER_COMPANY_CAP
+
 # Freshness gate: skip postings older than this when the age is known. Measured from the more
 # recent of posted/updated (see apply_url_resolver._newer_iso), so an actively-maintained req isn't
 # dropped. 30d is the hard floor; the queue is sorted freshest-first so recency is prioritized too.
@@ -166,7 +175,7 @@ async def intake_jobs(discovered: list[dict], state: JobSearchState,
             return None, "skipped_dup"
         if ledger.seen(company, title):                          # all-time dedup (across runs)
             return None, "skipped_dup"
-        if company_counts[_norm(company)] >= _PER_COMPANY_CAP:   # existing-app cap precheck
+        if company_counts[_norm(company)] >= _cap_for(company):  # existing-app cap precheck
             return None, "skipped_cap"
         if not _is_relevant_location(title, d.get("location"), (d.get("description") or "")[:200]):
             return None, "skipped_location"
@@ -234,7 +243,7 @@ async def intake_jobs(discovered: list[dict], state: JobSearchState,
             break
         job = cand["job"]
         company, title, ats_url = job["company_name"], job["title"], job["apply_url"]
-        if company_counts[_norm(company)] >= _PER_COMPANY_CAP:
+        if company_counts[_norm(company)] >= _cap_for(company):
             report["skipped_cap"] += 1
             continue
         if ats_url in committed_urls or ats_url in existing_urls:
