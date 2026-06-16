@@ -49,7 +49,7 @@ _PER_COMPANY_CAP = 3
 # Cap-exempt "companies": staffing agencies / marketplaces where every posting is effectively a
 # DIFFERENT client employer, so the anti-spam "≤3 at one company" rule doesn't apply (you're not
 # spamming one recruiter). Matched on the normalized company name.
-_CAP_EXEMPT = {"teksystems"}
+_CAP_EXEMPT = {"teksystems", "kforce", "insight global"}
 
 
 def _cap_for(company: str) -> float:
