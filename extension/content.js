@@ -146,6 +146,31 @@
     return [...menu.querySelectorAll("[role='option'], .select__option, [class*='__option']")];
   }
 
+  // Best label for a react-select. Greenhouse's Remix EEO selects (race/gender/…) don't expose the
+  // question via labelFor — the "Please identify your race" heading sits in a separate field
+  // wrapper. Fall back to: question-wrapper walk → aria-labelledby target → aria-label → the
+  // react-select-{key}-input id (race→"Race") → a hidden input[name]. Without this the field has no
+  // label and gets SKIPPED entirely (the "race not answered" bug).
+  function reactSelectLabel(ctrl, inp) {
+    let l = labelFor(ctrl) || questionLabel([ctrl]);
+    if (l) return l;
+    const lb = inp && inp.getAttribute("aria-labelledby");
+    if (lb) {
+      const txt = lb.split(/\s+/).map((id) => { const e = document.getElementById(id); return e ? clean(e.textContent) : ""; })
+        .filter(Boolean).join(" ").replace(/\s*(Race & Ethnicity Definitions|select\.\.\.).*/i, "").trim();
+      if (txt) return txt;
+    }
+    l = (inp && clean(inp.getAttribute("aria-label") || "")) || clean(ctrl.getAttribute("aria-label") || "");
+    if (l) return l;
+    // react-select-{key}-input  →  "race" / "hispanic_ethnicity" / "veteran_status"
+    const idstr = (inp && inp.id) || (ctrl.querySelector("[id*='react-select-']") || {}).id || "";
+    const m = idstr.match(/react-select-([a-z0-9_]+)-(?:input|live-region|listbox|placeholder)/i);
+    if (m) return m[1].replace(/[_-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());  // race → "Race"
+    const named = ctrl.querySelector("input[name]") || (ctrl.closest("[class*='field'],[class*='question'],div") || document).querySelector("input[name]");
+    if (named && named.name && !/^react-select/.test(named.name)) return named.name.replace(/[_-]+/g, " ");
+    return "";
+  }
+
   async function readReactOptions(control) {
     try {
       for (let attempt = 0; attempt < 2; attempt++) {
@@ -385,13 +410,8 @@
     .filter((el) => visible(el) && isReactSelect(el) && !el.querySelector("select"));
   for (const ctrl of rsControls) {
     if (ctrl.querySelector(".select__single-value, [class*='__single-value']")) continue; // already chosen
-    // Don't skip a required dropdown just because its label is awkwardly placed (Greenhouse's
-    // "Please identify your race" sits above a "Definitions" link, which defeats labelFor) —
-    // fall back to the question-wrapper walk, then the input's aria-label / placeholder.
     const inpEl = ctrl.querySelector("input");
-    const label = labelFor(ctrl) || questionLabel([ctrl])
-      || (inpEl && clean(inpEl.getAttribute("aria-label") || ""))
-      || clean(ctrl.getAttribute("aria-label") || "");
+    const label = reactSelectLabel(ctrl, inpEl);
     if (!label) continue;
     const options = await readReactOptions(ctrl);
     const id = nid();
