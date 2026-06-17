@@ -208,14 +208,15 @@ async def _fetch_company_postings(company: str) -> list | None:
         return cached[1]
 
     def _gh(j, slug=None):
-        # Use the CANONICAL Greenhouse-hosted form (job-boards.greenhouse.io/{slug}/jobs/{id}),
-        # NOT the API's `absolute_url` — many companies embed Greenhouse on their own domain and
-        # the branded vanity URL (e.g. www.asana.com/jobs/apply/{id}) 404s. The canonical hosted
-        # form is the actual application page and is always live for an open posting.
+        # Use the Greenhouse EMBED application form (boards.greenhouse.io/embed/job_app?for={slug}&
+        # token={id}) — the bare, always-live apply form. The canonical hosted page
+        # (job-boards.greenhouse.io/{slug}/jobs/{id}) 302-REDIRECTS to the company's branded careers
+        # SPA for many employers (e.g. Stripe → stripe.com/jobs/search?gh_jid=…, a LISTING, not the
+        # form). The embed endpoint never redirects off-site, so it's the reliable apply target.
         out = []
         for p in (j or {}).get("jobs", []):
             jid = p.get("id")
-            url = (f"https://job-boards.greenhouse.io/{slug}/jobs/{jid}" if slug and jid
+            url = (f"https://boards.greenhouse.io/embed/job_app?for={slug}&token={jid}" if slug and jid
                    else p.get("absolute_url"))
             out.append({"ats": "greenhouse", "title": p.get("title"), "url": url,
                         "location": (p.get("location") or {}).get("name", ""),
