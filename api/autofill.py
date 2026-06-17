@@ -305,6 +305,15 @@ def _resolve_one(f: FieldIn, P: dict) -> FillOut:
         return FillOut(id=f.id, kind="blank",
                        note="conditional — correctly left blank (previous answer was No)")
 
+    # ── Universal essay gate (runs BEFORE every keyword rule) ─────────────────
+    # Root-cause fix for the "preferred approach to STATE MANAGEMENT in React" → "Texas" class:
+    # a genuine free-text essay must never be hijacked by a downstream keyword rule that merely
+    # shares a word (state/city/company/github/...). A field WITH options is never an essay; cover
+    # letters and "anything else" boxes keep their dedicated handling later, so we exclude them.
+    # Work-auth / sponsorship / conditional are handled above and still win.
+    if not is_choice and _is_strong_essay(ll, ftype):
+        return FillOut(id=f.id, kind="generate", value=f.label, note="essay")
+
     # ── Identity ─────────────────────────────────────────────────────────────
     if "preferred name" in ll or "preferred first" in ll:
         return text(first)
@@ -320,11 +329,14 @@ def _resolve_one(f: FieldIn, P: dict) -> FillOut:
         return text(personal.get("email", ""))
     if ("phone" in ll or "mobile" in ll) and len(ll) <= 24:
         return text(personal.get("phone", ""))
-    if "linkedin" in ll:
+    # Length-guarded like email/phone: a SHORT label ("LinkedIn", "GitHub URL") is the profile
+    # field; a long question that merely mentions the platform ("your philosophy on using GitHub?")
+    # is not — let it fall through (the essay gate above usually already claimed it).
+    if "linkedin" in ll and len(ll) <= 30:
         return text(personal.get("linkedin_url", ""))
-    if "github" in ll:
+    if "github" in ll and len(ll) <= 30:
         return text(personal.get("github_url", ""))
-    if any(k in ll for k in ("website", "portfolio", "personal site")):
+    if any(k in ll for k in ("website", "portfolio", "personal site")) and len(ll) <= 30:
         return text(personal.get("github_url", ""))
 
     # ── Address ──────────────────────────────────────────────────────────────
@@ -586,6 +598,35 @@ def _resolve_one(f: FieldIn, P: dict) -> FillOut:
         return FillOut(id=f.id, kind="generate", value=f.label, note="essay")
 
     return skip("no rule — please fill")
+
+
+# Markers that make a free-text field UNAMBIGUOUSLY an essay (opinion / narrative / explanation) —
+# none of these appear in identity/address/short-datum labels, so it's safe to match these BEFORE
+# the keyword rules. (The broader _is_open_ended below — incl. "what is your", bare "?" — stays at
+# the END as a fallback, because those CAN be short-datum questions a keyword rule should claim.)
+_ESSAY_MARKERS = (
+    "why are you", "why do you", "why this", "why join", "why work", "why our", "why should",
+    "describe ", "explain ", "walk us through", "walk me through", "tell us about", "tell me about",
+    "in your own words", "your approach", "approach to", "thoughts on", "perspective on",
+    "elaborate", "experience with", "what excites", "what interests", "what motivat",
+    "what draws you", "what attracts", "good fit", "right fit", "best fit", "a time when",
+    "a time you", "give an example", "share an example", "how do you", "how would you",
+    "how have you", "how has", "what would you build", "what are your thoughts", "what makes you",
+)
+
+
+def _is_strong_essay(ll: str, ftype: str) -> bool:
+    """Conservative, runs-early essay test: only True for things that could NEVER be a short datum
+    (a textarea, a very long prompt, or an explicit explanation marker). Excludes cover letters and
+    'anything else' boxes, which have dedicated handling downstream."""
+    if "cover letter" in ll or "coverletter" in ll or "motivation" in ll:
+        return False
+    if any(k in ll for k in ("anything else", "additional information", "additional comments",
+                             "accommodation", "anything you")):
+        return False
+    if ftype == "textarea" or len(ll) > 80:
+        return True
+    return any(m in ll for m in _ESSAY_MARKERS)
 
 
 def _is_open_ended(ll: str, ftype: str) -> bool:
