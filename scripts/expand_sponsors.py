@@ -79,6 +79,31 @@ _CANDIDATES = [
     "datadog", "new relic", "dynatrace", "elastic", "grafana", "splunk",
     "hashicorp", "gitlab", "jfrog", "harness", "launchdarkly", "split", "statsig",
     "nvidia", "arm", "cerebras", "groq", "sambanova", "graphcore", "tenstorrent", "lightmatter",
+    # Insurance / insurtech
+    "lemonade", "root insurance", "hippo", "next insurance", "ethos", "newfront", "at-bay",
+    "clearcover", "kin insurance", "pie insurance", "openly", "bestow", "ladder", "sure",
+    "vouch", "cover genius", "trellis", "counterpart", "corvus insurance", "insurify",
+    "policygenius", "everquote", "the zebra", "gabi", "marshmallow", "branch insurance",
+    "loop insurance", "wefox", "getsafe", "l025", "boost insurance", "ledgebrook", "kettle",
+    "shift technology", "tractable", "snapsheet", "cape analytics", "akur8", "planck",
+    "assurance iq", "healthcare.com", "gravie", "sana benefits", "decent", "sidecar health",
+    "clearwater analytics", "duck creek", "guidewire", "applied systems", "ethos life",
+    # Healthcare / health tech / digital health
+    "oscar health", "clover health", "included health", "hinge health", "sword health",
+    "omada health", "virta health", "commure", "innovaccer", "cohere health", "notable health",
+    "akasa", "truveta", "datavant", "particle health", "health gorilla", "zus health",
+    "memora health", "bicycle health", "brightline", "brave health", "eleos health", "equip health",
+    "big health", "modern health", "talkspace", "cerebral", "k health", "curai health",
+    "buoy health", "aledade", "pearl health", "stellar health", "strive health", "monogram health",
+    "somatus", "carrum health", "nuna", "clarify health", "abridge", "ambience healthcare",
+    "suki", "regard", "navina", "fabric health", "qventus", "olive ai", "rivet health",
+    "candid health", "tennr", "thoughtful ai", "machinify", "alaffia health", "anomaly",
+    "recursion", "insitro", "tempus ai", "veeva", "veradigm", "doximity", "grow therapy",
+    "headway health", "two chairs", "octave", "lyra health", "spring health", "rula",
+    "garner health", "transcarent", "maven clinic", "carbon health", "color health", "ro health",
+    "function health", "superpower", "parsley health", "tia", "midi health", "maximus health",
+    "hims health", "openevidence", "abacus insights", "turquoise health", "collectivehealth",
+    "wellsky", "particlehealth", "evolenthealth", "privia health", "tebra", "cedar health",
 ]
 
 
