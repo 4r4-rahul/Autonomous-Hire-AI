@@ -733,9 +733,19 @@
     coverStatus = "✋ Cover letter attach failed: " + (e && e.message ? e.message : e);
   }
 
-  // Final re-assert: attaching the résumé/cover above triggers one more Ashby re-render that can
-  // re-drop the text fields — re-fire them once the form has settled so submit doesn't say "Missing".
-  if (textFills.length) { await sleep(400); reassertText(); }
+  // Final re-assert (universal): attaching the résumé/cover triggers one more Ashby re-render that
+  // can re-drop fields. Re-fire ALL value fills — text via setNative (always; idempotent), and
+  // select/radio/react ONLY if they're now visibly EMPTY (so we never toggle a multi-select OFF or
+  // disturb a still-committed dropdown — that's the safe boundary). A select whose chip still shows
+  // but whose RHF state silently dropped is undetectable here; a re-click of Fill recovers it.
+  if (attempts.length) {
+    await sleep(400);
+    reassertText();
+    for (const a of attempts) {
+      if (a.item.kind === "text") continue;
+      try { if (!verifyFilled(a.item)) await applyFill(a.item, a.fill); } catch (e) {}
+    }
+  }
 
   showOverlay(data, notes, resumeStatus, resumeViewUrl, blanks, coverStatus, coverViewUrl);
   } catch (err) {
