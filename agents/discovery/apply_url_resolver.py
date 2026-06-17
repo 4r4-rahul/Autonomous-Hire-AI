@@ -359,9 +359,10 @@ _FOREIGN_LOC = (
     "brno", "ottawa", "calgary", "guadalajara", "monterrey", "bogota", "bogotá", "buenos aires",
     "cairo", "egypt", "nairobi", "lagos", "riyadh", "doha", "amman", "casablanca",
 )
-_US_LOC = (
+# STRONG US signals: country + spelled-out states. Unambiguously US even when a foreign token is
+# also present (multi-loc "San Jose; London, UK" → US-available). NO foreign-city collisions here.
+_US_STRONG_LOC = (
     "united states", "usa", "us", "u.s", "americas", "north america", "nationwide",
-    # states
     "alabama", "alaska", "arizona", "arkansas", "california", "colorado", "connecticut",
     "delaware", "florida", "hawaii", "idaho", "illinois", "indiana", "iowa", "kansas",
     "kentucky", "louisiana", "maine", "maryland", "massachusetts", "michigan", "minnesota",
@@ -369,7 +370,10 @@ _US_LOC = (
     "new mexico", "new york", "north carolina", "north dakota", "ohio", "oklahoma", "oregon",
     "pennsylvania", "rhode island", "south carolina", "south dakota", "tennessee", "texas",
     "utah", "vermont", "virginia", "washington", "west virginia", "wisconsin", "wyoming",
-    # hubs
+)
+# WEAK US signals: city/hub names. These DO collide with foreign namesakes ("Cambridge, UK",
+# "Boston, UK"), so a city match only counts as US when NO foreign country is present.
+_US_CITY_LOC = (
     "san francisco", "bay area", "nyc", "seattle", "boston", "austin", "denver",
     "chicago", "atlanta", "los angeles", "san jose", "san diego", "dallas", "houston",
     "mountain view", "menlo park", "palo alto", "san mateo", "sunnyvale", "redmond", "bellevue",
@@ -383,6 +387,7 @@ _US_LOC = (
     "cleveland", "indianapolis", "tampa", "orlando", "sacramento", "san bruno", "foster city",
     "south san francisco", "emeryville", "burlingame", "bentonville", "raleigh-durham",
 )
+_US_LOC = _US_STRONG_LOC + _US_CITY_LOC
 # US state abbreviations in the conventional "City, ST" form. Matched case-sensitively on the
 # ORIGINAL (un-lowercased) text and only after a comma, so it can't collide with common English
 # words ('in', 'or', 'me', 'pa', 'hi' etc.) — those are lowercase and not comma-prefixed here.
@@ -405,6 +410,7 @@ _US_TOKENS = {a.lower() for a in _US_STATE_ABBR} | {
 # Word-boundary matching — naive substring matching mis-fires ('usa' inside 'lausanne',
 # 'us' inside 'belarus'). \b ensures whole-word matches only.
 _US_RE = re.compile(r"\b(?:" + "|".join(re.escape(k) for k in _US_LOC) + r")\b")
+_US_STRONG_RE = re.compile(r"\b(?:" + "|".join(re.escape(k) for k in _US_STRONG_LOC) + r")\b")
 _FOREIGN_RE = re.compile(r"\b(?:" + "|".join(re.escape(k) for k in _FOREIGN_LOC) + r")\b")
 
 
@@ -457,10 +463,16 @@ def _loc_class(text: str) -> str:
     The 'City, ST' state-abbreviation pattern (matched on the original case) also counts as US."""
     raw = text or ""
     t = raw.lower()
-    if _US_RE.search(t) or _US_ABBR_RE.search(raw):
+    # STRONG US signal (", CA" / spelled-out state / "United States") wins even alongside a foreign
+    # token — a genuine multi-location US-available role ("San Jose; London, UK").
+    if _US_ABBR_RE.search(raw) or _US_STRONG_RE.search(t):
         return "us"
+    # A foreign COUNTRY now beats a WEAK US-city match — so "Cambridge, UK" / "Boston, UK" (UK
+    # cities that share a name with US hubs) are correctly foreign, not US.
     if _FOREIGN_RE.search(t):
         return "foreign"
+    if _US_RE.search(t):
+        return "us"
     # "remote" counts as US ONLY when the string is JUST remote-ish words (a US-HQ remote role).
     # If any OTHER place token remains ("Türkiye, Remote", "Venezuela, Remote", "Latin America"),
     # we CANNOT confirm US → 'unknown' (rejected by strict), so a foreign-remote role whose country
