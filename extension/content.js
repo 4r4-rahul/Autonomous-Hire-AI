@@ -500,17 +500,19 @@
     if (item.kind === "text") textFills.push({ el: item.el, value: fill.value });
     attempts.push({ item, fld, fill });
   }
-  // ── Re-assert text fields after the form settles ─────────────────────────────
-  // Ashby (react-hook-form) can drop a programmatically-set value during a post-mount
-  // re-render: the input still SHOWS the text but the form's own state is empty, so submit
-  // fails with "Missing entry for required field: Name/Phone/LinkedIn" even though the box
-  // looks filled. Re-firing the full event sequence after a delay re-registers the value in
-  // React's state. Re-asserting is harmless when the value already stuck.
-  if (textFills.length) {
-    await sleep(500);
+  // ── Re-assert text fields as the form settles ────────────────────────────────
+  // Ashby (react-hook-form) drops a programmatically-set value during a post-mount RE-RENDER: the
+  // input still SHOWS the text but the form's own state is empty, so submit fails "Missing required
+  // field: Full Name/Phone" even though the box is green. Ashby re-renders MORE THAN ONCE
+  // (hydration, validation, and again when the résumé attaches), so a single re-assert isn't enough
+  // — re-fire the value at several points, AND once more after the résumé/cover attach below.
+  const reassertText = () => {
     for (const { el, value } of textFills) {
       try { if (el.isConnected) setNative(el, value); } catch (e) {}
     }
+  };
+  if (textFills.length) {
+    for (const gap of [400, 800, 1300]) { await sleep(gap); reassertText(); }
   }
 
   // ── Verify every fill against the live DOM, retry failures, recount from reality ──
@@ -730,6 +732,10 @@
   } catch (e) {
     coverStatus = "✋ Cover letter attach failed: " + (e && e.message ? e.message : e);
   }
+
+  // Final re-assert: attaching the résumé/cover above triggers one more Ashby re-render that can
+  // re-drop the text fields — re-fire them once the form has settled so submit doesn't say "Missing".
+  if (textFills.length) { await sleep(400); reassertText(); }
 
   showOverlay(data, notes, resumeStatus, resumeViewUrl, blanks, coverStatus, coverViewUrl);
   } catch (err) {
