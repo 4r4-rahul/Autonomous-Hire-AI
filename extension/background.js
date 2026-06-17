@@ -12,7 +12,40 @@ function bufToBase64(buf) {
   return btoa(bin);
 }
 
+// ── "Fill ALL" → fill each tab when you switch to it ─────────────────────────────────────────
+// Chrome freezes timers in BACKGROUND tabs, so injecting the filler into them does little until
+// they're focused. Instead "Fill ALL" arms the other application tabs here; each is filled the
+// instant it becomes active (full speed, no throttle, loads if it was lazy/discarded). Armed IDs
+// live in session storage so they survive the service worker being recycled.
+async function _getArmed() {
+  try { return new Set((await chrome.storage.session.get("armed")).armed || []); }
+  catch (e) { return new Set(); }
+}
+async function _setArmed(set) {
+  try { await chrome.storage.session.set({ armed: [...set] }); } catch (e) {}
+}
+
+chrome.tabs.onActivated.addListener(async ({ tabId }) => {
+  const armed = await _getArmed();
+  if (!armed.has(tabId)) return;
+  armed.delete(tabId);
+  await _setArmed(armed);
+  try {
+    await chrome.scripting.executeScript({ target: { tabId, allFrames: true }, files: ["content.js"] });
+  } catch (e) { /* tab restricted / closed — skip */ }
+});
+
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg && msg.type === "arm") {
+    (async () => {
+      const a = await _getArmed();
+      (msg.tabIds || []).forEach((id) => a.add(id));
+      await _setArmed(a);
+      sendResponse({ ok: true, armed: a.size });
+    })();
+    return true;
+  }
+
   if (msg && msg.type === "resolve") {
     fetch(`${BASE}/resolve`, {
       method: "POST",
