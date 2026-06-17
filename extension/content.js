@@ -319,6 +319,25 @@
   let uid = 0;
   const nid = () => "ah" + ++uid;
 
+  // Label for a plain input/select, with fallbacks for forms that use a PLACEHOLDER or just a
+  // name/id instead of a <label> — Kforce / TEKsystems / Insight Global custom apply forms do this,
+  // so labelFor returns nothing and every field gets skipped (the "Filled 0" bug). clean() strips
+  // the required '*'. placeholder "First Name *" → "First Name"; name "postalCode" → "postal code".
+  function fieldLabel(el) {
+    let l = labelFor(el);
+    if (l) return l;
+    l = clean(el.getAttribute("placeholder") || "") || clean(el.getAttribute("aria-label") || "")
+        || clean(el.getAttribute("title") || "");
+    if (l) return l;
+    if (el.tagName === "SELECT" && el.options && el.options.length) {
+      const ph = clean(el.options[0].textContent || "");   // e.g. "Select State:" → "State"
+      if (ph) { const s = ph.replace(/^\s*(select|choose|please select)\s+/i, "").replace(/[:*]+\s*$/, "").trim(); if (s) return s; }
+    }
+    const raw = (el.getAttribute("name") || el.id || "")    // "firstName" → "first name"
+      .replace(/[_\-]+/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2");
+    return clean(raw).toLowerCase();
+  }
+
   // text-like inputs + textareas
   const TEXT_TYPES = ["text", "email", "tel", "url", "number", ""];
   for (const el of document.querySelectorAll("input, textarea")) {
@@ -334,7 +353,9 @@
     if ((ctrlAnc && isReactSelect(ctrlAnc)) || el.getAttribute("role") === "combobox"
         || el.getAttribute("aria-autocomplete") === "list"
         || /(^|-)react-select-/.test(el.id || "")) continue;
-    const label = labelFor(el);
+    // Skip obvious site-search boxes (placeholder/name "search") — never an application field.
+    if (/\bsearch\b/i.test((el.getAttribute("placeholder") || "") + " " + (el.name || el.id || ""))) continue;
+    const label = fieldLabel(el);
     if (!label) continue;
     const id = nid();
     el.dataset.ahId = id;
@@ -346,7 +367,7 @@
   for (const el of document.querySelectorAll("select")) {
     if (!visible(el) || el.disabled) continue;
     if (el.value && el.value.trim() && !["", "0", "-1"].includes(el.value)) continue;
-    const label = labelFor(el);
+    const label = fieldLabel(el);
     if (!label) continue;
     const id = nid();
     reg[id] = { el, kind: "select" };

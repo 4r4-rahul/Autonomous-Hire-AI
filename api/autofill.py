@@ -280,6 +280,11 @@ def _resolve_one(f: FieldIn, P: dict) -> FillOut:
     # sentence option. Covers "eligible to work", "right to work", "legally able to work".
     _elig = (("eligible" in ll or "right to work" in ll or "legally able" in ll
               or "lawfully" in ll) and "work" in ll and "sponsor" not in ll)
+    # Staffing apply forms label this "Employment Eligibility" / "Work Eligibility" / "Work
+    # Authorization (Status)" with no "work"+"eligible" combo — route those to the truthful picker.
+    _elig = _elig or any(k in ll for k in ("employment eligibility", "work eligibility",
+                                           "eligibility to work", "work authorization",
+                                           "authorization to work", "employment authorization"))
     if _is_workauth_label(ll) or _elig:
         if is_choice and not _is_yesno(opts):
             idx = _pick_truthful_workauth(opts)
