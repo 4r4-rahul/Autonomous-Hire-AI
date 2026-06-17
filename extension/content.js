@@ -267,7 +267,37 @@
   // "required / missing" even though it looks filled (the Ashby "Missing entry for Name" case).
   // Fix: (1) reset React's _valueTracker so it detects the change, (2) set via the native setter,
   // (3) fire input+change, (4) focus/blur so the field is marked "touched" and validation re-runs.
+  // A phone field often has a JS input MASK (Kforce). Bulk-setting "555-010-0100" makes the mask
+  // truncate/garble it ("409800") — masks must be driven keystroke-by-keystroke. So for phone
+  // fields we TYPE the digits one at a time, re-reading the (mask-reformatted) value between each,
+  // which lets the mask build "(409) 800-4224" correctly. Plain fields just end up with the digits.
+  function _isPhoneField(el) {
+    const sig = ((el.name || "") + " " + (el.id || "") + " " + (el.getAttribute("placeholder") || "")
+      + " " + (el.getAttribute("aria-label") || "")).toLowerCase();
+    return el.type === "tel" || (/\bphone\b|mobile|tel\b|cell/.test(sig) && !/email/.test(sig));
+  }
+  function typePhone(el, value) {
+    const digits = (value || "").replace(/\D/g, "");
+    if (!digits) return;
+    const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value").set;
+    try { el.focus(); } catch (e) {}
+    try { if (el._valueTracker) el._valueTracker.setValue("x"); } catch (e) {}
+    setter.call(el, "");
+    try { el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "deleteContentBackward" })); } catch (e) { el.dispatchEvent(new Event("input", { bubbles: true })); }
+    for (const d of digits) {
+      const cur = el.value;                       // mask-formatted value so far
+      try { if (el._valueTracker) el._valueTracker.setValue(cur); } catch (e) {}
+      setter.call(el, cur + d);                   // append next digit; mask reformats on input
+      el.dispatchEvent(new KeyboardEvent("keydown", { key: d, keyCode: 48 + Number(d), which: 48 + Number(d), bubbles: true }));
+      try { el.dispatchEvent(new InputEvent("input", { bubbles: true, data: d, inputType: "insertText" })); } catch (e) { el.dispatchEvent(new Event("input", { bubbles: true })); }
+      el.dispatchEvent(new KeyboardEvent("keyup", { key: d, bubbles: true }));
+    }
+    el.dispatchEvent(new Event("change", { bubbles: true }));
+    el.dispatchEvent(new Event("blur", { bubbles: true }));
+  }
+
   function setNative(el, value) {
+    if (_isPhoneField(el) && /\d/.test(value || "")) { typePhone(el, value); return; }
     const proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
     const setter = Object.getOwnPropertyDescriptor(proto, "value").set;
     const fire = (data, inputType) => {
