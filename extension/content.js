@@ -269,6 +269,25 @@
   }
 
   try {
+  // ── Wait for the form to render before scraping ──────────────────────────────
+  // The page may still be loading / redirecting / hydrating (a React SPA) when we're injected —
+  // especially in a BACKGROUND tab opened by "Fill ALL", which Chrome loads lazily. Without this,
+  // we'd scrape 0 fields and bail, and you'd have to re-trigger. Poll until real form controls
+  // exist (or ~25s). Also wait a beat for late-rendering fields once the first ones appear.
+  const _formSel = "input:not([type=hidden]):not([type=submit]):not([type=button]), textarea, " +
+    "select, [class*='select__control'], [class*='__control'], [role='radio'], [role='combobox']";
+  {
+    const start = Date.now();
+    let seen = 0;
+    while (Date.now() - start < 25000) {
+      const n = document.querySelectorAll(_formSel).length;
+      // Stable for two checks (count stopped growing) → the form has finished rendering.
+      if (n > 0 && n === seen) break;
+      seen = n;
+      await sleep(600);
+    }
+  }
+
   // ── Scrape fields ────────────────────────────────────────────────────────────
   const fields = [];      // {id, label, type, options}
   const reg = {};         // id -> {el / radios / control, kind}
