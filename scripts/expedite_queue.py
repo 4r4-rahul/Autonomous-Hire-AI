@@ -7,12 +7,15 @@ Usage:
   python scripts/expedite_queue.py                  # rank + print today's worklist (free, instant)
   python scripts/expedite_queue.py --top 25         # worklist size
   python scripts/expedite_queue.py --pretailor 15   # ALSO pre-tailor the top 15 that need it (Opus)
+  python scripts/expedite_queue.py --open 10        # OPEN the top 10 READY apps as Chrome tabs to blitz
 """
 from __future__ import annotations
 
 import argparse
 import asyncio
+import subprocess
 import sys
+import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -77,11 +80,47 @@ async def _pretailor(rows, apps_by_job, n: int):
     print("Pre-tailor wave done — those forms now open instantly.")
 
 
+def _open_in_chrome(rows, apps_by_job, n: int, include_pending: bool, batch: int = 8):
+    """Open the top N apply URLs as tabs in Chrome (where the extension + your logins live). By
+    default only READY (tailored) ones, so every tab fills instantly; --open-pending includes
+    not-yet-tailored ones (those make the extension tailor on demand, ~20-30s)."""
+    picked, skipped = [], 0
+    for r in rows:
+        a = apps_by_job.get(r["job"].get("id"), {})
+        url = r["job"].get("apply_url")
+        if not url:
+            continue
+        if not a.get("tailored_resume_path") and not include_pending:
+            skipped += 1
+            continue
+        picked.append(url)
+        if len(picked) >= n:
+            break
+    if not picked:
+        print("\nNothing READY to open — run --pretailor first, or pass --open-pending.")
+        return
+    print(f"\nOpening {len(picked)} apply URLs as Chrome tabs"
+          + (f" (skipped {skipped} not-yet-tailored)" if skipped else "") + " …")
+    for i in range(0, len(picked), batch):
+        chunk = picked[i:i + batch]
+        try:
+            subprocess.run(["open", "-a", "Google Chrome", *chunk], check=False)
+        except Exception as e:
+            print("  open failed:", str(e)[:80]); return
+        if i + batch < len(picked):
+            time.sleep(1.5)   # let Chrome settle between batches
+    print("Done — click the AutonomousHire extension in each tab, review, solve CAPTCHA, submit.")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--top", type=int, default=25, help="worklist size (best first)")
     ap.add_argument("--pretailor", type=int, default=0, metavar="N",
                     help="also pre-tailor the top N that aren't tailored yet (Opus cost)")
+    ap.add_argument("--open", type=int, default=0, metavar="N", dest="open_n",
+                    help="open the top N READY apply URLs as Chrome tabs to blitz")
+    ap.add_argument("--open-pending", action="store_true",
+                    help="with --open, also include not-yet-tailored apps (they tailor on demand)")
     args = ap.parse_args()
 
     rows, apps_by_job = _worklist(args.top)
@@ -94,6 +133,10 @@ def main():
           f"(run with --pretailor {n_pending} to make them instant-open).")
     if args.pretailor:
         asyncio.run(_pretailor(rows, apps_by_job, args.pretailor))
+    if args.open_n:
+        # Re-read state so freshly pre-tailored apps count as READY in the same run.
+        rows, apps_by_job = _worklist(args.top)
+        _open_in_chrome(rows, apps_by_job, args.open_n, args.open_pending)
 
 
 if __name__ == "__main__":
