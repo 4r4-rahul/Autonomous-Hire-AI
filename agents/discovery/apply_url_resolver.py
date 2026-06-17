@@ -336,8 +336,17 @@ _FOREIGN_LOC = (
     "lausanne", "geneva", "luxembourg", "belarus", "minsk", "ukraine", "kyiv", "estonia", "tallinn",
     "iceland", "reykjavik", "reykjavík", "norway", "bergen", "iceland", "scotland", "edinburgh",
     "wales", "cardiff", "cyprus", "malta", "croatia", "zagreb", "slovenia", "ljubljana",
-    "czech", "prague", "greece", "athens", "turkey", "istanbul", "south africa", "nigeria",
-    "kenya", "argentina", "colombia", "chile", "peru", "costa rica", "new zealand", "auckland",
+    "czech", "prague", "greece", "athens", "turkey", "türkiye", "turkiye", "istanbul", "ankara",
+    "south africa", "nigeria", "lagos", "kenya", "nairobi", "egypt", "cairo", "morocco",
+    "argentina", "buenos aires", "colombia", "bogota", "bogotá", "chile", "santiago", "peru",
+    "lima", "venezuela", "caracas", "ecuador", "uruguay", "costa rica", "panama", "guatemala",
+    "latin america", "latam", "south america", "central america", "middle east", "mena",
+    "europe", "european union", "eu remote", "asia pacific", "asia-pacific", "oceania",
+    "pakistan", "karachi", "lahore", "bangladesh", "dhaka", "sri lanka", "colombo", "nepal",
+    "thailand", "bangkok", "malaysia", "kuala lumpur", "saudi", "riyadh", "qatar", "doha",
+    "hungary", "budapest", "bulgaria", "sofia", "serbia", "belgrade", "lithuania", "vilnius",
+    "latvia", "riga", "slovakia", "bratislava", "armenia", "yerevan", "georgia (country)",
+    "new zealand", "auckland", "wellington", "bahrain", "kuwait", "oman", "jordan", "amman",
     # India tech hubs — 'gurgaon' was renamed 'gurugram' (2016); most of these were missing,
     # so India-located roles leaked through as 'unknown'. Chosen to avoid US-namesake collisions.
     "gurugram", "noida", "new delhi", "mumbai", "navi mumbai", "chennai", "kolkata", "ahmedabad",
@@ -384,6 +393,15 @@ _US_STATE_ABBR = (
     "VA", "WA", "WV", "WI", "WY", "DC",
 )
 _US_ABBR_RE = re.compile(r",\s*(?:" + "|".join(_US_STATE_ABBR) + r")\b")
+# Tokens that, as the ENTIRE residual after stripping remote/office words, still mean US: state
+# codes (ca, ny, tx…), big-city/region abbrevs, and US timezones. Used so "Remote - CA" (California)
+# and "SF Office Remote" aren't mistaken for foreign. (Canadian 'ON'/'BC' aren't here → correctly
+# rejected.) Requiring ALL residual tokens to be in this set avoids the 'in'/'or' word collisions.
+_US_TOKENS = {a.lower() for a in _US_STATE_ABBR} | {
+    "sf", "sfo", "nyc", "la", "lax", "sea", "bos", "chi", "dfw", "atx", "pdx", "bay", "silicon",
+    "valley", "usa", "us", "united", "states", "america", "american", "nationwide", "anywhereus",
+    "est", "edt", "pst", "pdt", "cst", "cdt", "mst", "mdt", "et", "pt", "ct",
+}
 # Word-boundary matching — naive substring matching mis-fires ('usa' inside 'lausanne',
 # 'us' inside 'belarus'). \b ensures whole-word matches only.
 _US_RE = re.compile(r"\b(?:" + "|".join(re.escape(k) for k in _US_LOC) + r")\b")
@@ -443,7 +461,21 @@ def _loc_class(text: str) -> str:
         return "us"
     if _FOREIGN_RE.search(t):
         return "foreign"
-    if "remote" in t or "anywhere" in t:
+    # "remote" counts as US ONLY when the string is JUST remote-ish words (a US-HQ remote role).
+    # If any OTHER place token remains ("Türkiye, Remote", "Venezuela, Remote", "Latin America"),
+    # we CANNOT confirm US → 'unknown' (rejected by strict), so a foreign-remote role whose country
+    # we don't explicitly list can't leak through as US (the Sezzle/Türkiye/Venezuela bug).
+    residual = re.sub(r"[,\-/|()]+", " ", t)
+    residual = re.sub(r"\b(remote|wfh|work\s*from\s*home|hybrid|on[\s-]?site|onsite|flexible|"
+                      r"telecommute|in[\s-]?office|office|hq|headquarters|based|only|greater|metro|"
+                      r"area|region)\b", " ", residual)
+    toks = re.findall(r"[a-z]+", residual)
+    if not toks:
+        return "us" if ("remote" in t or "anywhere" in t) else "unknown"
+    # ALL leftover tokens are US state codes / city abbrevs / timezones → US (e.g. "Remote - CA",
+    # "SF Office Remote"). Any unrecognized token ("türkiye", "venezuela", "europe") → unknown,
+    # which strict mode rejects — so foreign-remote can't leak through.
+    if all(w in _US_TOKENS for w in toks):
         return "us"
     return "unknown"
 
