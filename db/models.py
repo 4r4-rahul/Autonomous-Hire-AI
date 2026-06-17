@@ -132,6 +132,9 @@ class Application(Base):
     status: Mapped[str]            = mapped_column(Enum(ApplicationStatus), nullable=False, default=ApplicationStatus.queued, index=True)
     quality_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     quality_report: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
+    # Quick Haiku fit score from intake — present on EVERY app (incl. cheap-parked ones not yet
+    # tailored), so the UI can show a score before the full quality review runs.
+    fit_score: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     tailored_resume_path: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     cover_letter_path: Mapped[Optional[str]]    = mapped_column(String(500), nullable=True)
     ats_url: Mapped[Optional[str]]   = mapped_column(String(1000), nullable=True)

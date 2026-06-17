@@ -263,6 +263,7 @@ def migrate(quiet: bool = False) -> dict:
                         job_id               = job_id,
                         status               = status,
                         quality_score        = app_raw.get("quality_score"),
+                        fit_score            = app_raw.get("fit_score"),
                         quality_report       = app_raw.get("quality_report"),
                         tailored_resume_path = app_raw.get("tailored_resume_path"),
                         cover_letter_path    = app_raw.get("cover_letter_path"),

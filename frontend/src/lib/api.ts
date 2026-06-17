@@ -56,6 +56,7 @@ export interface Application {
   job_id: string;
   status: string;
   quality_score: number | null;
+  fit_score: number | null;
   quality_report: Record<string, unknown> | null;
   tailored_resume_path: string | null;
   ats_url: string | null;
