@@ -343,10 +343,20 @@ def _resolve_one(f: FieldIn, P: dict) -> FillOut:
     if "country" in ll:
         return choose("United States", "residence country")
     # Word-boundary so "city" doesn't match "ethniCITY" and "state" doesn't match
-    # "STATEment" / "real eState".
-    if re.search(r"\bcity\b", ll) or "location" in ll:
+    # "STATEment" / "real eState". PLUS a context guard: address fields are SHORT — a long essay
+    # that merely contains "state"/"city"/"location" ("preferred approach to STATE MANAGEMENT in
+    # React") is NOT an address field and must fall through to the open-ended handler, not get
+    # answered "Texas".
+    _addr_ctx = any(k in ll for k in ("address", "residen", "reside", "you live", "based in",
+                                      "mailing", "located", "hometown", "where are you", "home "))
+    _not_addr = any(k in ll for k in ("state management", "state machine", "application state",
+                                      "global state", "component state", "manage state", "react",
+                                      "redux", "state of the", "approach", "describe", "explain",
+                                      "experience", "preferred approach"))
+    _addr_ok = (len(ll) <= 28 or _addr_ctx) and not _not_addr
+    if (re.search(r"\bcity\b", ll) or ("location" in ll and "relocat" not in ll)) and _addr_ok:
         return loc(home.get("city", "McKinney"))
-    if re.search(r"\bstate\b", ll) or "province" in ll:
+    if (re.search(r"\bstate\b", ll) or "province" in ll) and _addr_ok:
         return choose(home.get("state", "Texas"))
     if any(k in ll for k in ("zip", "postal")):
         return text(home.get("zip", "75070"))
