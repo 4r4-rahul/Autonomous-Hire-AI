@@ -102,6 +102,8 @@ export interface AppProof {
   quality_score: number | null;
   quality_report: Record<string, unknown> | null;
   resume_markdown: string;
+  cover_letter_markdown: string;
+  has_cover_letter: boolean;
   filled_screenshot_url: string | null;
   confirmation_screenshot_url: string | null;
   debug_screenshot_url: string | null;

@@ -232,6 +232,17 @@ export function ProofModal({ appId, onClose, onDecide }: Props) {
                 </Section>
               )}
 
+              {/* Cover letter (only when this role has one — covers are selective) */}
+              {proof.cover_letter_markdown && (
+                <Section title="Cover Letter Used">
+                  <div className="bg-slate-900/60 border border-slate-700 rounded-xl p-5 max-h-96 overflow-y-auto">
+                    <pre className="text-xs text-slate-300 whitespace-pre-wrap font-sans leading-relaxed">
+                      {proof.cover_letter_markdown}
+                    </pre>
+                  </div>
+                </Section>
+              )}
+
               {/* Job description */}
               {proof.job_description && (
                 <Section title="Job Description">

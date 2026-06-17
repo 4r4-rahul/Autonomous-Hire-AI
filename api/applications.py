@@ -279,6 +279,16 @@ async def get_proof(app_id: str):
             raw = p.read_text(encoding="utf-8")
             resume_md = raw.split("<!-- TAILOR_META")[0].strip()
 
+    # Cover letter markdown (only some roles have one — selective). Surfaced so the UI can show it.
+    cover_md = ""
+    cover_path = getattr(app, "cover_letter_path", None) or log_entry.get("cover_letter_path", "")
+    if cover_path:
+        cp = Path(cover_path)
+        if not cp.is_absolute():
+            cp = Path(__file__).parent.parent / cp
+        if cp.exists():
+            cover_md = cp.read_text(encoding="utf-8").strip()
+
     # Screenshot URLs (relative to /screenshots static mount)
     def _screenshot_url(app_id: str, suffix: str) -> str | None:
         fname = f"{app_id}_{suffix}.png"
@@ -307,6 +317,8 @@ async def get_proof(app_id: str):
         "quality_score":    app.quality_score or log_entry.get("quality_score"),
         "quality_report":   app.quality_report,
         "resume_markdown":  resume_md,
+        "cover_letter_markdown": cover_md,
+        "has_cover_letter":      bool(cover_md),
         "filled_screenshot_url":        _screenshot_url(app_id, "filled"),
         "confirmation_screenshot_url":  _screenshot_url(app_id, "confirmation"),
         "debug_screenshot_url":         _screenshot_url(app_id, "submit_debug"),
