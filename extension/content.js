@@ -323,17 +323,20 @@
   // name/id instead of a <label> — Kforce / TEKsystems / Insight Global custom apply forms do this,
   // so labelFor returns nothing and every field gets skipped (the "Filled 0" bug). clean() strips
   // the required '*'. placeholder "First Name *" → "First Name"; name "postalCode" → "postal code".
+  // Generic page text labelFor sometimes grabs off a custom form (Kforce labeled its State select
+  // "All fields with an asterisk are required"). Reject these so we fall through to the real signal.
+  const _BAD_LABEL = /all fields|are required|asterisk|indicates?\s+required|required field|please\s+(complete|fill)|fields with/i;
   function fieldLabel(el) {
     let l = labelFor(el);
-    if (l) return l;
+    if (l && !_BAD_LABEL.test(l)) return l;
     l = clean(el.getAttribute("placeholder") || "") || clean(el.getAttribute("aria-label") || "")
         || clean(el.getAttribute("title") || "");
-    if (l) return l;
+    if (l && !_BAD_LABEL.test(l)) return l;
     if (el.tagName === "SELECT" && el.options && el.options.length) {
       const ph = clean(el.options[0].textContent || "");   // e.g. "Select State:" → "State"
       if (ph) { const s = ph.replace(/^\s*(select|choose|please select)\s+/i, "").replace(/[:*]+\s*$/, "").trim(); if (s) return s; }
     }
-    const raw = (el.getAttribute("name") || el.id || "")    // "firstName" → "first name"
+    const raw = (el.getAttribute("name") || el.id || "")    // "firstName" → "first name", "state" → "state"
       .replace(/[_\-]+/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2");
     return clean(raw).toLowerCase();
   }
