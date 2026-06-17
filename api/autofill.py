@@ -469,11 +469,13 @@ def _resolve_one(f: FieldIn, P: dict) -> FillOut:
     # NOTE: check "transgender" FIRST — it contains "gender" and must not take the gender path.
     if any(k in ll for k in _DEMO_KEYS):
         cands: list[str] = []
+        is_race = False
         if "transgender" in ll:
             cands = ["No"]
         elif "gender" in ll or "how do you identify" in ll:
             cands = [defs.get("eeoc_gender", "Man"), "Man", "Male", "Cisgender man", "Cis man"]
-        elif "race" in ll or "ethnic" in ll:
+        elif ("race" in ll or "ethnic" in ll) and "hispanic" not in ll and "latino" not in ll:
+            is_race = True
             # Rahul is Indian → South Asian. Cover granular OMB-style sets (Asian Indian /
             # Indian subcontinent), federal verbose ("Asian (Not Hispanic or Latino)"),
             # the Asian/Pacific-Islander grouping, then plain "Asian". NOT bare "Indian"
@@ -506,7 +508,7 @@ def _resolve_one(f: FieldIn, P: dict) -> FillOut:
             # Race guard: the chosen race option MUST contain "asian" (Rahul is South Asian).
             # Defends against any fuzzy match ever returning Black / White / Native / Hispanic /
             # Pacific-Islander-only — if it's not an Asian-family option, fall to decline instead.
-            if opt is not None and ("race" in ll or "ethnic" in ll) and "asian" not in opt.lower():
+            if opt is not None and is_race and "asian" not in opt.lower():
                 opt = None
             if opt is not None:
                 return FillOut(id=f.id, kind="value", value=opt, note="EEO (truthful answer)")
