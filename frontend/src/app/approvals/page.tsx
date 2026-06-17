@@ -132,7 +132,7 @@ export default function ApprovalsPage() {
                   </div>
                 )}
               </div>
-              <ScoreBadge score={app.quality_score} />
+              <ScoreBadge score={app.quality_score} fit={app.fit_score} />
               <PostedBadge postedAt={app.posted_at} />
             </div>
             <div className="flex items-center gap-2 shrink-0 ml-4">
@@ -278,7 +278,7 @@ function ReadonlyRow({ app, onProof, onReferral, onAnswers, tone }: { app: Appli
           <div className="text-sm font-semibold text-slate-100 truncate">{app.company_name}</div>
           <div className="text-xs text-slate-400 truncate mt-0.5">{app.role_title}</div>
         </div>
-        <ScoreBadge score={app.quality_score} />
+        <ScoreBadge score={app.quality_score} fit={app.fit_score} />
         <span className="text-xs text-slate-600 hidden md:block">
           {STATUS_LABEL[app.status] ?? app.status} · {fmtRelative(app.submitted_at ?? app.updated_at)}
         </span>

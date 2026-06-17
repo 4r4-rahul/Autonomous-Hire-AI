@@ -315,6 +315,7 @@ async def get_proof(app_id: str):
         "status":           app.status,
         "submitted_at":     app.submitted_at.isoformat() if app.submitted_at else log_entry.get("submitted_at"),
         "quality_score":    app.quality_score or log_entry.get("quality_score"),
+        "fit_score":        app.fit_score,
         "quality_report":   app.quality_report,
         "resume_markdown":  resume_md,
         "cover_letter_markdown": cover_md,

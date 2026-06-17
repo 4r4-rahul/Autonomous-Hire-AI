@@ -32,6 +32,7 @@ class ApplicationOut(BaseModel):
     job_id: str
     status: str
     quality_score: Optional[int]
+    fit_score: Optional[int] = None
     quality_report: Optional[dict[str, Any]]
     tailored_resume_path: Optional[str]
     ats_url: Optional[str]
