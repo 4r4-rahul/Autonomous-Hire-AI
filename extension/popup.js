@@ -41,19 +41,22 @@ document.getElementById("fillAll").addEventListener("click", async () => {
       statusEl.textContent = `No application tabs matched (${tabs.length} open). Open apply tabs first.`;
       return;
     }
-    // Inject the filler into EACH application tab. Each tab's content script runs independently
-    // (its own /resolve call) → concurrent fills. Filling never submits. Chrome throttles
-    // BACKGROUND tabs, so the focused one fills full-speed and the rest finish as you switch.
-    let ok = 0; const errs = [];
-    for (const t of targets) {
+    // Chrome freezes timers in BACKGROUND tabs, so we can't fill all 10 at once. Instead: fill the
+    // tab you're looking at NOW, and ARM the rest — the background worker fills each the instant you
+    // switch to it (full speed). Zero extra clicks; you just tab through to review + submit.
+    const active = targets.find((t) => t.active)
+      || (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
+    let filledActive = false;
+    if (active && active.id && _ATS_HOST.test(active.url || "")) {
       try {
-        await chrome.scripting.executeScript({ target: { tabId: t.id, allFrames: true }, files: ["content.js"] });
-        ok++;
-      } catch (e) { errs.push(String((e && e.message) || e).slice(0, 50)); }
+        await chrome.scripting.executeScript({ target: { tabId: active.id, allFrames: true }, files: ["content.js"] });
+        filledActive = true;
+      } catch (e) { /* fall through */ }
     }
-    statusEl.textContent = ok
-      ? `Filling ${ok}/${targets.length} tabs — switch through to review + submit.`
-      : `Matched ${targets.length} but inject failed: ${errs[0] || "?"} — reload the extension.`;
+    const rest = targets.filter((t) => !active || t.id !== active.id);
+    await chrome.runtime.sendMessage({ type: "arm", tabIds: rest.map((t) => t.id) });
+    statusEl.textContent = (filledActive ? "Filling this tab; " : "")
+      + `${rest.length} more armed — each fills the moment you switch to it. Review + submit per tab.`;
   } catch (e) {
     statusEl.textContent = "Error: " + String(e && e.message ? e.message : e).slice(0, 120);
   }

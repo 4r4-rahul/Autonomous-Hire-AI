@@ -3,7 +3,7 @@
   "name": "AutonomousHire Autofill",
   "version": "0.1.0",
   "description": "Fills job application forms from your AutonomousHire profile, in your own logged-in browser. You review, solve any CAPTCHA, and submit.",
-  "permissions": ["activeTab", "scripting", "tabs"],
+  "permissions": ["activeTab", "scripting", "tabs", "storage"],
   "host_permissions": ["http://localhost:8000/*", "<all_urls>"],
   "background": { "service_worker": "background.js" },
   "action": {
