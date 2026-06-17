@@ -26,6 +26,60 @@ router = APIRouter(prefix="/pipeline", tags=["pipeline"])
 _ROOT     = Path(__file__).parent.parent
 _PID_FILE = Path("/tmp/autonomoushire_pipeline.pid")
 _LOG_FILE = Path("/tmp/autonomoushire_pipeline.log")
+# The launchd SCHEDULER (the thing that actually runs day-to-day) logs here — NOT to _LOG_FILE
+# and it never writes _PID_FILE. Status must read this too, or the dashboard wrongly shows
+# "not running / never ran".
+_SCHED_LOG = _ROOT / "data" / "scheduler.out.log"
+
+# Friendly current-step names for the scheduler's recent activity (its JSON log "event" field).
+_SCHED_EVENT_STEP = [
+    ("scheduled_board_scan",    "Board scan (discovery)"),
+    ("board_scan",              "Board scan (discovery)"),
+    ("teksystems_scan",         "TEKsystems scan"),
+    ("kforce_scan",             "Kforce scan"),
+    ("insightglobal_scan",      "Insight Global scan"),
+    ("apply_pipeline",          "Apply pipeline (score + park)"),
+    ("ats_intake",              "ATS intake (resolve + park)"),
+    ("auto_submit",             "Auto-submit"),
+    ("email_monitor",           "Email monitor"),
+    ("linkedin_scan",           "LinkedIn scan"),
+    ("health_check",            "Health check"),
+    ("db_synced",               "DB sync"),
+]
+
+
+def _scheduler_activity():
+    """(last_activity_dt, friendly_step) from the scheduler's JSON log tail — its REAL last run."""
+    if not _SCHED_LOG.exists():
+        return None, None
+    try:
+        lines = _SCHED_LOG.read_text(errors="ignore").splitlines()[-60:]
+    except Exception:
+        return None, None
+    last_dt, last_event = None, None
+    for ln in reversed(lines):
+        ln = ln.strip()
+        if not ln.startswith("{"):
+            continue
+        try:
+            rec = json.loads(ln)
+        except Exception:
+            continue
+        ts, ev = rec.get("timestamp"), rec.get("event", "")
+        if ts and last_dt is None:
+            try:
+                last_dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            except Exception:
+                pass
+        if ev and last_event is None:
+            last_event = ev
+        if last_dt and last_event:
+            break
+    step = None
+    if last_event:
+        low = last_event.lower()
+        step = next((name for key, name in _SCHED_EVENT_STEP if key in low), last_event)
+    return last_dt, step
 
 _STEP_PATTERNS = [
     ("Scanning LinkedIn",      ["li_scan", "searching linkedin", "li_cards_found"]),
@@ -99,10 +153,22 @@ async def get_status():
             .limit(1)
         )).scalar_one_or_none()
 
+    # Fold in the launchd SCHEDULER's real activity (it doesn't write the pid/PipelineRun).
+    sched_dt, sched_step = _scheduler_activity()
+    # last_run = the more recent of the API run and the scheduler's last log event.
+    def _aware(d):
+        return d.replace(tzinfo=timezone.utc) if d and d.tzinfo is None else d
+    candidates = [d for d in (_aware(last_run), sched_dt) if d]
+    last_run = max(candidates) if candidates else None
+    # The scheduler is "running" right now if it logged within the last ~3 min (a scan in flight).
+    sched_active = bool(sched_dt and (datetime.now(timezone.utc) - sched_dt).total_seconds() < 180)
+    running = running or sched_active
+    current_step = (_current_step_from_log() if pid else None) or (sched_step if sched_active else None)
+
     return PipelineStatusOut(
         running=running,
         pid=pid,
-        current_step=_current_step_from_log() if running else None,
+        current_step=current_step,
         queue_depth=queue_depth,
         submitted_today=submitted_today,
         last_run_at=last_run,
