@@ -367,7 +367,7 @@ def _resolve_one(f: FieldIn, P: dict) -> FillOut:
                                       "experience", "preferred approach"))
     _addr_ok = (len(ll) <= 28 or _addr_ctx) and not _not_addr
     if (re.search(r"\bcity\b", ll) or ("location" in ll and "relocat" not in ll)) and _addr_ok:
-        return loc(home.get("city", "McKinney"))
+        return loc(home.get("city", "Plano"))
     if (re.search(r"\bstate\b", ll) or "province" in ll) and _addr_ok:
         return choose(home.get("state", "Texas"))
     if any(k in ll for k in ("zip", "postal")):
@@ -460,6 +460,12 @@ def _resolve_one(f: FieldIn, P: dict) -> FillOut:
     # "No, I am not a veteran or active member"). If no truthful option matches, select the
     # always-present "decline to self-identify" option so the question still gets filled —
     # never blind-pick a protected-class value, never leave it stuck on the user.
+    # ── Age eligibility — "At the time of application, are you 18+ years of age?" → Yes ──
+    if (("18" in ll or "eighteen" in ll or "age of majority" in ll or "legal working age" in ll)
+            and any(k in ll for k in ("age", "older", "old", "18+", "eighteen", "legal working",
+                                      "majority"))):
+        return choose("Yes", "18+ years of age: Yes")
+
     # NOTE: check "transgender" FIRST — it contains "gender" and must not take the gender path.
     if any(k in ll for k in _DEMO_KEYS):
         cands: list[str] = []
@@ -497,6 +503,11 @@ def _resolve_one(f: FieldIn, P: dict) -> FillOut:
                      defs.get("eeoc_sexual_orientation", "Straight"), "Heterosexual", "Straight"]
         if cands and is_choice:
             opt = _match_eeo_option(cands, opts)
+            # Race guard: the chosen race option MUST contain "asian" (Rahul is South Asian).
+            # Defends against any fuzzy match ever returning Black / White / Native / Hispanic /
+            # Pacific-Islander-only — if it's not an Asian-family option, fall to decline instead.
+            if opt is not None and ("race" in ll or "ethnic" in ll) and "asian" not in opt.lower():
+                opt = None
             if opt is not None:
                 return FillOut(id=f.id, kind="value", value=opt, note="EEO (truthful answer)")
             decline = _decline_option(opts)
