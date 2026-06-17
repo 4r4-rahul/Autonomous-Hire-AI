@@ -112,6 +112,18 @@ def _norm_label(s: str) -> str:
     return s.strip()
 
 
+def _us_phone(raw: str) -> str:
+    """US national format with NO country code — "+1 555-010-0100" → "555-010-0100". The "+1 "
+    prefix / 11th digit clears masked US phone fields (Kforce et al. expect 10 digits), so we feed
+    the bare 10-digit number (dashed: mask-friendly AND readable on plain fields)."""
+    digits = re.sub(r"\D", "", raw or "")
+    if len(digits) == 11 and digits.startswith("1"):
+        digits = digits[1:]
+    if len(digits) == 10:
+        return f"{digits[:3]}-{digits[3:6]}-{digits[6:]}"
+    return (raw or "").strip()   # unrecognized format → leave untouched
+
+
 def _match_option(answer: str, options: list[str]) -> Optional[str]:
     """Pick the option text that best matches `answer` (exact → contains → first word)."""
     if not options or not answer:
@@ -264,7 +276,7 @@ def _resolve_one(f: FieldIn, P: dict) -> FillOut:
     # polluted labels (Workable jams the whole country-code list into the phone label,
     # which broke the length-guarded "phone" rule and mis-filled it with the city).
     if ftype == "tel":
-        return text(personal.get("phone", ""))
+        return text(_us_phone(personal.get("phone", "")))
     if ftype == "email":
         return text(personal.get("email", ""))
 
@@ -333,7 +345,7 @@ def _resolve_one(f: FieldIn, P: dict) -> FillOut:
     if ("email" in ll or "e mail" in ll) and len(ll) <= 24:
         return text(personal.get("email", ""))
     if ("phone" in ll or "mobile" in ll) and len(ll) <= 24:
-        return text(personal.get("phone", ""))
+        return text(_us_phone(personal.get("phone", "")))
     # Length-guarded like email/phone: a SHORT label ("LinkedIn", "GitHub URL") is the profile
     # field; a long question that merely mentions the platform ("your philosophy on using GitHub?")
     # is not — let it fall through (the essay gate above usually already claimed it).
