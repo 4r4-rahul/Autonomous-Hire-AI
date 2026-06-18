@@ -3,6 +3,13 @@
 // them, and shows an overlay of what was filled vs. what needs the user. No submission —
 // the user reviews, solves any CAPTCHA, and submits natively.
 (async () => {
+  // Idempotency: a frame can be injected twice (Fill-All direct-inject + the discard re-arm, or a
+  // re-click). Skip if a fill is already running here, or finished < 20s ago — so we never
+  // double-scrape or double-attach the résumé.
+  if (window.__ahRunning) return;
+  if (window.__ahDoneAt && Date.now() - window.__ahDoneAt < 20000) return;
+  window.__ahRunning = true;
+  const _ahDone = () => { window.__ahRunning = false; window.__ahDoneAt = Date.now(); };
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const clean = (s) => (s || "").replace(/\s+/g, " ").replace(/\*+/g, "").trim();
   const visible = (el) => {
@@ -797,7 +804,9 @@
   }
 
   showOverlay(data, notes, resumeStatus, resumeViewUrl, blanks, coverStatus, coverViewUrl);
+  _ahDone();
   } catch (err) {
+    _ahDone();
     try {
       if (document.body) {
         const b = document.createElement("div");

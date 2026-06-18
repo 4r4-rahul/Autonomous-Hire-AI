@@ -44,22 +44,23 @@ document.getElementById("fillAll").addEventListener("click", async () => {
       statusEl.textContent = `No application tabs matched (${tabs.length} open). Open apply tabs first.`;
       return;
     }
-    // Chrome freezes timers in BACKGROUND tabs, so we can't fill all 10 at once. Instead: fill the
-    // tab you're looking at NOW, and ARM the rest — the background worker fills each the instant you
-    // switch to it (full speed). Zero extra clicks; you just tab through to review + submit.
-    const active = targets.find((t) => t.active)
-      || (await chrome.tabs.query({ active: true, currentWindow: true }))[0];
-    let filledActive = false;
-    if (active && active.id && _ATS_HOST.test(active.url || "")) {
+    // Inject the filler DIRECTLY into every application tab now. Each tab's content script runs
+    // independently; Chrome throttles BACKGROUND tabs so they fill slowly, but they resume at full
+    // speed the moment you focus them — so as you switch through, each is filled/finishing. (Direct
+    // inject is simpler + more reliable than the old arm-on-focus path, which depended on the
+    // service worker + storage all firing.) content.js self-guards against double-running.
+    let ok = 0; const errs = [];
+    for (const t of targets) {
       try {
-        await chrome.scripting.executeScript({ target: { tabId: active.id, allFrames: true }, files: ["content.js"] });
-        filledActive = true;
-      } catch (e) { /* fall through */ }
+        await chrome.scripting.executeScript({ target: { tabId: t.id, allFrames: true }, files: ["content.js"] });
+        ok++;
+      } catch (e) { errs.push(String((e && e.message) || e).slice(0, 50)); }
     }
-    const rest = targets.filter((t) => !active || t.id !== active.id);
-    await chrome.runtime.sendMessage({ type: "arm", tabIds: rest.map((t) => t.id) });
-    statusEl.textContent = (filledActive ? "Filling this tab; " : "")
-      + `${rest.length} more armed — each fills the moment you switch to it. Review + submit per tab.`;
+    // Also arm them, so a tab Chrome DISCARDS (unloads) gets re-filled when you return to it.
+    await chrome.runtime.sendMessage({ type: "arm", tabIds: targets.map((t) => t.id) }).catch(() => {});
+    statusEl.textContent = ok
+      ? `Filling ${ok}/${targets.length} tabs — switch through to review + submit (background tabs finish as you focus them).`
+      : `Matched ${targets.length} but couldn't inject: ${errs[0] || "?"} — set Site access to "On all sites" + re-add.`;
   } catch (e) {
     statusEl.textContent = "Error: " + String(e && e.message ? e.message : e).slice(0, 120);
   }
