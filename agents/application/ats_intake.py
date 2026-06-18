@@ -126,7 +126,8 @@ async def intake_jobs(discovered: list[dict], state: JobSearchState,
     # Reuse the learned quality gates: low-value companies (avg fit < 40 over ≥10 jobs) +
     # zero-pass title patterns (forward deployed, solutions engineer, sales…) + sponsorship
     # knock-outs. Keeps Palantir/Cloudflare/Veeva noise out of the queue.
-    from agents.discovery.fit_analyst import _build_low_value_companies, _quick_prefilter
+    from agents.discovery.fit_analyst import (
+        _build_low_value_companies, _quick_prefilter, _min_required_years, _MAX_REQUIRED_YEARS)
     low_value = _build_low_value_companies(updated)
 
     # Persistent all-time dedup: never tailor a role we've ever tailored (survives ID/URL churn
@@ -218,6 +219,11 @@ async def intake_jobs(discovered: list[dict], state: JobSearchState,
         age = posting_age_days(posted_at)
         if age is not None and age > _MAX_AGE_DAYS:
             return None, "skipped_stale"
+        # Experience ceiling on the FULL resolved JD — the lead's description may have been thin when
+        # the prefilter ran above, so re-check now that we have the real posting text.
+        _min_yrs = _min_required_years(desc)
+        if _min_yrs and _min_yrs > _MAX_REQUIRED_YEARS:
+            return None, "skipped_prefilter"
         job, is_new = _mkjob(d, ats_url, desc)
         if res and res.get("location"):
             job["location"] = res["location"]

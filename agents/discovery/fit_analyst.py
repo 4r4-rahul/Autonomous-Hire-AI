@@ -8,6 +8,7 @@ Only jobs scoring >= config.MIN_FIT_SCORE (default: 65) are passed forward.
 """
 
 import asyncio
+import re
 import uuid
 import yaml
 import json
@@ -179,6 +180,36 @@ _EXCLUDE_TITLE_PATTERNS: list[str] = [
 ]
 
 
+# Drop roles that REQUIRE more years of experience than the candidate has (Rahul ≈ 6-7 yrs). Staff/
+# Principal reqs of 8/10/12+ are a poor fit and waste an application. Overridable via
+# profile target.max_required_years.
+_MAX_REQUIRED_YEARS = 7
+_YEARS_RE = re.compile(r"(\d{1,2})\s*\+?\s*(?:to|-|–|—)?\s*(?:\d{1,2})?\s*\+?\s*years?", re.I)
+
+
+def _min_required_years(desc: str) -> int | None:
+    """Smallest HARD (non-'preferred') years-of-experience requirement stated in the JD, or None.
+    Uses the MIN of stated hard requirements so a role with a low bar plus a high 'total' mention
+    isn't wrongly dropped — only roles whose lowest required bar exceeds the ceiling are filtered."""
+    d = (desc or "").lower()
+    hard = []
+    # Work per clause (sentence / bullet / comma boundary): a "preferred"/"a plus" qualifier
+    # disqualifies its OWN clause only, so it can't downgrade a hard "X+ years required" elsewhere.
+    for clause in re.split(r"[.;\n••]|,(?=\s)", d):
+        if any(w in clause for w in ("preferred", "nice to have", "a plus", "bonus",
+                                     "ideally", "desirable")):
+            continue
+        # Count only clauses that are about experience OR are explicit requirements.
+        if not (any(w in clause for w in ("experience", "exp.", "background"))
+                or any(w in clause for w in ("require", "minimum", "at least", "must have"))):
+            continue
+        for m in _YEARS_RE.finditer(clause):
+            n = int(m.group(1))
+            if 1 <= n <= 25:
+                hard.append(n)
+    return min(hard) if hard else None
+
+
 def _quick_prefilter(
     job: JobListing,
     profile: dict,
@@ -198,6 +229,12 @@ def _quick_prefilter(
     # Hard-exclude title patterns (non-tech + learned zero-pass patterns)
     if any(kw in title for kw in _EXCLUDE_TITLE_PATTERNS):
         return False, f"excluded title pattern: {job['title']}"
+
+    # Experience ceiling — drop roles requiring more years than the candidate has (+ small buffer).
+    max_years = int(profile.get("target", {}).get("max_required_years", _MAX_REQUIRED_YEARS))
+    min_req = _min_required_years(job.get("description") or "")
+    if min_req and min_req > max_years:
+        return False, f"requires {min_req}+ yrs experience (> {max_years})"
 
     # Sponsorship hard block — skip before wasting an LLM call
     blocked, reason = _requires_sponsorship_blocked(job, profile)
