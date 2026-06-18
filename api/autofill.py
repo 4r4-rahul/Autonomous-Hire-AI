@@ -76,6 +76,7 @@ class FieldIn(BaseModel):
 class ResolveIn(BaseModel):
     url: str = ""
     referrer: str = ""            # parent-page URL (the form is often in a cross-origin iframe)
+    origin_url: str = ""          # URL the extension opened this tab with (survives Apply-Now nav)
     fields: list[FieldIn] = []
 
 
@@ -812,16 +813,18 @@ async def _generate_open_ended(questions: list[str], job: Optional[dict], P: dic
 
 
 # ── Endpoint ─────────────────────────────────────────────────────────────────
-def _match_job(url: str, referrer: str = "") -> Optional[dict]:
-    """Return {id, company, title} for the job matching `url` or `referrer`.
+def _match_job(url: str, referrer: str = "", origin: str = "") -> Optional[dict]:
+    """Return {id, company, title} for the job matching `url`, `referrer`, or `origin`.
     Embedded application forms live in a cross-origin iframe, so the iframe URL is the
     ATS embed (not our stored apply_url) — we also match on the parent referrer and, as
-    a fallback, on a shared long numeric token (gh_jid / job id present in both URLs)."""
+    a fallback, on a shared long numeric token (gh_jid / job id present in both URLs).
+    `origin` is the URL the extension OPENED this tab with (e.g. the job page it reopened in
+    incognito) — it survives an 'Apply Now' navigation that drops the job id from url/referrer."""
     try:
         st = json.loads(_STATE.read_text())
     except Exception:
         return None
-    cands = [u for u in (url, referrer) if u]
+    cands = [u for u in (url, referrer, origin) if u]
     if not cands:
         return None
     bases = [u.split("?")[0] for u in cands]
@@ -999,7 +1002,7 @@ def _save_answers_for_job(job_id: str, new_answers: dict) -> None:
 @router.post("/resolve")
 async def resolve(body: ResolveIn) -> dict:
     P = _load_profile()
-    job = _match_job(body.url, body.referrer)
+    job = _match_job(body.url, body.referrer, body.origin_url)
     resolved = [_resolve_one(f, P) for f in body.fields]
 
     # Cover-letter fields → fill with the REVIEWED bank-grounded letter (the one in the UI), not a
@@ -1152,12 +1155,12 @@ async def report(body: ReportIn) -> dict:
 
 
 @router.get("/resume")
-def resume(url: str = "", referrer: str = ""):
-    """Serve the tailored resume PDF for the job whose apply_url matches `url`/`referrer`.
+def resume(url: str = "", referrer: str = "", origin: str = ""):
+    """Serve the tailored resume PDF for the job whose apply_url matches `url`/`referrer`/`origin`.
     The extension attaches it to the form's file input (different resume per application)."""
     from fastapi import HTTPException
     from fastapi.responses import FileResponse
-    job = _match_job(url, referrer)
+    job = _match_job(url, referrer, origin)
     if not job:
         raise HTTPException(404, "no job matched this URL")
     md = _resume_path_for_job(job["id"])
@@ -1178,12 +1181,12 @@ def resume(url: str = "", referrer: str = ""):
 
 
 @router.get("/cover")
-def cover(url: str = "", referrer: str = ""):
-    """Serve the reviewed cover letter as a formatted PDF for the job matching `url`/`referrer`.
+def cover(url: str = "", referrer: str = "", origin: str = ""):
+    """Serve the reviewed cover letter as a formatted PDF for the job matching `url`/`referrer`/`origin`.
     The extension attaches it to a cover-letter file input (same bytes the form submits)."""
     from fastapi import HTTPException
     from fastapi.responses import FileResponse
-    job = _match_job(url, referrer)
+    job = _match_job(url, referrer, origin)
     if not job:
         raise HTTPException(404, "no job matched this URL")
     pdf = _cover_pdf_for_job(job["id"])
