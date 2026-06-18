@@ -25,6 +25,19 @@ async function _setArmed(set) {
   try { await chrome.storage.session.set({ armed: [...set] }); } catch (e) {}
 }
 
+// The URL the extension OPENED a tab with (e.g. a job page reopened in incognito). Stored per
+// tab so the backend can match the job even after an "Apply Now" navigation strips the job id /
+// referrer from the apply-page URL. Returned as the `origin` matching hint on resolve/resume/cover.
+async function _srcFor(sender) {
+  try {
+    const id = sender && sender.tab && sender.tab.id;
+    if (id == null) return "";
+    const k = "src_" + id;
+    const o = await chrome.storage.session.get(k);
+    return o[k] || "";
+  } catch (e) { return ""; }
+}
+
 chrome.tabs.onActivated.addListener(async ({ tabId }) => {
   const armed = await _getArmed();
   if (!armed.has(tabId)) return;
@@ -65,6 +78,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           tabId = w.tabs && w.tabs[0] && w.tabs[0].id;
         }
         if (msg.closeTabId) { try { await chrome.tabs.remove(msg.closeTabId); } catch (e) {} }
+        // Remember the job URL for this tab so resolve/resume/cover can still match the job after
+        // "Apply Now" navigates to an apply page that drops the job id / referrer.
+        if (tabId != null) { try { await chrome.storage.session.set({ ["src_" + tabId]: msg.url }); } catch (e) {} }
         if (tabId && msg.autofill !== false) {
           const onDone = (id, info) => {
             if (id === tabId && info.status === "complete") {
@@ -86,14 +102,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 
   if (msg && msg.type === "resolve") {
-    fetch(`${BASE}/resolve`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: msg.url || "", referrer: msg.referrer || "", fields: msg.fields || [] }),
-    })
-      .then((r) => r.json())
-      .then((data) => sendResponse({ ok: true, data }))
-      .catch((e) => sendResponse({ ok: false, error: String(e) }));
+    (async () => {
+      const origin_url = await _srcFor(_sender);
+      try {
+        const r = await fetch(`${BASE}/resolve`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: msg.url || "", referrer: msg.referrer || "",
+                                 origin_url, fields: msg.fields || [] }),
+        });
+        sendResponse({ ok: true, data: await r.json() });
+      } catch (e) { sendResponse({ ok: false, error: String(e) }); }
+    })();
     return true;
   }
 
@@ -124,17 +144,19 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   }
 
   if (msg && (msg.type === "resume" || msg.type === "cover")) {
-    const qs = new URLSearchParams({ url: msg.url || "", referrer: msg.referrer || "" });
-    const fallbackName = msg.type === "cover" ? "cover_letter.pdf" : "resume.pdf";
-    fetch(`${BASE}/${msg.type}?${qs.toString()}`)
-      .then(async (r) => {
+    (async () => {
+      const origin = await _srcFor(_sender);
+      const qs = new URLSearchParams({ url: msg.url || "", referrer: msg.referrer || "", origin });
+      const fallbackName = msg.type === "cover" ? "cover_letter.pdf" : "resume.pdf";
+      try {
+        const r = await fetch(`${BASE}/${msg.type}?${qs.toString()}`);
         if (!r.ok) return sendResponse({ ok: false, status: r.status });
         const buf = await r.arrayBuffer();
         const cd = r.headers.get("content-disposition") || "";
         const m = cd.match(/filename="?([^"]+)"?/);
         sendResponse({ ok: true, base64: bufToBase64(buf), filename: m ? m[1] : fallbackName });
-      })
-      .catch((e) => sendResponse({ ok: false, error: String(e) }));
+      } catch (e) { sendResponse({ ok: false, error: String(e) }); }
+    })();
     return true;
   }
 });
