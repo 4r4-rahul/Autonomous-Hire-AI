@@ -1,8 +1,28 @@
 const statusEl = document.getElementById("status");
 // Bump this on every extension code change. If the popup doesn't show this exact build, the reload
 // didn't take — remove & re-add the extension.
-const BUILD = "fillall-4 (2026-06-18)";
+const BUILD = "incognito-1 (2026-06-18)";
 statusEl.textContent = "build " + BUILD;
+
+// PerimeterX sites (e.g. TEKsystems) 403 a normal tab but allow a fresh incognito session. This
+// reopens the current job URL in an incognito window and auto-fills it there.
+document.getElementById("incognito").addEventListener("click", async () => {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab || !tab.id || !/^https?:/.test(tab.url || "")) {
+      statusEl.textContent = "Open the job page first (then reopen it in incognito).";
+      return;
+    }
+    statusEl.textContent = "Opening in incognito…";
+    const r = await chrome.runtime.sendMessage({ type: "open_incognito", url: tab.url, closeTabId: tab.id });
+    statusEl.textContent = (r && r.ok)
+      ? "Opened in incognito — it auto-fills there. Solve any Press-and-Hold, then submit."
+      : "Couldn't open incognito: " + ((r && r.error) || "?") +
+        " — enable 'Allow in incognito' at chrome://extensions → AutonomousHire → Details.";
+  } catch (e) {
+    statusEl.textContent = "Error: " + String(e && e.message ? e.message : e).slice(0, 120);
+  }
+});
 
 document.getElementById("fill").addEventListener("click", async () => {
   statusEl.textContent = "Filling…";
