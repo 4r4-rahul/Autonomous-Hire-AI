@@ -36,19 +36,32 @@
   };
   const fields = els.map((el, i) => {
     let r = {}; try { r = el.getBoundingClientRect(); } catch (e) {}
-    let lbldby = "";
+    let lbldby = "", lbldbyHTML = "";
     const lb = el.getAttribute && el.getAttribute("aria-labelledby");
-    if (lb) lbldby = lb.split(/\s+/).map((id) => {
-      try { return (el.getRootNode().getElementById && el.getRootNode().getElementById(id) || {}).textContent || ""; }
-      catch (e) { return ""; }
-    }).join(" ");
+    if (lb) lb.split(/\s+/).forEach((id) => {
+      try {
+        const e2 = (el.getRootNode().getElementById && el.getRootNode().getElementById(id))
+          || document.getElementById(id);
+        if (e2) { lbldby += " " + (e2.textContent || ""); lbldbyHTML += (e2.outerHTML || "").slice(0, 180); }
+      } catch (e) {}
+    });
+    // nearest label-ish element above the field (what labelFor's ancestor-walk would scan)
+    let near = "", pp = el.parentElement;
+    for (let k = 0; k < 6 && pp && !near; k++) {
+      let L = null;
+      try { L = pp.querySelector("label, legend, [class*='label' i], [class*='question' i]"); } catch (e) {}
+      if (L && !L.querySelector("input,select,textarea") && clip(L.textContent, 5)) near = clip(L.outerHTML, 220);
+      pp = pp.parentElement;
+    }
     return {
       i, tag: el.tagName, type: (el.getAttribute && el.getAttribute("type")) || "",
       role: (el.getAttribute && el.getAttribute("role")) || "",
       id: el.id || "", name: (el.getAttribute && el.getAttribute("name")) || "",
       placeholder: (el.getAttribute && el.getAttribute("placeholder")) || "",
       ariaLabel: (el.getAttribute && el.getAttribute("aria-label")) || "",
-      ariaLabelledby: clip(lbldby, 140),
+      ariaLabelledby: clip(lbldby, 160),
+      ariaLabelledbyHTML: lbldbyHTML,
+      nearLabelHTML: near,
       cls: clip(el.className && el.className.toString ? el.className.toString() : "", 180),
       labelFor: labelFor(el),
       inShadow: el.getRootNode && el.getRootNode() !== document,
