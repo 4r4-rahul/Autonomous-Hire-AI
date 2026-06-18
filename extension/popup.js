@@ -1,4 +1,8 @@
 const statusEl = document.getElementById("status");
+// Bump this on every extension code change. If the popup doesn't show this exact build, the reload
+// didn't take — remove & re-add the extension.
+const BUILD = "fillall-3 (2026-06-18)";
+statusEl.textContent = "build " + BUILD;
 
 document.getElementById("fill").addEventListener("click", async () => {
   statusEl.textContent = "Filling…";
