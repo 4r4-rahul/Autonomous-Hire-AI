@@ -1,7 +1,7 @@
 const statusEl = document.getElementById("status");
 // Bump this on every extension code change. If the popup doesn't show this exact build, the reload
 // didn't take — remove & re-add the extension.
-const BUILD = "fillall-3 (2026-06-18)";
+const BUILD = "fillall-4 (2026-06-18)";
 statusEl.textContent = "build " + BUILD;
 
 document.getElementById("fill").addEventListener("click", async () => {
@@ -48,25 +48,28 @@ document.getElementById("fillAll").addEventListener("click", async () => {
       statusEl.textContent = `No application tabs matched (${tabs.length} open). Open apply tabs first.`;
       return;
     }
-    // Inject the filler DIRECTLY into every application tab now. Each tab's content script runs
-    // independently; Chrome throttles BACKGROUND tabs so they fill slowly, but they resume at full
-    // speed the moment you focus them — so as you switch through, each is filled/finishing. (Direct
-    // inject is simpler + more reliable than the old arm-on-focus path, which depended on the
-    // service worker + storage all firing.) content.js self-guards against double-running.
-    let ok = 0; const errs = [];
-    for (const t of targets) {
-      try {
-        await chrome.scripting.executeScript({ target: { tabId: t.id, allFrames: true }, files: ["content.js"] });
-        ok++;
-      } catch (e) { errs.push(String((e && e.message) || e).slice(0, 50)); }
-    }
+    // Inject the filler into every application tab IN PARALLEL. CRITICAL: do NOT await each tab
+    // sequentially — chrome.scripting.executeScript blocks until the injected content script's async
+    // work finishes (the résumé tailoring poll alone is up to ~50s), so a sequential loop serializes
+    // the tabs and looks frozen ("no activity on other tabs" for minutes). Firing them concurrently
+    // means every tab gets content.js immediately and starts filling at once. A per-tab timeout keeps
+    // the popup status from waiting on a slow fill — injection already happened by then.
+    statusEl.textContent = `Injecting ${targets.length} application tabs…`;
+    const inject = (t) => Promise.race([
+      chrome.scripting.executeScript({ target: { tabId: t.id, allFrames: true }, files: ["content.js"] })
+        .then(() => "ok"),
+      new Promise((res) => setTimeout(() => res("running"), 6000)),   // injected; still filling — fine
+    ]).catch((e) => "ERR:" + String((e && e.message) || e).slice(0, 40));
+    const results = await Promise.all(targets.map(inject));
+    const ok = results.filter((r) => r === "ok" || r === "running").length;
+    const errs = results.filter((r) => typeof r === "string" && r.startsWith("ERR:"));
     // Also arm them, so a tab Chrome DISCARDS (unloads) gets re-filled when you return to it.
     await chrome.runtime.sendMessage({ type: "arm", tabIds: targets.map((t) => t.id) }).catch(() => {});
     const diag = `[${tabs.length} open · ${withUrl.length} readable · ${targets.length} matched · ${ok} injected]`;
     statusEl.textContent = ok
-      ? `Filling ${ok}/${targets.length} app tabs — switch through to review. ${diag}` +
+      ? `Filling ${ok}/${targets.length} app tabs — switch through; each shows a blue badge + fills. ${diag}` +
         (errs.length ? ` ${errs.length} failed: ${errs[0]}` : "")
-      : `Couldn't inject any tab. ${diag} ${errs[0] ? "err: " + errs[0] : ""}`;
+      : `Couldn't inject any tab. ${diag} ${errs[0] ? errs[0] : ""}`;
   } catch (e) {
     statusEl.textContent = "Error: " + String(e && e.message ? e.message : e).slice(0, 120);
   }
