@@ -147,6 +147,15 @@ async def intake_jobs(discovered: list[dict], state: JobSearchState,
     def _mkjob(d, ats_url, desc):
         """Build (or copy) the JobListing for scoring/tailoring. Reuses an existing lead's
         fields if a job_id was supplied (committed in place in Phase 2)."""
+        # Canonical greenhouse job URLs (job-boards.greenhouse.io/{slug}/jobs/{id}) 302-redirect to
+        # the company's branded SPA (careers.x.com / careerpuck), which the extension can't fill —
+        # normalize to the EMBED form, which never redirects off-site.
+        try:
+            from agents.application.url_refresher import _greenhouse_embed_url
+            if ats_url and "greenhouse.io" in ats_url and "embed/job_app" not in ats_url:
+                ats_url = _greenhouse_embed_url(ats_url) or ats_url
+        except Exception:
+            pass
         lead = jobs_by_id.get(d.get("job_id"))
         base = dict(lead) if lead else {"id": str(uuid.uuid4()), "company_id": ""}
         base.update({
