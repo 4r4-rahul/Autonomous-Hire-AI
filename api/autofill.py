@@ -1198,6 +1198,24 @@ def cover(url: str = "", referrer: str = "", origin: str = ""):
                         filename=f"{safe}_Cover_Letter.pdf", content_disposition_type="inline")
 
 
+class DomDumpIn(BaseModel):
+    url: str = ""
+    fields: list[dict] = []
+
+
+@router.post("/domdump")
+async def domdump(body: DomDumpIn) -> dict:
+    """DEBUG: receive a structural snapshot of a form's fields (tag/role/class/label/outerHTML) so a
+    bespoke ATS form (e.g. apply.teksystems.com's custom widgets) can be reverse-engineered. Writes
+    data/ah_domdump.json (gitignored). One-shot, triggered by the extension's capture button."""
+    p = Path("data/ah_domdump.json")
+    try:
+        p.write_text(json.dumps({"url": body.url, "count": len(body.fields), "fields": body.fields}, indent=2))
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:120]}
+    return {"ok": True, "saved": str(p), "fields": len(body.fields)}
+
+
 class CoverGenIn(BaseModel):
     url: str = ""
     referrer: str = ""

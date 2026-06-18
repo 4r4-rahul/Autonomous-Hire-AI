@@ -1,8 +1,25 @@
 const statusEl = document.getElementById("status");
 // Bump this on every extension code change. If the popup doesn't show this exact build, the reload
 // didn't take — remove & re-add the extension.
-const BUILD = "incognito-3 (2026-06-18)";
+const BUILD = "capture-1 (2026-06-18)";
 statusEl.textContent = "build " + BUILD;
+
+// DEBUG: capture the current form's field structure (no personal values) so a bespoke ATS form
+// (e.g. apply.teksystems.com custom widgets) can be reverse-engineered.
+document.getElementById("capture").addEventListener("click", async () => {
+  try {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab || !tab.id || /^(chrome|edge|about|chrome-extension):/.test(tab.url || "")) {
+      statusEl.textContent = "Open the application form first, then capture.";
+      return;
+    }
+    statusEl.textContent = "Capturing form DOM…";
+    await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames: true }, files: ["capture.js"] });
+    statusEl.textContent = "Capture sent — analysis next (see the green note on the page).";
+  } catch (e) {
+    statusEl.textContent = "Error: " + String(e && e.message ? e.message : e).slice(0, 120);
+  }
+});
 
 // PerimeterX sites (e.g. TEKsystems) 403 a normal tab but allow a fresh incognito session. This
 // reopens the current job URL in an incognito window and auto-fills it there.
