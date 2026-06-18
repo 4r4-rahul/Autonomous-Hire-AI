@@ -41,21 +41,13 @@ _ACTIVE = ("submitted", "pending_review", "awaiting_confirmation", "approved",
 # NOT ones already applied to. So once you apply to 3 roles at a company, those slots free up and
 # new matched roles there can surface — you just never see more than 3 at once (the anti-spam point).
 # Dedup still uses _ACTIVE, so a role you've already applied to is never re-queued.
-_CAP_STATUSES = ("pending_review", "pending_manual_submit", "awaiting_confirmation")
 
-# Recruiter red-flag rule: never queue more than this many roles at one company. Raised 3→6 to
-# widen reach (release the ~1.2k roles/scan the tighter cap was dropping) while still bounding how
-# many apps land at any single employer.
-_PER_COMPANY_CAP = 6
-
-# Cap-exempt "companies": staffing agencies / marketplaces where every posting is effectively a
-# DIFFERENT client employer, so the anti-spam "≤3 at one company" rule doesn't apply (you're not
-# spamming one recruiter). Matched on the normalized company name.
-_CAP_EXEMPT = {"teksystems", "kforce", "insight global"}
-
-
-def _cap_for(company: str) -> float:
-    return float("inf") if _norm(company) in _CAP_EXEMPT else _PER_COMPANY_CAP
+# Per-company application caps now live in data/company_caps.json (core.company_caps): a rolling
+# WINDOW cap (default 4 per 30 days) that respects employer application-limit policies — e.g. Roblox
+# auto-closes the 6th application in 30 days. Counts PENDING + SUBMITTED-within-window, so a submitted
+# app no longer frees an unlimited slot (the old bug that let us submit 6× to Roblox). Staffing
+# agencies stay exempt. See core.company_caps.
+from core.company_caps import cap_for as _cap_for, count_against_cap as _counts_against_cap
 
 # Freshness gate: skip postings older than this when the age is known. Measured from the more
 # recent of posted/updated (see apply_url_resolver._newer_iso), so an actively-maintained req isn't
@@ -121,8 +113,10 @@ async def intake_jobs(discovered: list[dict], state: JobSearchState,
     # Per-company cap: count only roles STILL AWAITING ACTION (not already-applied) at each company,
     # so applying to your 3 frees the slots for fresh matched roles there (this run adds to it).
     from collections import Counter
+    # Window-aware per-company count: PENDING + SUBMITTED-within-window (NOT all-time pending-only —
+    # that let submitted apps free unlimited slots, so we hit Roblox 6×). See core.company_caps.
     company_counts = Counter(_norm(a.get("company_name"))
-                             for a in updated.get("applications", []) if a.get("status") in _CAP_STATUSES)
+                             for a in updated.get("applications", []) if _counts_against_cap(a))
     # Reuse the learned quality gates: low-value companies (avg fit < 40 over ≥10 jobs) +
     # zero-pass title patterns (forward deployed, solutions engineer, sales…) + sponsorship
     # knock-outs. Keeps Palantir/Cloudflare/Veeva noise out of the queue.

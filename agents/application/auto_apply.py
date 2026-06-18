@@ -18,6 +18,7 @@ from pathlib import Path
 
 from core.state import JobSearchState, JobListing
 from core.logger import get_logger
+from core.company_caps import cap_for as _cap_for, count_against_cap as _counts_against_cap
 from agents.discovery.targeting import sponsorship_signal, rank_for_application
 
 logger = get_logger("auto_apply")
@@ -25,7 +26,8 @@ logger = get_logger("auto_apply")
 # Higher bars than the discovery threshold (65): only auto-send genuinely strong fits.
 MIN_FIT_AUTO = int(os.getenv("AUTO_SUBMIT_MIN_FIT", "75"))
 MIN_QUALITY_AUTO = int(os.getenv("AUTO_SUBMIT_MIN_QUALITY", "78"))
-PER_COMPANY_CAP = int(os.getenv("AUTO_SUBMIT_PER_COMPANY_CAP", "3"))
+# Per-company caps now come from data/company_caps.json (rolling-window, per-company overrides) via
+# core.company_caps — same source as ats_intake, so the auto lane respects Roblox-style limits too.
 
 _ROOT = Path(__file__).parent.parent.parent
 _KILL_SWITCH = _ROOT / "data" / "auto_apply.disabled"
@@ -59,7 +61,7 @@ def _company_counts(state: JobSearchState) -> Counter:
     """How many applications are already live (submitted/queued) per company."""
     c: Counter = Counter()
     for a in state.get("applications", []):
-        if a.get("status") in _ACTIVE:
+        if _counts_against_cap(a):   # PENDING + SUBMITTED-within-window (rolling cap)
             c[(a.get("company_name") or "").strip().lower()] += 1
     return c
 
@@ -91,10 +93,11 @@ def auto_submit_gate(app: dict, job: JobListing, fit_score: dict, profile: dict,
     if not (rp and p.exists() and p.stat().st_size > 0):
         reasons.append("no tailored resume")
 
-    # 4) Per-company cap (the recruiter red-flag rule).
+    # 4) Per-company rolling-window cap (respects employer limit policies, e.g. Roblox 5/30d).
     co = (job.get("company_name") or "").strip().lower()
-    if company_counts.get(co, 0) >= PER_COMPANY_CAP:
-        reasons.append(f"per-company cap {PER_COMPANY_CAP} reached for {job.get('company_name')}")
+    cap = _cap_for(co)
+    if company_counts.get(co, 0) >= cap:
+        reasons.append(f"per-company cap {cap:g} reached for {job.get('company_name')}")
 
     return (len(reasons) == 0, reasons)
 
