@@ -296,7 +296,8 @@ def _resolve_one(f: FieldIn, P: dict) -> FillOut:
     # Authorization (Status)" with no "work"+"eligible" combo — route those to the truthful picker.
     _elig = _elig or any(k in ll for k in ("employment eligibility", "work eligibility",
                                            "eligibility to work", "work authorization",
-                                           "authorization to work", "employment authorization"))
+                                           "authorization to work", "employment authorization",
+                                           "eligibility")) and "benefit" not in ll
     if _is_workauth_label(ll) or _elig:
         if is_choice and not _is_yesno(opts):
             idx = _pick_truthful_workauth(opts)
