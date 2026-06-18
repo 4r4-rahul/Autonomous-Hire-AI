@@ -32,9 +32,12 @@ document.getElementById("fillAll").addEventListener("click", async () => {
     const targets = withUrl.filter((t) => /^https?:/.test(t.url) && _ATS_HOST.test(t.url));
     console.log("[AH] fillAll — tabs:", tabs.length, "readable URLs:", withUrl.length,
                 "matched:", targets.length, targets.map((t) => t.url));
-    if (!withUrl.length) {
-      // tabs.query returned no URLs → 'tabs' permission not granted yet (extension needs a full reload).
-      statusEl.textContent = "Can't read tab URLs — REMOVE & re-add the extension (new 'tabs' permission).";
+    // Without the 'tabs' permission GRANTED, query returns background tabs with url=undefined — only
+    // the active tab is readable (via activeTab). So if many tabs are open but we can read ≤1 URL,
+    // the permission wasn't granted (a reload doesn't grant it — the extension must be RE-ADDED).
+    if (!withUrl.length || (withUrl.length <= 1 && tabs.length > 2)) {
+      statusEl.textContent = `Can't see other tabs (read ${withUrl.length}/${tabs.length} URLs). ` +
+        `REMOVE & re-add the extension to grant the 'tabs' permission.`;
       return;
     }
     if (!targets.length) {
