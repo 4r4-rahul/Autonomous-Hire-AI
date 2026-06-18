@@ -141,6 +141,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
 
+  if (msg && msg.type === "domdump") {
+    fetch(`${BASE}/domdump`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: msg.url || "", fields: msg.fields || [] }),
+    })
+      .then((r) => r.json())
+      .then((data) => sendResponse(data))
+      .catch((e) => sendResponse({ ok: false, error: String(e) }));
+    return true;
+  }
+
   if (msg && msg.type === "report") {
     // Fire-and-forget telemetry: verified per-field fill outcomes (no user values).
     fetch(`${BASE}/report`, {
