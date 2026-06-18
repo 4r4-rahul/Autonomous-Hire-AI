@@ -32,11 +32,29 @@ async function _srcFor(sender) {
   try {
     const id = sender && sender.tab && sender.tab.id;
     if (id == null) return "";
-    const k = "src_" + id;
-    const o = await chrome.storage.session.get(k);
-    return o[k] || "";
+    const direct = (await chrome.storage.session.get("src_" + id))["src_" + id];
+    if (direct) return direct;
+    // "Apply Now" frequently opens a NEW tab (often cross-domain, e.g. apply.teksystems.com) — walk
+    // the opener-tab chain to find the job URL we stored on the originating tab.
+    let curId = id;
+    for (let i = 0; i < 4; i++) {
+      let tab;
+      try { tab = await chrome.tabs.get(curId); } catch (e) { break; }
+      const opener = tab && tab.openerTabId;
+      if (opener == null) break;
+      const v = (await chrome.storage.session.get("src_" + opener))["src_" + opener];
+      if (v) return v;
+      curId = opener;
+    }
+    // Last resort: the most-recently incognito-opened job URL, if recent (handles Apply-Now tabs
+    // opened with rel=noopener, which carry no openerTabId). Token-validated by _match_job anyway.
+    const g = await chrome.storage.session.get(["last_src", "last_src_ts"]);
+    if (g.last_src && g.last_src_ts && (DATE_NOW() - g.last_src_ts) < 600000) return g.last_src;
+    return "";
   } catch (e) { return ""; }
 }
+// Date.now() is fine in the extension (only the workflow sandbox forbids it).
+function DATE_NOW() { return Date.now(); }
 
 chrome.tabs.onActivated.addListener(async ({ tabId }) => {
   const armed = await _getArmed();
@@ -80,7 +98,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         if (msg.closeTabId) { try { await chrome.tabs.remove(msg.closeTabId); } catch (e) {} }
         // Remember the job URL for this tab so resolve/resume/cover can still match the job after
         // "Apply Now" navigates to an apply page that drops the job id / referrer.
-        if (tabId != null) { try { await chrome.storage.session.set({ ["src_" + tabId]: msg.url }); } catch (e) {} }
+        if (tabId != null) {
+          try {
+            await chrome.storage.session.set({
+              ["src_" + tabId]: msg.url, last_src: msg.url, last_src_ts: Date.now(),
+            });
+          } catch (e) {}
+        }
         if (tabId && msg.autofill !== false) {
           const onDone = (id, info) => {
             if (id === tabId && info.status === "complete") {
