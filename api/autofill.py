@@ -448,7 +448,12 @@ def _resolve_one(f: FieldIn, P: dict) -> FillOut:
     if any(k in ll for k in ("start date", "available to start", "earliest start",
                              "when can you start", "notice period")):
         return choose(defs.get("start_date", "Immediately"))
-    if any(k in ll for k in ("salary", "compensation", "pay expectation", "desired pay")):
+    # Pay RANGE as a single numeric field (Salesforce decimal/spinbutton) — a range string like
+    # "$150,000 – $200,000" breaks it, so return the plain target number.
+    if any(k in ll for k in ("pay range", "salary range", "desired pay range", "compensation range",
+                             "desired pay", "expected pay", "pay rate")):
+        return text(str(defs.get("salary_min", 150000)))
+    if any(k in ll for k in ("salary", "compensation", "pay expectation")):
         return text(defs.get("salary_display", "$150,000 – $200,000"))
     # Relocation / onsite-willingness ("Our HQ is in San Mateo and this role is not remote. Are
     # you …?") → Yes (open to relocating / working onsite). Gated on a willingness phrasing so it
@@ -474,8 +479,31 @@ def _resolve_one(f: FieldIn, P: dict) -> FillOut:
         return text(str(yrs))
     if any(k in ll for k in ("current company", "current employer")):
         return text(defs.get("current_company", "JPMorgan Chase & Co."))
-    if any(k in ll for k in ("current title", "current role", "current position")):
+    if any(k in ll for k in ("current title", "current role", "current position", "job title",
+                             "recent job title", "current job", "most recent title")):
         return text(defs.get("current_title", "Senior Software Engineer"))
+
+    # ── Work setting / preferred contact / SMS consent (Salesforce LWC staffing forms) ──────
+    if is_choice and any(k in ll for k in ("work setting", "work arrangement", "work model",
+                         "work style", "work preference", "work location preference",
+                         "settings are you open")):
+        for want in ("remote", "hybrid", "flexible", "any"):     # open to remote/hybrid
+            m = _first_option_containing(want, opts)
+            if m:
+                return choose(m, "work setting: open to remote/hybrid")
+        return skip("work setting — please pick")
+    if is_choice and any(k in ll for k in ("how would you like to be contacted", "preferred contact",
+                         "contact method", "contacted regarding", "method of contact",
+                         "how should we contact", "best way to contact")):
+        for want in ("text", "sms", "mobile", "email", "phone", "call"):   # prefer text/sms
+            m = _first_option_containing(want, opts)
+            if m:
+                return choose(m, "preferred contact method")
+        return skip("contact method — please pick")
+    if is_choice and ("text message" in ll or "receive text" in ll
+                      or ("sms" in ll and ("consent" in ll or "agree" in ll or "opt" in ll))):
+        m = _first_option_containing("agree", opts) or _first_option_containing("yes", opts)
+        return choose(m, "agree to receive text messages") if m else skip("text consent — please pick")
     if "pronoun" in ll:
         pref = defs.get("pronouns", "He/Him")
         if is_choice:
@@ -677,6 +705,11 @@ def _is_strong_essay(ll: str, ftype: str) -> bool:
         return False
     if any(k in ll for k in ("anything else", "additional information", "additional comments",
                              "accommodation", "anything you")):
+        return False
+    # Pay/salary questions are often phrased as long sentences ("What is the desired pay range you'll
+    # consider…") but want a NUMBER, not prose — never treat them as essays.
+    if any(k in ll for k in ("pay range", "salary", "compensation", "desired pay", "expected pay",
+                             "pay rate", "hourly rate")):
         return False
     if ftype == "textarea" or len(ll) > 80:
         return True
