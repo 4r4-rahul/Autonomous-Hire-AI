@@ -121,9 +121,14 @@
   }
 
   // ── React-Select helpers ─────────────────────────────────────────────────────
-  const isReactSelect = (el) =>
-    (el.className || "").toString().includes("select__control") ||
-    /\b[\w-]*__control\b/.test((el.className || "").toString());
+  const isReactSelect = (el) => {
+    const c = (el.className || "").toString();
+    if (c.includes("select__control")) return true;            // react-select proper
+    // Generic BEM "__control" (some react-select builds) BUT NOT Salesforce/SLDS form wrappers:
+    // slds-form-element__control wraps EVERY input, so matching it skipped all the contact fields
+    // (First/Last/email/phone/address) on Lightning forms like apply.teksystems.com.
+    return /\b[\w-]*__control\b/.test(c) && !/(^|\s)slds-|form-element__control/.test(c);
+  };
 
   function rsOpen(control) {
     // React-Select opens on mousedown of the control (or its inner input), not a plain click.
@@ -435,13 +440,28 @@
     fields.push({ id, label, type: "select", options });
   }
 
-  // radio groups (by name)
-  const groups = {};
+  // radio groups: by shared `name`, else by the nearest common CONTAINER. Salesforce/SLDS radios
+  // (apply.teksystems.com) carry NO name attribute, so name-keying shatters each option into its own
+  // 1-item group ("Diploma", "Associate"… as separate fields). Group those by the smallest ancestor
+  // that holds ≥2 radios = that question's option set.
+  const radioGroups = new Map();
+  const _groupKey = (el) => {
+    if (el.name) return "name:" + el.name;
+    let p = el.parentElement;
+    for (let i = 0; i < 8 && p; i++) {
+      if (p.querySelectorAll("input[type='radio']").length >= 2) return p;  // tightest option-set wrapper
+      p = p.parentElement;
+    }
+    return el;  // truly lone radio
+  };
   for (const el of document.querySelectorAll("input[type='radio']")) {
     if (!ctrlPresent(el)) continue;  // native radio may be hidden behind a styled control
-    (groups[el.name || ("__" + nid())] ||= []).push(el);
+    const k = _groupKey(el);
+    if (!radioGroups.has(k)) radioGroups.set(k, []);
+    radioGroups.get(k).push(el);
   }
-  for (const [name, radios] of Object.entries(groups)) {
+  for (const [, radios] of radioGroups) {
+    const name = (radios[0] && radios[0].name) || "";
     // DON'T skip a group just because one radio is pre-checked: forms DEFAULT a wrong option
     // (Kforce defaults "authorized for any employer" — we must override with "require sponsorship").
     // Track the pre-checked state so an unrecognized default is kept (not flagged), but a recognized
