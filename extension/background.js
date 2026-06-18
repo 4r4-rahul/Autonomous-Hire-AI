@@ -46,6 +46,45 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
 
+  if (msg && msg.type === "open_incognito") {
+    // Reopen a URL in an INCOGNITO window — a fresh session clears cookie/fingerprint-based bot
+    // blocks (PerimeterX on TEKsystems 403s a normal tab but lets an incognito one through). Reuse
+    // an existing incognito window so repeated opens don't pile up new windows. Auto-fills once the
+    // page loads. Requires the extension's "Allow in incognito" to be ON (else create() throws).
+    (async () => {
+      try {
+        const wins = await chrome.windows.getAll({});
+        const incog = wins.find((w) => w.incognito);
+        let tabId;
+        if (incog) {
+          const t = await chrome.tabs.create({ windowId: incog.id, url: msg.url, active: true });
+          tabId = t.id;
+          await chrome.windows.update(incog.id, { focused: true });
+        } else {
+          const w = await chrome.windows.create({ url: msg.url, incognito: true, focused: true });
+          tabId = w.tabs && w.tabs[0] && w.tabs[0].id;
+        }
+        if (msg.closeTabId) { try { await chrome.tabs.remove(msg.closeTabId); } catch (e) {} }
+        if (tabId && msg.autofill !== false) {
+          const onDone = (id, info) => {
+            if (id === tabId && info.status === "complete") {
+              chrome.tabs.onUpdated.removeListener(onDone);
+              // small delay so the SPA renders its form before we scrape
+              setTimeout(() => chrome.scripting.executeScript({
+                target: { tabId, allFrames: true }, files: ["content.js"],
+              }).catch(() => {}), 1800);
+            }
+          };
+          chrome.tabs.onUpdated.addListener(onDone);
+        }
+        sendResponse({ ok: true });
+      } catch (e) {
+        sendResponse({ ok: false, error: String((e && e.message) || e) });
+      }
+    })();
+    return true;
+  }
+
   if (msg && msg.type === "resolve") {
     fetch(`${BASE}/resolve`, {
       method: "POST",
