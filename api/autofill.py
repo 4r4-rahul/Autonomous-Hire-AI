@@ -362,7 +362,8 @@ def _resolve_one(f: FieldIn, P: dict) -> FillOut:
     # Word boundaries: "unit" must not match "UNITed States", "apt" not "adAPTable".
     if "address line 2" in ll or re.search(r"\b(apt|apartment|suite|ste|unit)\b", ll):
         return text("")
-    if any(k in ll for k in ("address line 1", "street address", "home address")):
+    if any(k in ll for k in ("address line 1", "street address", "home address", "mailing address",
+                             "street")) and "email" not in ll:
         return text(home.get("line1", "4011 S Custer Rd"))
     # Citizenship / birth / nationality → India (Rahul is an Indian national on a visa),
     # NOT his US residence. MUST come before the generic residence-country rule.
@@ -385,12 +386,33 @@ def _resolve_one(f: FieldIn, P: dict) -> FillOut:
                                       "redux", "state of the", "approach", "describe", "explain",
                                       "experience", "preferred approach"))
     _addr_ok = (len(ll) <= 28 or _addr_ctx) and not _not_addr
-    if (re.search(r"\bcity\b", ll) or ("location" in ll and "relocat" not in ll)) and _addr_ok:
+    # NOT for Yes/No choices: "Are you a primary resident of the State of Texas?" contains "state"
+    # but is a Yes/No question (handled by the residency rule below), not a state dropdown.
+    if (re.search(r"\bcity\b", ll) or ("location" in ll and "relocat" not in ll)) and _addr_ok \
+            and not _is_yesno(opts):
         return loc(home.get("city", "Plano"))
-    if (re.search(r"\bstate\b", ll) or "province" in ll) and _addr_ok:
+    if (re.search(r"\bstate\b", ll) or "province" in ll) and _addr_ok and not _is_yesno(opts):
         return choose(home.get("state", "Texas"))
     if any(k in ll for k in ("zip", "postal")):
-        return text(home.get("zip", "75070"))
+        return text(home.get("zip", "75024"))
+
+    # ── Staffing/screening questions (Salesforce-LWC & similar custom apply forms) ──────────
+    # Highest level of education as a CHOICE (Diploma/Associate/Bachelor/Master/Doctorate) — pick the
+    # candidate's highest (Master's). Distinct from the free-text "degree" field handled below.
+    if is_choice and "education" in ll and any(k in ll for k in ("highest", "level", "completed")):
+        m = _first_option_containing("master", opts)
+        return choose(m, "highest education level: Master's") if m else skip("education level — please pick")
+    # "Are you a primary resident of the State of <X>?" → truthful vs the candidate's home state.
+    if "resident" in ll and "state of" in ll:
+        st = (home.get("state", "Texas") or "").lower()
+        return choose("Yes" if st and st in ll else "No", "primary residency vs home state")
+    # Open to a direct-placement / permanent role → Yes.
+    if any(k in ll for k in ("direct placement", "direct hire", "permanent position")) \
+            and (_is_yesno(opts) or any(k in ll for k in ("able to", "willing", "open to", "interested"))):
+        return choose("Yes", "open to direct placement")
+    # Willing to provide professional references → Yes.
+    if "reference" in ll and any(k in ll for k in ("willing", "provide", "able to")):
+        return choose("Yes", "willing to provide references")
 
     # ── Education (ATS School/Degree/Discipline widget) ──────────────────────
     # MUST come before the job "start date → Immediately" rule: education uses
