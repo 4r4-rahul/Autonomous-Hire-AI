@@ -10,6 +10,20 @@
   if (window.__ahDoneAt && Date.now() - window.__ahDoneAt < 20000) return;
   window.__ahRunning = true;
   const _ahDone = () => { window.__ahRunning = false; window.__ahDoneAt = Date.now(); };
+  // Instant proof-of-injection badge: appears the MOMENT this frame is injected (DOM ops aren't
+  // throttled in background tabs), so when you switch to a Fill-All'd tab you can SEE it was hit —
+  // even before the throttled fill finishes. showOverlay() at the end replaces it.
+  try {
+    if (document.body && !document.getElementById("__ah_badge")) {
+      const _b = document.createElement("div");
+      _b.id = "__ah_badge";
+      _b.style.cssText = "position:fixed;top:16px;right:16px;z-index:2147483647;background:#1e3a8a;" +
+        "color:#dbeafe;font:12px -apple-system,sans-serif;padding:8px 12px;border-radius:8px;" +
+        "box-shadow:0 8px 30px rgba(0,0,0,.5)";
+      _b.textContent = "AutonomousHire: filling this form…";
+      document.body.appendChild(_b);
+    }
+  } catch (_) {}
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const clean = (s) => (s || "").replace(/\s+/g, " ").replace(/\*+/g, "").trim();
   const visible = (el) => {
@@ -894,6 +908,7 @@
 
   function showOverlay(data, notes, resumeStatus, resumeViewUrl, blanks, coverStatus, coverViewUrl) {
     document.getElementById("ah-overlay")?.remove();
+    document.getElementById("__ah_badge")?.remove();
     const s = data.summary || {};
     const box = document.createElement("div");
     box.id = "ah-overlay";

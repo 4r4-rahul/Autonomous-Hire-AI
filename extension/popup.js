@@ -58,9 +58,11 @@ document.getElementById("fillAll").addEventListener("click", async () => {
     }
     // Also arm them, so a tab Chrome DISCARDS (unloads) gets re-filled when you return to it.
     await chrome.runtime.sendMessage({ type: "arm", tabIds: targets.map((t) => t.id) }).catch(() => {});
+    const diag = `[${tabs.length} open · ${withUrl.length} readable · ${targets.length} matched · ${ok} injected]`;
     statusEl.textContent = ok
-      ? `Filling ${ok}/${targets.length} tabs — switch through to review + submit (background tabs finish as you focus them).`
-      : `Matched ${targets.length} but couldn't inject: ${errs[0] || "?"} — set Site access to "On all sites" + re-add.`;
+      ? `Filling ${ok}/${targets.length} app tabs — switch through to review. ${diag}` +
+        (errs.length ? ` ${errs.length} failed: ${errs[0]}` : "")
+      : `Couldn't inject any tab. ${diag} ${errs[0] ? "err: " + errs[0] : ""}`;
   } catch (e) {
     statusEl.textContent = "Error: " + String(e && e.message ? e.message : e).slice(0, 120);
   }
