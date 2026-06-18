@@ -1,7 +1,7 @@
 const statusEl = document.getElementById("status");
 // Bump this on every extension code change. If the popup doesn't show this exact build, the reload
 // didn't take — remove & re-add the extension.
-const BUILD = "slds-2 (2026-06-18)";
+const BUILD = "slds-3 (2026-06-18)";
 statusEl.textContent = "build " + BUILD;
 
 // DEBUG: capture the current form's field structure (no personal values) so a bespoke ATS form
