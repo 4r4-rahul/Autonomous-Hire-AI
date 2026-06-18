@@ -16,8 +16,9 @@ from pathlib import Path
 
 _FILE = Path(__file__).parent.parent / "data" / "company_caps.json"
 
-# Conservative fallbacks if the config is missing/corrupt (never crash intake on a bad file).
-_FALLBACK = {"default_max": 4, "window_days": 30, "exempt": [], "overrides": {}}
+# Fallbacks if the config is missing/corrupt (never crash intake on a bad file). default_max=None
+# means NO CAP — we only limit companies with a proven policy (manual override or email-learned).
+_FALLBACK = {"default_max": None, "window_days": 30, "exempt": [], "overrides": {}, "learned": {}}
 
 _PENDING_STATUSES = ("pending_review", "pending_manual_submit", "awaiting_confirmation")
 
@@ -43,12 +44,35 @@ def is_exempt(company: str) -> bool:
 
 
 def cap_for(company: str) -> float:
-    """Max distinct apps allowed at this company within the window (inf for exempt staffing agencies)."""
+    """Max distinct apps allowed at this company within the window. Unlimited (inf) for exempt
+    staffing agencies and for any company with no proven limit (default_max=null). A company is
+    capped only via a manual `overrides` entry or an email-`learned` one."""
     cfg = _load()
     if is_exempt(company):
         return float("inf")
-    overrides = {_norm(k): v for k, v in cfg.get("overrides", {}).items()}
-    return float(overrides.get(_norm(company), cfg.get("default_max", 4)))
+    # learned (auto-detected from emails) + manual overrides; manual wins on conflict.
+    caps = {_norm(k): v for k, v in {**cfg.get("learned", {}), **cfg.get("overrides", {})}.items()}
+    val = caps.get(_norm(company), cfg.get("default_max"))
+    return float("inf") if val is None else float(val)
+
+
+def set_cap(company: str, max_apps: int, *, source: str = "email", note: str = "") -> None:
+    """Record a proven per-company limit (e.g. auto-learned from a rejection email). Writes to the
+    `learned` map so it survives restarts and is visible/auditable. Manual `overrides` still win."""
+    company = _norm(company)
+    cfg = _load()
+    learned = cfg.get("learned", {}) or {}
+    prev = learned.get(company)
+    new = int(max_apps) if prev is None else min(int(prev), int(max_apps))  # tightest wins
+    learned[company] = new
+    cfg["learned"] = learned
+    notes = cfg.get("_learned_notes", {}) or {}
+    notes[company] = f"{source}: max {max_apps}{(' — ' + note) if note else ''}"
+    cfg["_learned_notes"] = notes
+    try:
+        _FILE.write_text(json.dumps(cfg, indent=2))
+    except Exception:
+        pass
 
 
 def _within_window(app: dict, now: datetime, win: timedelta) -> bool:

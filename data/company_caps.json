@@ -1,11 +1,12 @@
 {
-  "_doc": "Per-company application caps. We apply to at most `max` distinct roles at one company within any rolling `window_days` period (counts PENDING + SUBMITTED-within-window). This respects employer application-limit policies (e.g. Roblox auto-closes >5 in 30 days) and Greenhouse/Workday duplicate-applicant dedup. Reach comes from breadth (many companies), NOT depth at one employer. Override a company by name (normalized: lowercased) in `overrides`. `exempt` = staffing agencies/marketplaces where each posting is a different end-client, so the anti-spam rule doesn't apply.",
-  "default_max": 4,
+  "_doc": "Per-company application caps. POLICY: default is NO CAP — most employers (e.g. Databricks) don't limit applications, so we don't throw away reach. We only cap a company once it has PROVEN a limit: either a manually-known policy or one auto-learned from a rejection/auto-close email (see agents/monitoring/email_monitor cap-learning). `default_max: null` = unlimited. Override a company by normalized (lowercased) name in `overrides` (the cap = max distinct roles within `window_days`, counting PENDING + SUBMITTED-within-window). `exempt` = staffing agencies where each posting is a different end-client. `learned` records auto-detected limits with provenance.",
+  "default_max": null,
   "window_days": 30,
   "exempt": ["teksystems", "kforce", "insight global"],
   "overrides": {
     "roblox": 4
   },
+  "learned": {},
   "_known_hard_limits": {
     "roblox": "5 applications per 30 days (auto-closes the 6th) — confirmed via no-reply@roblox.com 2026-06-18; we cap at 4 for a safety margin."
   }

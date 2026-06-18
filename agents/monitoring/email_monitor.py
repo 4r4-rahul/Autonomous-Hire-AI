@@ -24,6 +24,49 @@ from core.state import JobSearchState, EmailEvent
 
 logger = get_logger("email_monitor")
 
+# ── Auto-learn per-company application caps from "application limit" / auto-close emails ──────────
+# Some employers cap applications per rolling window and auto-close the excess (Roblox: 5 per 30
+# days). When such an email arrives we LEARN the limit and record it in data/company_caps.json so
+# the pipeline stops over-applying there — without imposing a cap on companies that don't limit.
+_WORD_NUM = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
+             "seven": 7, "eight": 8, "nine": 9, "ten": 10, "eleven": 11, "twelve": 12}
+_LIMIT_RE = re.compile(
+    r"(?:maximum of|limit(?:ed)?(?:\s+\w+){0,3}?\s+to(?:\s+a)?(?:\s+maximum of)?|"
+    r"limit of|no more than|more than|up to)\s+"
+    r"(\d{1,2}|one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)\s+application",
+    re.I)
+# Email/ATS sender domains that are NOT the hiring company — don't infer a company name from these.
+_NON_COMPANY_DOMAINS = {"greenhouse", "lever", "ashbyhq", "workable", "smartrecruiters", "icims",
+                        "myworkdayjobs", "workday", "jobvite", "gmail", "googlemail", "google",
+                        "careerpuck", "phenompeople", "myworkday", "hire", "us", "eu"}
+
+
+def _detect_application_limit(subject: str, body: str) -> Optional[int]:
+    """If the email states an application-limit / auto-close policy, return the limit N, else None."""
+    text = f"{subject}\n{body}".lower()
+    if not any(k in text for k in ("application limit", "maximum of", "limit candidates",
+                                   "limit applicants", "automatically closed", "limit of",
+                                   "applications within", "no more than", "up to", "we limit",
+                                   "limit the number", "more than")):
+        return None
+    for m in _LIMIT_RE.finditer(text):
+        tok = m.group(1)
+        n = int(tok) if tok.isdigit() else _WORD_NUM.get(tok)
+        if n and 1 <= n <= 20:
+            return n
+    return None
+
+
+def _company_from_sender(sender: str) -> Optional[str]:
+    """Best-effort company name from an email sender domain (no-reply@roblox.com → 'roblox')."""
+    m = re.search(r"@([\w.-]+)", sender or "")
+    if not m:
+        return None
+    labels = [p for p in m.group(1).lower().split(".") if p]
+    # registrable label = second-to-last (roblox.com → roblox; jobs.roblox.com → roblox)
+    cand = labels[-2] if len(labels) >= 2 else (labels[0] if labels else "")
+    return cand if cand and cand not in _NON_COMPANY_DOMAINS else None
+
 _CATEGORIZE_SYSTEM = """You are an email classifier for a job search pipeline.
 Given an email subject and body, extract:
 - category: one of "interview_invite", "rejection", "offer", "application_received", "info_request", "follow_up_needed", "other"
@@ -407,6 +450,20 @@ async def run(state: JobSearchState) -> JobSearchState:
         updated_state["email_events"].append(event)
 
         _update_application_status(updated_state, category, company_name, summary)
+
+        # Auto-learn a per-company application cap from limit/auto-close policy emails (Roblox etc.),
+        # regardless of category. Apply a 1-app safety margin (our submission counts undercount the
+        # manual extension flow), keeping the tightest limit if we've seen one before.
+        limit = _detect_application_limit(email["subject"], email["body"])
+        if limit:
+            co = company_name or _company_from_sender(email["sender"])
+            if co:
+                from core.company_caps import set_cap
+                applied = max(1, limit - 1)
+                set_cap(co, applied, source="email",
+                        note=f"policy max {limit} from auto-close email {email.get('received_at','')}")
+                logger.info("application_cap_learned", company=co,
+                            detected_limit=limit, applied_cap=applied, subject=email["subject"])
 
         if category in _NOTABLE_CATEGORIES and company_name:
             await _notify_discord(category, company_name, summary)
