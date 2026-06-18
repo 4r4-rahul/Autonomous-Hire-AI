@@ -55,6 +55,12 @@
     if (el.id) { const le = document.querySelector(`label[for="${CSS.escape(el.id)}"]`); if (le) l = clean(le.textContent); }
     if (!l) { const w = el.closest("label"); if (w) l = clean(w.textContent); }
     if (!l) l = clean((el.getAttribute && el.getAttribute("aria-label")) || "");
+    // Radio/checkbox with NO <label> — Kforce renders "<input> I require sponsorship…" as a sibling
+    // text/element. Read the adjacent text, then fall back to the value attr ("NeedsSponsorship"),
+    // which encodes the meaning. Without this the group's options are blank → it gets skipped.
+    if (!l && el.nextSibling) l = clean(el.nextSibling.textContent || el.nextSibling.nodeValue || "");
+    if (!l && el.parentElement) { const pt = clean(el.parentElement.textContent || ""); if (pt && pt.length <= 140) l = pt; }
+    if (!l) l = clean((el.getAttribute && el.getAttribute("value")) || "");
     return l;
   }
   function isOptionText(t, opts) {
@@ -415,13 +421,20 @@
     (groups[el.name || ("__" + nid())] ||= []).push(el);
   }
   for (const [name, radios] of Object.entries(groups)) {
-    if (radios.some((r) => r.checked)) continue;
+    // DON'T skip a group just because one radio is pre-checked: forms DEFAULT a wrong option
+    // (Kforce defaults "authorized for any employer" — we must override with "require sponsorship").
+    // Track the pre-checked state so an unrecognized default is kept (not flagged), but a recognized
+    // group (work-auth/EEO) gets the truthful answer applied over the default.
+    const prechecked = radios.some((r) => r.checked);
     const optPairs = radios.map((r) => ({ r, l: optionText(r) }));
-    // the QUESTION (not the first option's text)
-    const label = questionLabel(radios) || labelFor(radios[0]);
+    // the QUESTION (not the first option's text) → name fallback ("eligibility") if label is
+    // missing/generic, so the resolver can still route it.
+    let label = questionLabel(radios) || labelFor(radios[0]);
+    if ((!label || _BAD_LABEL.test(label)) && name && !name.startsWith("__"))
+      label = name.replace(/[_\-]+/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2");
     if (!label || optPairs.every((o) => !o.l)) continue;
     const id = nid();
-    reg[id] = { kind: "radio", pairs: optPairs };
+    reg[id] = { kind: "radio", pairs: optPairs, prechecked };
     fields.push({ id, label, type: "radio", options: optPairs.map((o) => o.l) });
   }
 
@@ -524,6 +537,9 @@
       continue;
     }
     if (fill.kind === "skip") {
+      // A pre-checked radio group the resolver doesn't recognize = a form DEFAULT that's fine
+      // (e.g. résumé-upload "From this computer") — keep it, don't flag the user.
+      if (item.prechecked) { markFilled(item); continue; }
       markNeedsYou(item, fld.label, fill.note);
       notes.push({ label: fld.label, note: fill.note || "needs you", status: "skip" });
       skips.push({ item, fld, note: fill.note });
