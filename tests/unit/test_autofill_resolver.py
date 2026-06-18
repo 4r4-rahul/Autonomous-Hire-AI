@@ -30,7 +30,7 @@ CASES = [
     # ── address + collision traps ──
     ("Street Address", "text", None, "text", "Custer"),
     ("Address Line 2", "text", None, "text", ""),
-    ("City", "text", None, "text", "McKinney"),
+    ("City", "text", None, "text", "Plano"),
     ("State", "select", ["Texas", "California"], "value", "Texas"),
     ("Zip", "text", None, "text", "00000"),
     ("Country", "select", ["United States", "India"], "value", "United States"),
