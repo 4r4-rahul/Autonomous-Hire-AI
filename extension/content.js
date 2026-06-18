@@ -66,6 +66,21 @@
       if (l && !l.querySelector("input,select,textarea") && clean(l.textContent).length > 2)
         return clean(l.textContent);
     }
+    // Last resort: the question is often a PRECEDING sibling (a plain <p>/<span>/heading with no
+    // 'label' class) of the field — Salesforce LWC renders "<p>What is your … title?</p><input>".
+    // Walk up, scanning earlier siblings at each level for the nearest question-like text block.
+    let q = el;
+    for (let i = 0; i < 5 && q; i++) {
+      let sib = q.previousElementSibling;
+      while (sib) {
+        if (!sib.querySelector("input,select,textarea,button,a")) {
+          const t = clean(sib.textContent);
+          if (t.length > 3 && t.length <= 160) return t;
+        }
+        sib = sib.previousElementSibling;
+      }
+      q = q.parentElement;
+    }
     return clean((el.getAttribute && el.getAttribute("placeholder")) || "");
   }
 
