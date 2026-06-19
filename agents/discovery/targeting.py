@@ -126,6 +126,31 @@ def priority(fit_0_100: float, sponsor_score: float, recency_0_1: float) -> floa
     return round(_W_FIT * fit + _W_SPONSOR * sponsor_score + _W_RECENCY * recency_0_1, 4)
 
 
+_INSIGHTS_FILE = _ROOT / "data" / "learning_insights.json"
+_RESP_MIN_SAMPLE = 3        # need ≥3 resolved (responded+ghosted) apps before trusting the signal
+_RESP_BASELINE = 0.15       # response rate that maps to a neutral 1.0 multiplier
+
+
+def response_multipliers() -> dict[str, float]:
+    """Per-company priority multiplier LEARNED from real outcomes — lean toward companies that
+    actually respond and gently away from chronic ghosters. Neutral (company absent → caller uses
+    1.0) until there's a minimum sample, so a sparse early history can't distort the ranking."""
+    try:
+        data = json.loads(_INSIGHTS_FILE.read_text())
+    except Exception:
+        return {}
+    out: dict[str, float] = {}
+    for co, cell in (data.get("by_company") or {}).items():
+        resolved = cell.get("resolved", 0)          # responded + ghosted = apps with a verdict
+        if resolved < _RESP_MIN_SAMPLE:
+            continue
+        rr = cell.get("responded", 0) / resolved
+        # response rate → multiplier in [0.85, 1.20], pivoting at the baseline
+        mult = 1.0 + max(-0.15, min(0.20, rr - _RESP_BASELINE))
+        out[_norm(co)] = round(mult, 3)
+    return out
+
+
 def learned_non_sponsors(state: JobSearchState) -> set[str]:
     """Companies that rejected us citing sponsorship/visa → treat as non-sponsors."""
     out: set[str] = set()
@@ -146,6 +171,7 @@ def rank_for_application(jobs: list[JobListing], fit_by_id: dict, profile: dict,
     Each item: {job, fit, sponsor_label, sponsor_reason, recency, priority}."""
     requires = bool(profile.get("work_authorization", {}).get("requires_sponsorship"))
     learned_no = learned_non_sponsors(state) if state else set()
+    resp_mult = response_multipliers()          # learned: favor companies that actually respond
     now = datetime.now(timezone.utc)
     ranked: list[dict] = []
     for job in jobs:
@@ -159,9 +185,11 @@ def rank_for_application(jobs: list[JobListing], fit_by_id: dict, profile: dict,
         if label == "blocked":
             continue
         rec = recency_score(job, now)
+        rmult = resp_mult.get(_norm(job.get("company_name", "")), 1.0)
         ranked.append({
             "job": job, "fit": fit, "sponsor_label": label, "sponsor_reason": reason,
-            "recency": rec, "priority": priority(fit, sscore, rec),
+            "recency": rec, "response_mult": rmult,
+            "priority": round(priority(fit, sscore, rec) * rmult, 4),
         })
     ranked.sort(key=lambda r: r["priority"], reverse=True)
     return ranked
