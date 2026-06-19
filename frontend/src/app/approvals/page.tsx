@@ -12,7 +12,7 @@ import { ReferralModal } from "@/components/ReferralModal";
 import { FormAnswersModal } from "@/components/FormAnswersModal";
 import { ScoreBadge } from "@/components/ScoreBadge";
 import {
-  SORT_OPTIONS, GROUP_OPTIONS, atsOf, daysOld,
+  SORT_OPTIONS, GROUP_OPTIONS, atsOf, daysOld, scoreOf,
   sortApps, filterApps, groupApps, distinctAts,
   type SortKey, type GroupKey,
 } from "@/lib/queue";
@@ -160,6 +160,16 @@ export default function ApprovalsPage() {
   const groups = useMemo(() => groupApps(filtered, groupBy), [filtered, groupBy]);
   const atsList = useMemo(() => distinctAts(all), [all]);
   const filtersActive = !!search || freshOnly || preparedOnly || hideStale || !!atsFilter;
+
+  // Follow-up lane: submitted 3–30 days ago — old enough to follow up, not so old it's dead. A short
+  // follow-up or (better) a referral here is the highest-leverage post-apply move.
+  const followUps = useMemo(
+    () => (submitted ?? [])
+      .filter((a) => { const d = daysOld(a.submitted_at); return d !== null && d >= 3 && d <= 30; })
+      .sort((a, b) => scoreOf(b) - scoreOf(a)),
+    [submitted]);
+  const followUpIds = useMemo(() => new Set(followUps.map((a) => a.id)), [followUps]);
+  const submittedRest = useMemo(() => (submitted ?? []).filter((a) => !followUpIds.has(a.id)), [submitted, followUpIds]);
 
   const rowHandlers = {
     tailor, tailoringId, openApply, onApplied, onSkip, busyId,
@@ -404,12 +414,31 @@ export default function ApprovalsPage() {
         </>
       )}
 
+      {/* ── Follow up / get a referral (highest-leverage post-apply move) ── */}
+      {!!followUps.length && (
+        <>
+          <h2 className="text-xs font-semibold text-amber-300/90 uppercase tracking-wider mb-1 flex items-center gap-2">
+            <Users className="w-3.5 h-3.5" /> Follow up — applied 3+ days ago ({followUps.length})
+          </h2>
+          <p className="text-xs text-slate-500 mb-3">
+            A short follow-up — or far better, a <strong className="text-amber-300">referral</strong> — is the single biggest
+            callback lever after applying (a warm intro can lift response 5–10×). Hit <strong className="text-amber-300">Referral</strong> for
+            ready-to-send notes + the right people to reach.
+          </p>
+          <div className="space-y-2 mb-8">
+            {followUps.map((app) => (
+              <ReadonlyRow key={app.id} app={app} onProof={() => setSelectedId(app.id)} onReferral={() => setReferralApp(app)} onAnswers={() => setAnswersApp(app)} tone="teal" highlightReferral />
+            ))}
+          </div>
+        </>
+      )}
+
       {/* ── Submitted (confirmed) ─────────────────────────────────────── */}
       <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
         Submitted {submitted?.length ? `(${submitted.length})` : ""}
       </h2>
       <div className="space-y-2">
-        {(submitted ?? []).map((app) => (
+        {submittedRest.map((app) => (
           <ReadonlyRow key={app.id} app={app} onProof={() => setSelectedId(app.id)} onReferral={() => setReferralApp(app)} onAnswers={() => setAnswersApp(app)} tone="green" />
         ))}
         {!submitted?.length && (
@@ -533,7 +562,7 @@ function PendingRow({ app, h, focused }: { app: Application; h: RowHandlers; foc
   );
 }
 
-function ReadonlyRow({ app, onProof, onReferral, onAnswers, tone }: { app: Application; onProof: () => void; onReferral?: () => void; onAnswers?: () => void; tone: "teal" | "green" }) {
+function ReadonlyRow({ app, onProof, onReferral, onAnswers, tone, highlightReferral }: { app: Application; onProof: () => void; onReferral?: () => void; onAnswers?: () => void; tone: "teal" | "green"; highlightReferral?: boolean }) {
   const dot = tone === "teal" ? "bg-teal-400" : "bg-green-400";
   return (
     <div className="bg-slate-800/50 border border-slate-700 rounded-xl px-5 py-4 flex items-center justify-between hover:bg-slate-700/30 transition-colors">
@@ -557,7 +586,11 @@ function ReadonlyRow({ app, onProof, onReferral, onAnswers, tone }: { app: Appli
         )}
         {onReferral && (
           <button onClick={onReferral} title="Get ready-to-send referral notes + find connections — the biggest callback lever after applying"
-            className="flex items-center gap-1.5 bg-amber-600/15 hover:bg-amber-600/30 border border-amber-500/40 text-amber-300 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors">
+            className={`flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-lg transition-colors ${
+              highlightReferral
+                ? "bg-amber-500 hover:bg-amber-400 text-slate-900 border border-amber-400 font-semibold"
+                : "bg-amber-600/15 hover:bg-amber-600/30 border border-amber-500/40 text-amber-300 font-medium"
+            }`}>
             <Users className="w-3.5 h-3.5" /> Referral
           </button>
         )}
