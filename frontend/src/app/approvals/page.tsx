@@ -1,6 +1,6 @@
 "use client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api, type Application } from "@/lib/api";
 import { fmtRelative, STATUS_LABEL } from "@/lib/utils";
 import {
@@ -52,8 +52,10 @@ export default function ApprovalsPage() {
   const [search, setSearch] = useState("");
   const [freshOnly, setFreshOnly] = useState(false);
   const [preparedOnly, setPreparedOnly] = useState(false);
+  const [hideStale, setHideStale] = useState(false);
   const [atsFilter, setAtsFilter] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [focusedId, setFocusedId] = useState<string | null>(null);
 
   const qc = useQueryClient();
 
@@ -135,19 +137,58 @@ export default function ApprovalsPage() {
     setNotice(parts.join(" "));
   };
 
+  // Batch-tailor the un-prepared résumés in a group so Open-all → Fill-All has them ready.
+  const PREP_CAP = 5;
+  const prepareAll = async (items: Application[]) => {
+    const unprepared = items.filter((a) => a.quality_score == null).slice(0, PREP_CAP);
+    if (!unprepared.length) { setNotice("Every role in this group already has a tailored résumé."); return; }
+    if (!window.confirm(`Tailor ${unprepared.length} résumé${unprepared.length === 1 ? "" : "s"} now? (~$0.11 each, Opus — takes ~30s each.)`)) return;
+    setNotice(`Tailoring ${unprepared.length} résumé${unprepared.length === 1 ? "" : "s"}… each row gets a score as it finishes.`);
+    await Promise.allSettled(unprepared.map((a) => api.tailorApp(a.id)));
+    qc.invalidateQueries({ queryKey: PENDING_KEY });
+    setNotice(`Tailoring complete for ${unprepared.length} role${unprepared.length === 1 ? "" : "s"}.`);
+  };
+  const unpreparedOf = (items: Application[]) => items.filter((a) => a.quality_score == null).length;
+
   // ── Derived view: filter → sort → group ────────────────────────────────────
   const all = useMemo(() => pending ?? [], [pending]);
-  const filtered = useMemo(
-    () => sortApps(filterApps(all, { search, freshOnly, preparedOnly, ats: atsFilter }), sortBy),
-    [all, search, freshOnly, preparedOnly, atsFilter, sortBy]);
+  const filtered = useMemo(() => {
+    let f = filterApps(all, { search, freshOnly, preparedOnly, ats: atsFilter });
+    if (hideStale) f = f.filter((a) => { const d = daysOld(a.posted_at); return d === null || d <= 21; });
+    return sortApps(f, sortBy);
+  }, [all, search, freshOnly, preparedOnly, hideStale, atsFilter, sortBy]);
   const groups = useMemo(() => groupApps(filtered, groupBy), [filtered, groupBy]);
   const atsList = useMemo(() => distinctAts(all), [all]);
-  const filtersActive = !!search || freshOnly || preparedOnly || !!atsFilter;
+  const filtersActive = !!search || freshOnly || preparedOnly || hideStale || !!atsFilter;
 
   const rowHandlers = {
     tailor, tailoringId, openApply, onApplied, onSkip, busyId,
     setReferralApp, setAnswersApp, setSelectedId,
   };
+
+  // ── Keyboard navigation: j/k (or ↑/↓) move · o open · a applied · s skip ────
+  const modalOpen = !!(selectedId || referralApp || answersApp);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const el = e.target as HTMLElement;
+      if (modalOpen || /^(INPUT|TEXTAREA|SELECT)$/.test(el?.tagName || "")) return;
+      if (!filtered.length) return;
+      const idx = Math.max(0, filtered.findIndex((a) => a.id === focusedId));
+      const cur = filtered[idx];
+      const go = (i: number) => {
+        const t = filtered[Math.min(filtered.length - 1, Math.max(0, i))];
+        if (t) { setFocusedId(t.id); document.getElementById(`app-${t.id}`)?.scrollIntoView({ block: "center", behavior: "smooth" }); }
+      };
+      if (e.key === "j" || e.key === "ArrowDown") { e.preventDefault(); go(idx + 1); }
+      else if (e.key === "k" || e.key === "ArrowUp") { e.preventDefault(); go(idx - 1); }
+      else if (!cur) { /* nothing focused yet */ }
+      else if (e.key === "o") { openApply(cur); }
+      else if (e.key === "a") { onApplied(cur.id); }
+      else if (e.key === "s") { onSkip(cur.id); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [filtered, focusedId, modalOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleGroup = (label: string) =>
     setCollapsed((c) => {
@@ -239,6 +280,15 @@ export default function ApprovalsPage() {
           >
             Prepared
           </button>
+          <button
+            onClick={() => setHideStale((v) => !v)}
+            title="Hide postings older than 3 weeks — callback odds there are near zero"
+            className={`text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-colors ${
+              hideStale ? "bg-orange-600/25 border-orange-500/50 text-orange-300" : "bg-slate-800/60 border-slate-700 text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            Hide stale
+          </button>
           {atsList.length > 1 && (
             <select
               value={atsFilter}
@@ -252,13 +302,18 @@ export default function ApprovalsPage() {
             </select>
           )}
 
-          <div className="ml-auto text-xs text-slate-500 whitespace-nowrap">
-            <strong className="text-slate-300">{filtered.length}</strong>
-            {filtersActive && <> of {all.length}</>} {filtered.length === 1 ? "role" : "roles"}
+          <div className="ml-auto flex items-center gap-2 text-xs text-slate-500 whitespace-nowrap">
+            <span className="hidden xl:inline text-slate-600" title="Keyboard: j/k move · o open · a applied · s skip">
+              ⌨ j/k · o · a · s
+            </span>
+            <span>
+              <strong className="text-slate-300">{filtered.length}</strong>
+              {filtersActive && <> of {all.length}</>} {filtered.length === 1 ? "role" : "roles"}
+            </span>
             {filtersActive && (
               <button
-                onClick={() => { setSearch(""); setFreshOnly(false); setPreparedOnly(false); setAtsFilter(""); }}
-                className="ml-2 text-slate-500 hover:text-slate-300 underline"
+                onClick={() => { setSearch(""); setFreshOnly(false); setPreparedOnly(false); setHideStale(false); setAtsFilter(""); }}
+                className="text-slate-500 hover:text-slate-300 underline"
               >
                 clear
               </button>
@@ -271,6 +326,7 @@ export default function ApprovalsPage() {
       <div className="space-y-2 mb-8">
         {groups.map((g) => {
           const openableCount = openableOf(g.items).length;
+          const unprepCount = unpreparedOf(g.items);
           return (
           <div key={g.label || "__all"} className={groupBy !== "none" ? "mb-3" : ""}>
             {groupBy !== "none" && (
@@ -285,6 +341,15 @@ export default function ApprovalsPage() {
                   <span className="text-xs text-slate-500 shrink-0">· {g.items.length}</span>
                   {g.avgScore != null && <span className="text-xs text-slate-600 shrink-0">· avg {g.avgScore}</span>}
                 </button>
+                {unprepCount > 0 && (
+                  <button
+                    onClick={() => prepareAll(g.items)}
+                    title="Tailor résumés for the un-prepared roles in this group (Opus, ~$0.11 each)"
+                    className="flex items-center gap-1.5 bg-purple-600/20 hover:bg-purple-600/40 border border-purple-500/40 text-purple-300 text-xs font-medium px-2.5 py-1 rounded-lg transition-colors shrink-0"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" /> Prepare all ({Math.min(unprepCount, PREP_CAP)})
+                  </button>
+                )}
                 {openableCount > 1 && (
                   <button
                     onClick={() => openAll(g.items)}
@@ -298,7 +363,7 @@ export default function ApprovalsPage() {
             )}
             {!collapsed.has(g.label) && (
               <div className="space-y-2 mt-1">
-                {g.items.map((app) => <PendingRow key={app.id} app={app} h={rowHandlers} />)}
+                {g.items.map((app) => <PendingRow key={app.id} app={app} h={rowHandlers} focused={focusedId === app.id} />)}
               </div>
             )}
           </div>
@@ -383,9 +448,14 @@ interface RowHandlers {
   setSelectedId: (id: string) => void;
 }
 
-function PendingRow({ app, h }: { app: Application; h: RowHandlers }) {
+function PendingRow({ app, h, focused }: { app: Application; h: RowHandlers; focused?: boolean }) {
   return (
-    <div className="bg-slate-800/50 border border-slate-700 rounded-xl px-5 py-4 flex items-center justify-between hover:bg-slate-700/30 transition-colors">
+    <div
+      id={`app-${app.id}`}
+      className={`bg-slate-800/50 border rounded-xl px-5 py-4 flex items-center justify-between transition-colors ${
+        focused ? "border-blue-500/70 ring-1 ring-blue-500/40 bg-slate-700/30" : "border-slate-700 hover:bg-slate-700/30"
+      }`}
+    >
       <div className="flex items-center gap-4 min-w-0">
         <div className="min-w-0">
           <div className="text-sm font-semibold text-slate-100 truncate">{app.company_name}</div>
