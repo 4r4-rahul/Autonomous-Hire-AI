@@ -1,20 +1,28 @@
 "use client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { api, type Application } from "@/lib/api";
 import { fmtRelative, STATUS_LABEL } from "@/lib/utils";
-import { Eye, Check, X, ExternalLink, Sparkles, Users, MessageSquareText } from "lucide-react";
+import {
+  Eye, Check, X, ExternalLink, Sparkles, Users, MessageSquareText,
+  Search, ChevronRight, Building2, Layers,
+} from "lucide-react";
 import { ProofModal } from "@/components/ProofModal";
 import { ReferralModal } from "@/components/ReferralModal";
 import { FormAnswersModal } from "@/components/FormAnswersModal";
 import { ScoreBadge } from "@/components/ScoreBadge";
+import {
+  SORT_OPTIONS, GROUP_OPTIONS, atsOf, daysOld,
+  sortApps, filterApps, groupApps, distinctAts,
+  type SortKey, type GroupKey,
+} from "@/lib/queue";
 
 const PENDING_KEY = ["apps-pending-approvals"];
 
 // "posted Xd ago" — green within a week (best recency edge), amber up to 3 weeks.
 function PostedBadge({ postedAt }: { postedAt: string | null }) {
-  if (!postedAt) return null;
-  const days = Math.max(0, Math.floor((Date.now() - new Date(postedAt).getTime()) / 86400000));
+  const days = daysOld(postedAt);
+  if (days === null) return null;
   const tone = days <= 7 ? "bg-green-500/15 text-green-400 border-green-500/30"
              : days <= 21 ? "bg-amber-500/15 text-amber-400 border-amber-500/30"
              : "bg-slate-600/15 text-slate-500 border-slate-600/30";
@@ -22,16 +30,37 @@ function PostedBadge({ postedAt }: { postedAt: string | null }) {
   return <span className={`text-xs px-2 py-0.5 rounded-full border ${tone} hidden md:inline-block`}>{label}</span>;
 }
 
+function AtsBadge({ url }: { url: string | null }) {
+  const ats = atsOf(url);
+  if (ats === "Other") return null;
+  return (
+    <span className="text-[11px] px-1.5 py-0.5 rounded border border-slate-600/40 bg-slate-700/30 text-slate-400 hidden lg:inline-block">
+      {ats}
+    </span>
+  );
+}
+
 export default function ApprovalsPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [referralApp, setReferralApp] = useState<Application | null>(null);
   const [answersApp, setAnswersApp] = useState<Application | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // ── Queue organization state ──────────────────────────────────────────────
+  const [sortBy, setSortBy] = useState<SortKey>("recommended");
+  const [groupBy, setGroupBy] = useState<GroupKey>("none");
+  const [search, setSearch] = useState("");
+  const [freshOnly, setFreshOnly] = useState(false);
+  const [preparedOnly, setPreparedOnly] = useState(false);
+  const [atsFilter, setAtsFilter] = useState("");
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
   const qc = useQueryClient();
 
   const { data: pending, isLoading: pendingLoading } = useQuery({
     queryKey: PENDING_KEY,
-    queryFn: () => api.listApps("status=pending_approval&sort_by=recency&limit=100"),
+    // Fetch the whole queue so sorting/grouping/filtering is instant + complete client-side.
+    queryFn: () => api.listApps("status=pending_approval&sort_by=recency&limit=300"),
     refetchInterval: 15_000,
   });
 
@@ -50,7 +79,6 @@ export default function ApprovalsPage() {
   const decide = useMutation({
     mutationFn: ({ id, action, reason }: { id: string; action: "approve" | "reject"; reason?: string }) =>
       api.decideApp(id, action, reason),
-    // Optimistic: remove the row immediately so it doesn't linger/reappear under polling.
     onMutate: async ({ id }) => {
       setActionError(null);
       await qc.cancelQueries({ queryKey: PENDING_KEY });
@@ -59,7 +87,6 @@ export default function ApprovalsPage() {
       return { prev };
     },
     onError: (_err, _vars, ctx) => {
-      // Roll back the optimistic removal and surface the failure (no more silent data loss).
       if (ctx?.prev) qc.setQueryData(PENDING_KEY, ctx.prev);
       setActionError("Action failed — the application was NOT updated. Check the API and retry.");
     },
@@ -71,8 +98,6 @@ export default function ApprovalsPage() {
     },
   });
 
-  // Tailor-on-demand: generate the Opus résumé for a parked role only when the user chooses to
-  // pursue it. Takes ~20-30s; the row updates (gets a score) when done.
   const tailor = useMutation({
     mutationFn: (id: string) => api.tailorApp(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: PENDING_KEY }),
@@ -88,17 +113,36 @@ export default function ApprovalsPage() {
   const openApply = (app: Application) => {
     if (app.ats_url) window.open(app.ats_url, "_blank", "noopener");
   };
-
   const busyId = decide.isPending ? decide.variables?.id : null;
+
+  // ── Derived view: filter → sort → group ────────────────────────────────────
+  const all = useMemo(() => pending ?? [], [pending]);
+  const filtered = useMemo(
+    () => sortApps(filterApps(all, { search, freshOnly, preparedOnly, ats: atsFilter }), sortBy),
+    [all, search, freshOnly, preparedOnly, atsFilter, sortBy]);
+  const groups = useMemo(() => groupApps(filtered, groupBy), [filtered, groupBy]);
+  const atsList = useMemo(() => distinctAts(all), [all]);
+  const filtersActive = !!search || freshOnly || preparedOnly || !!atsFilter;
+
+  const rowHandlers = {
+    tailor, tailoringId, openApply, onApplied, onSkip, busyId,
+    setReferralApp, setAnswersApp, setSelectedId,
+  };
+
+  const toggleGroup = (label: string) =>
+    setCollapsed((c) => {
+      const n = new Set(c);
+      if (n.has(label)) n.delete(label); else n.add(label);
+      return n;
+    });
 
   return (
     <div>
-      <div className="mb-6">
+      <div className="mb-5">
         <h1 className="text-2xl font-bold text-slate-100">Review Queue</h1>
         <p className="text-sm text-slate-500 mt-0.5">
-          <strong className="text-blue-400">Open &amp; Apply ↗</strong> opens the application page in a new tab — use the
-          AutonomousHire extension there to fill it, then submit. Back here, mark it{" "}
-          <strong className="text-green-400">Applied</strong> or <strong className="text-red-400">Skip</strong>.
+          <strong className="text-blue-400">Open &amp; Apply ↗</strong> opens the application in a new tab — fill it with the
+          extension, submit, then mark it <strong className="text-green-400">Applied</strong> or <strong className="text-red-400">Skip</strong>.
         </p>
       </div>
 
@@ -109,86 +153,115 @@ export default function ApprovalsPage() {
         </div>
       )}
 
+      {/* ── Queue cockpit: sort / group / filter ─────────────────────────── */}
+      <div className="sticky top-0 z-20 -mx-2 px-2 py-3 mb-4 bg-slate-900/80 backdrop-blur border-b border-slate-800">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* search */}
+          <div className="relative flex-1 min-w-[180px] max-w-xs">
+            <Search className="w-4 h-4 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search company or role…"
+              className="w-full bg-slate-800/60 border border-slate-700 rounded-lg pl-8 pr-3 py-1.5 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500/60"
+            />
+          </div>
+
+          {/* sort pills */}
+          <div className="flex items-center gap-1 bg-slate-800/60 border border-slate-700 rounded-lg p-0.5">
+            {SORT_OPTIONS.map((o) => (
+              <button
+                key={o.key}
+                onClick={() => setSortBy(o.key)}
+                title={o.hint}
+                className={`text-xs font-medium px-2.5 py-1 rounded-md transition-colors ${
+                  sortBy === o.key ? "bg-blue-600 text-white" : "text-slate-400 hover:text-slate-200"
+                }`}
+              >
+                {o.label}
+              </button>
+            ))}
+          </div>
+
+          {/* group select */}
+          <div className="flex items-center gap-1.5 bg-slate-800/60 border border-slate-700 rounded-lg px-2 py-1.5">
+            <Layers className="w-3.5 h-3.5 text-slate-500" />
+            <select
+              value={groupBy}
+              onChange={(e) => setGroupBy(e.target.value as GroupKey)}
+              className="bg-transparent text-xs text-slate-300 focus:outline-none cursor-pointer"
+            >
+              {GROUP_OPTIONS.map((g) => <option key={g.key} value={g.key} className="bg-slate-800">{g.label}</option>)}
+            </select>
+          </div>
+
+          {/* filter chips */}
+          <button
+            onClick={() => setFreshOnly((v) => !v)}
+            className={`text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-colors ${
+              freshOnly ? "bg-green-600/25 border-green-500/50 text-green-300" : "bg-slate-800/60 border-slate-700 text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            Fresh ≤7d
+          </button>
+          <button
+            onClick={() => setPreparedOnly((v) => !v)}
+            title="Résumé already tailored — apply right now, no wait"
+            className={`text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-colors ${
+              preparedOnly ? "bg-purple-600/25 border-purple-500/50 text-purple-300" : "bg-slate-800/60 border-slate-700 text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            Prepared
+          </button>
+          {atsList.length > 1 && (
+            <select
+              value={atsFilter}
+              onChange={(e) => setAtsFilter(e.target.value)}
+              className={`text-xs rounded-lg border px-2 py-1.5 focus:outline-none cursor-pointer ${
+                atsFilter ? "bg-sky-600/25 border-sky-500/50 text-sky-300" : "bg-slate-800/60 border-slate-700 text-slate-400"
+              }`}
+            >
+              <option value="" className="bg-slate-800">All ATS</option>
+              {atsList.map((a) => <option key={a} value={a} className="bg-slate-800">{a}</option>)}
+            </select>
+          )}
+
+          <div className="ml-auto text-xs text-slate-500 whitespace-nowrap">
+            <strong className="text-slate-300">{filtered.length}</strong>
+            {filtersActive && <> of {all.length}</>} {filtered.length === 1 ? "role" : "roles"}
+            {filtersActive && (
+              <button
+                onClick={() => { setSearch(""); setFreshOnly(false); setPreparedOnly(false); setAtsFilter(""); }}
+                className="ml-2 text-slate-500 hover:text-slate-300 underline"
+              >
+                clear
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
       {/* ── Awaiting approval ─────────────────────────────────────────── */}
-      <h2 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">
-        Awaiting your approval {pending?.length ? `(${pending.length})` : ""}
-      </h2>
       <div className="space-y-2 mb-8">
-        {(pending ?? []).map((app) => (
-          <div key={app.id}
-            className="bg-slate-800/50 border border-slate-700 rounded-xl px-5 py-4 flex items-center justify-between hover:bg-slate-700/30 transition-colors">
-            <div className="flex items-center gap-4 min-w-0">
-              <div className="min-w-0">
-                <div className="text-sm font-semibold text-slate-100 truncate">{app.company_name}</div>
-                <div className="text-xs text-slate-400 truncate mt-0.5">{app.role_title}</div>
-                {app.location && (
-                  <div className="text-[11px] text-slate-500 truncate mt-0.5">
-                    📍 {app.location}
-                    {app.multi_location && (
-                      <span className="ml-1 text-amber-400" title="Offered in the US and abroad — apply to the US office">
-                        · multi-location, apply to US office
-                      </span>
-                    )}
-                  </div>
-                )}
+        {groups.map((g) => (
+          <div key={g.label || "__all"} className={groupBy !== "none" ? "mb-3" : ""}>
+            {groupBy !== "none" && (
+              <button
+                onClick={() => toggleGroup(g.label)}
+                className="w-full flex items-center gap-2 text-left px-2 py-2 sticky top-[60px] z-10 bg-slate-900/70 backdrop-blur rounded-md hover:bg-slate-800/50 transition-colors"
+              >
+                <ChevronRight className={`w-4 h-4 text-slate-500 transition-transform ${collapsed.has(g.label) ? "" : "rotate-90"}`} />
+                {groupBy === "company" && <Building2 className="w-3.5 h-3.5 text-slate-500" />}
+                <span className="text-sm font-semibold text-slate-200">{g.label || "All"}</span>
+                <span className="text-xs text-slate-500">· {g.items.length}</span>
+                {g.avgScore != null && <span className="text-xs text-slate-600">· avg {g.avgScore}</span>}
+              </button>
+            )}
+            {!collapsed.has(g.label) && (
+              <div className="space-y-2 mt-1">
+                {g.items.map((app) => <PendingRow key={app.id} app={app} h={rowHandlers} />)}
               </div>
-              <ScoreBadge score={app.quality_score} fit={app.fit_score} />
-              <PostedBadge postedAt={app.posted_at} />
-            </div>
-            <div className="flex items-center gap-2 shrink-0 ml-4">
-              {app.quality_score == null && (
-                <button
-                  onClick={() => tailor.mutate(app.id)}
-                  disabled={tailoringId === app.id}
-                  title="Generate the tailored Opus résumé for this role"
-                  className="flex items-center gap-1.5 bg-purple-600/20 hover:bg-purple-600/40 border border-purple-500/40 text-purple-300 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-                >
-                  <Sparkles className="w-3.5 h-3.5" /> {tailoringId === app.id ? "Tailoring…" : "Prepare résumé"}
-                </button>
-              )}
-              <button
-                onClick={() => openApply(app)}
-                disabled={!app.ats_url}
-                title={app.ats_url ?? "no application URL"}
-                className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-40"
-              >
-                Open &amp; Apply <ExternalLink className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={() => setReferralApp(app)}
-                title="Find connections + get ready-to-send referral notes"
-                className="flex items-center gap-1.5 bg-amber-600/15 hover:bg-amber-600/30 border border-amber-500/40 text-amber-300 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
-              >
-                <Users className="w-3.5 h-3.5" /> Referral
-              </button>
-              <button
-                onClick={() => setAnswersApp(app)}
-                title="View the saved LLM answers drafted for this role's form questions"
-                className="flex items-center gap-1.5 bg-sky-600/15 hover:bg-sky-600/30 border border-sky-500/40 text-sky-300 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
-              >
-                <MessageSquareText className="w-3.5 h-3.5" /> Answers
-              </button>
-              <button
-                onClick={() => setSelectedId(app.id)}
-                className="flex items-center gap-1.5 bg-slate-700/40 hover:bg-slate-700 border border-slate-600 text-slate-300 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
-              >
-                <Eye className="w-3.5 h-3.5" /> Proof
-              </button>
-              <button
-                disabled={busyId === app.id}
-                onClick={() => onApplied(app.id)}
-                className="flex items-center gap-1.5 bg-green-600/20 hover:bg-green-600/40 border border-green-500/40 text-green-400 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-              >
-                <Check className="w-3.5 h-3.5" /> {busyId === app.id ? "…" : "Applied"}
-              </button>
-              <button
-                disabled={busyId === app.id}
-                onClick={() => onSkip(app.id)}
-                className="flex items-center gap-1.5 bg-red-600/10 hover:bg-red-600/30 border border-red-500/40 text-red-400 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
-              >
-                <X className="w-3.5 h-3.5" /> Skip
-              </button>
-            </div>
+            )}
           </div>
         ))}
 
@@ -199,10 +272,15 @@ export default function ApprovalsPage() {
             ))}
           </div>
         )}
-        {!pendingLoading && !pending?.length && (
+        {!pendingLoading && !all.length && (
           <div className="text-center py-12 text-slate-600 bg-slate-800/30 border border-slate-800 rounded-xl">
             <div className="text-3xl mb-2">✅</div>
             <p className="text-sm">Nothing waiting for approval.</p>
+          </div>
+        )}
+        {!pendingLoading && !!all.length && !filtered.length && (
+          <div className="text-center py-10 text-slate-600 bg-slate-800/30 border border-slate-800 rounded-xl">
+            <p className="text-sm">No roles match these filters.</p>
           </div>
         )}
       </div>
@@ -240,30 +318,107 @@ export default function ApprovalsPage() {
         <ProofModal
           appId={selectedId}
           onClose={() => setSelectedId(null)}
-          onDecide={(action, reason) => {
-            decide.mutate({ id: selectedId, action, reason });
-            setSelectedId(null);
-          }}
+          onDecide={(action, reason) => { decide.mutate({ id: selectedId, action, reason }); setSelectedId(null); }}
         />
       )}
-
       {referralApp && (
-        <ReferralModal
-          appId={referralApp.id}
-          company={referralApp.company_name || ""}
-          role={referralApp.role_title || ""}
-          onClose={() => setReferralApp(null)}
-        />
+        <ReferralModal appId={referralApp.id} company={referralApp.company_name || ""} role={referralApp.role_title || ""} onClose={() => setReferralApp(null)} />
       )}
-
       {answersApp && (
-        <FormAnswersModal
-          appId={answersApp.id}
-          company={answersApp.company_name || ""}
-          role={answersApp.role_title || ""}
-          onClose={() => setAnswersApp(null)}
-        />
+        <FormAnswersModal appId={answersApp.id} company={answersApp.company_name || ""} role={answersApp.role_title || ""} onClose={() => setAnswersApp(null)} />
       )}
+    </div>
+  );
+}
+
+interface RowHandlers {
+  tailor: { mutate: (id: string) => void };
+  tailoringId: string | null | undefined;
+  openApply: (app: Application) => void;
+  onApplied: (id: string) => void;
+  onSkip: (id: string) => void;
+  busyId: string | null | undefined;
+  setReferralApp: (a: Application) => void;
+  setAnswersApp: (a: Application) => void;
+  setSelectedId: (id: string) => void;
+}
+
+function PendingRow({ app, h }: { app: Application; h: RowHandlers }) {
+  return (
+    <div className="bg-slate-800/50 border border-slate-700 rounded-xl px-5 py-4 flex items-center justify-between hover:bg-slate-700/30 transition-colors">
+      <div className="flex items-center gap-4 min-w-0">
+        <div className="min-w-0">
+          <div className="text-sm font-semibold text-slate-100 truncate">{app.company_name}</div>
+          <div className="text-xs text-slate-400 truncate mt-0.5">{app.role_title}</div>
+          {app.location && (
+            <div className="text-[11px] text-slate-500 truncate mt-0.5">
+              📍 {app.location}
+              {app.multi_location && (
+                <span className="ml-1 text-amber-400" title="Offered in the US and abroad — apply to the US office">
+                  · multi-location, apply to US office
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+        <ScoreBadge score={app.quality_score} fit={app.fit_score} />
+        <PostedBadge postedAt={app.posted_at} />
+        <AtsBadge url={app.ats_url} />
+      </div>
+      <div className="flex items-center gap-2 shrink-0 ml-4">
+        {app.quality_score == null && (
+          <button
+            onClick={() => h.tailor.mutate(app.id)}
+            disabled={h.tailoringId === app.id}
+            title="Generate the tailored Opus résumé for this role"
+            className="flex items-center gap-1.5 bg-purple-600/20 hover:bg-purple-600/40 border border-purple-500/40 text-purple-300 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+          >
+            <Sparkles className="w-3.5 h-3.5" /> {h.tailoringId === app.id ? "Tailoring…" : "Prepare résumé"}
+          </button>
+        )}
+        <button
+          onClick={() => h.openApply(app)}
+          disabled={!app.ats_url}
+          title={app.ats_url ?? "no application URL"}
+          className="flex items-center gap-1.5 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors disabled:opacity-40"
+        >
+          Open &amp; Apply <ExternalLink className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={() => h.setReferralApp(app)}
+          title="Find connections + get ready-to-send referral notes"
+          className="flex items-center gap-1.5 bg-amber-600/15 hover:bg-amber-600/30 border border-amber-500/40 text-amber-300 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+        >
+          <Users className="w-3.5 h-3.5" /> Referral
+        </button>
+        <button
+          onClick={() => h.setAnswersApp(app)}
+          title="View the saved LLM answers drafted for this role's form questions"
+          className="flex items-center gap-1.5 bg-sky-600/15 hover:bg-sky-600/30 border border-sky-500/40 text-sky-300 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+        >
+          <MessageSquareText className="w-3.5 h-3.5" /> Answers
+        </button>
+        <button
+          onClick={() => h.setSelectedId(app.id)}
+          className="flex items-center gap-1.5 bg-slate-700/40 hover:bg-slate-700 border border-slate-600 text-slate-300 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
+        >
+          <Eye className="w-3.5 h-3.5" /> Proof
+        </button>
+        <button
+          disabled={h.busyId === app.id}
+          onClick={() => h.onApplied(app.id)}
+          className="flex items-center gap-1.5 bg-green-600/20 hover:bg-green-600/40 border border-green-500/40 text-green-400 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+        >
+          <Check className="w-3.5 h-3.5" /> {h.busyId === app.id ? "…" : "Applied"}
+        </button>
+        <button
+          disabled={h.busyId === app.id}
+          onClick={() => h.onSkip(app.id)}
+          className="flex items-center gap-1.5 bg-red-600/10 hover:bg-red-600/30 border border-red-500/40 text-red-400 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors disabled:opacity-50"
+        >
+          <X className="w-3.5 h-3.5" /> Skip
+        </button>
+      </div>
     </div>
   );
 }
@@ -285,27 +440,19 @@ function ReadonlyRow({ app, onProof, onReferral, onAnswers, tone }: { app: Appli
       </div>
       <div className="flex items-center gap-2 shrink-0 ml-4">
         {onAnswers && (
-          <button
-            onClick={onAnswers}
-            title="View the saved LLM answers drafted for this role's form questions"
-            className="flex items-center gap-1.5 bg-sky-600/15 hover:bg-sky-600/30 border border-sky-500/40 text-sky-300 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
-          >
+          <button onClick={onAnswers} title="View the saved LLM answers drafted for this role's form questions"
+            className="flex items-center gap-1.5 bg-sky-600/15 hover:bg-sky-600/30 border border-sky-500/40 text-sky-300 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors">
             <MessageSquareText className="w-3.5 h-3.5" /> Answers
           </button>
         )}
         {onReferral && (
-          <button
-            onClick={onReferral}
-            title="Get ready-to-send referral notes + find connections — the biggest callback lever after applying"
-            className="flex items-center gap-1.5 bg-amber-600/15 hover:bg-amber-600/30 border border-amber-500/40 text-amber-300 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
-          >
+          <button onClick={onReferral} title="Get ready-to-send referral notes + find connections — the biggest callback lever after applying"
+            className="flex items-center gap-1.5 bg-amber-600/15 hover:bg-amber-600/30 border border-amber-500/40 text-amber-300 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors">
             <Users className="w-3.5 h-3.5" /> Referral
           </button>
         )}
-        <button
-          onClick={onProof}
-          className="flex items-center gap-2 bg-blue-600/20 hover:bg-blue-600/40 border border-blue-500/40 text-blue-400 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors"
-        >
+        <button onClick={onProof}
+          className="flex items-center gap-2 bg-blue-600/20 hover:bg-blue-600/40 border border-blue-500/40 text-blue-400 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors">
           <Eye className="w-3.5 h-3.5" /> View Proof
         </button>
       </div>
