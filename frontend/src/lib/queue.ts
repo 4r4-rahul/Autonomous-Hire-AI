@@ -24,7 +24,6 @@ export const SORT_OPTIONS: { key: SortKey; label: string; hint: string }[] = [
 export const GROUP_OPTIONS: { key: GroupKey; label: string }[] = [
   { key: "none",      label: "No grouping" },
   { key: "company",   label: "By company" },
-  { key: "ats",       label: "By ATS" },
   { key: "freshness", label: "By freshness" },
 ];
 
