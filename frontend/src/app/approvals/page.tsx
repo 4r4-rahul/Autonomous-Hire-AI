@@ -115,6 +115,26 @@ export default function ApprovalsPage() {
   };
   const busyId = decide.isPending ? decide.variables?.id : null;
 
+  const [notice, setNotice] = useState<string | null>(null);
+  const PX = /teksystems\.com/i; // PerimeterX — 403s normal tabs, needs the incognito flow; skip in bulk
+  const openableOf = (items: Application[]) => items.filter((a) => a.ats_url && !PX.test(a.ats_url || ""));
+  const OPEN_CAP = 10;
+  // Batch-open a group's apply pages as tabs → then the user clicks the extension's "Fill ALL".
+  const openAll = (items: Application[]) => {
+    const openable = openableOf(items);
+    const skippedPX = items.length - openable.length;
+    const batch = openable.slice(0, OPEN_CAP);
+    if (!batch.length) { setNotice("Nothing to bulk-open here (no direct apply URLs, or all need the incognito flow)."); return; }
+    if (batch.length > 6 && !window.confirm(`Open ${batch.length} application tabs? Then click the extension's “Fill ALL”.`)) return;
+    let blocked = 0;
+    for (const a of batch) { if (!window.open(a.ats_url as string, "_blank", "noopener")) blocked++; }
+    const parts = [`Opened ${batch.length - blocked} tab${batch.length - blocked === 1 ? "" : "s"} — now click the extension's “Fill ALL”.`];
+    if (blocked) parts.push(`${blocked} blocked by the pop-up blocker — allow pop-ups for this site, then retry.`);
+    if (openable.length > OPEN_CAP) parts.push(`(first ${OPEN_CAP} of ${openable.length}; repeat for the rest.)`);
+    if (skippedPX) parts.push(`${skippedPX} skipped — PerimeterX; use “Reopen in incognito”.`);
+    setNotice(parts.join(" "));
+  };
+
   // ── Derived view: filter → sort → group ────────────────────────────────────
   const all = useMemo(() => pending ?? [], [pending]);
   const filtered = useMemo(
@@ -150,6 +170,12 @@ export default function ApprovalsPage() {
         <div className="mb-4 flex items-center justify-between bg-red-600/15 border border-red-500/40 text-red-300 text-sm px-4 py-2.5 rounded-lg">
           <span>{actionError}</span>
           <button onClick={() => setActionError(null)} className="text-red-400 hover:text-red-200">✕</button>
+        </div>
+      )}
+      {notice && (
+        <div className="mb-4 flex items-center justify-between bg-blue-600/15 border border-blue-500/40 text-blue-200 text-sm px-4 py-2.5 rounded-lg">
+          <span>{notice}</span>
+          <button onClick={() => setNotice(null)} className="text-blue-300 hover:text-blue-100">✕</button>
         </div>
       )}
 
@@ -243,19 +269,32 @@ export default function ApprovalsPage() {
 
       {/* ── Awaiting approval ─────────────────────────────────────────── */}
       <div className="space-y-2 mb-8">
-        {groups.map((g) => (
+        {groups.map((g) => {
+          const openableCount = openableOf(g.items).length;
+          return (
           <div key={g.label || "__all"} className={groupBy !== "none" ? "mb-3" : ""}>
             {groupBy !== "none" && (
-              <button
-                onClick={() => toggleGroup(g.label)}
-                className="w-full flex items-center gap-2 text-left px-2 py-2 sticky top-[60px] z-10 bg-slate-900/70 backdrop-blur rounded-md hover:bg-slate-800/50 transition-colors"
-              >
-                <ChevronRight className={`w-4 h-4 text-slate-500 transition-transform ${collapsed.has(g.label) ? "" : "rotate-90"}`} />
-                {groupBy === "company" && <Building2 className="w-3.5 h-3.5 text-slate-500" />}
-                <span className="text-sm font-semibold text-slate-200">{g.label || "All"}</span>
-                <span className="text-xs text-slate-500">· {g.items.length}</span>
-                {g.avgScore != null && <span className="text-xs text-slate-600">· avg {g.avgScore}</span>}
-              </button>
+              <div className="flex items-center gap-2 px-2 py-2 sticky top-[60px] z-10 bg-slate-900/70 backdrop-blur rounded-md">
+                <button
+                  onClick={() => toggleGroup(g.label)}
+                  className="flex items-center gap-2 flex-1 min-w-0 text-left hover:opacity-80 transition-opacity"
+                >
+                  <ChevronRight className={`w-4 h-4 text-slate-500 transition-transform shrink-0 ${collapsed.has(g.label) ? "" : "rotate-90"}`} />
+                  {groupBy === "company" && <Building2 className="w-3.5 h-3.5 text-slate-500 shrink-0" />}
+                  <span className="text-sm font-semibold text-slate-200 truncate">{g.label || "All"}</span>
+                  <span className="text-xs text-slate-500 shrink-0">· {g.items.length}</span>
+                  {g.avgScore != null && <span className="text-xs text-slate-600 shrink-0">· avg {g.avgScore}</span>}
+                </button>
+                {openableCount > 1 && (
+                  <button
+                    onClick={() => openAll(g.items)}
+                    title="Open these application pages in tabs, then click the extension's “Fill ALL”"
+                    className="flex items-center gap-1.5 bg-blue-600/20 hover:bg-blue-600/40 border border-blue-500/40 text-blue-300 text-xs font-medium px-2.5 py-1 rounded-lg transition-colors shrink-0"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" /> Open all ({Math.min(openableCount, OPEN_CAP)})
+                  </button>
+                )}
+              </div>
             )}
             {!collapsed.has(g.label) && (
               <div className="space-y-2 mt-1">
@@ -263,7 +302,8 @@ export default function ApprovalsPage() {
               </div>
             )}
           </div>
-        ))}
+          );
+        })}
 
         {pendingLoading && !pending && (
           <div className="space-y-2">
