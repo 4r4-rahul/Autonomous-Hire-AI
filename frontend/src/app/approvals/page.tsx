@@ -122,15 +122,27 @@ export default function ApprovalsPage() {
   const PX = /teksystems\.com/i; // PerimeterX — 403s normal tabs, needs the incognito flow; skip in bulk
   const openableOf = (items: Application[]) => items.filter((a) => a.ats_url && !PX.test(a.ats_url || ""));
   const OPEN_CAP = 10;
-  // Batch-open a group's apply pages as tabs → then the user clicks the extension's "Fill ALL".
-  const openAll = (items: Application[]) => {
+  // Open a group's apply pages as tabs — auto-preparing any un-tailored résumés FIRST so the résumé
+  // attaches instantly per tab (no on-demand tailoring wait) → then click the extension's "Fill ALL".
+  const openAll = async (items: Application[]) => {
     const openable = openableOf(items);
     const skippedPX = items.length - openable.length;
     const batch = openable.slice(0, OPEN_CAP);
     if (!batch.length) { setNotice("Nothing to bulk-open here (no direct apply URLs, or all need the incognito flow)."); return; }
-    if (batch.length > 6 && !window.confirm(`Open ${batch.length} application tabs? Then click the extension's “Fill ALL”.`)) return;
+    const unprep = batch.filter((a) => a.quality_score == null);
     const tail = (openable.length > OPEN_CAP ? ` (first ${OPEN_CAP} of ${openable.length}; repeat for the rest.)` : "")
       + (skippedPX ? ` ${skippedPX} skipped — PerimeterX; use “Reopen in incognito”.` : "");
+    // One confirm covering the résumé-prep cost (if any) + the tab count.
+    const msg = unprep.length
+      ? `Prepare ${unprep.length} résumé${unprep.length === 1 ? "" : "s"} (~$0.11 each, Opus) so they attach instantly, then open ${batch.length} tab${batch.length === 1 ? "" : "s"}?`
+      : (batch.length > 6 ? `Open ${batch.length} application tabs? Then click the extension's “Fill ALL”.` : "");
+    if (msg && !window.confirm(msg)) return;
+    // Auto-prepare the un-tailored ones FIRST, in parallel, so /resume is instant when each tab fills.
+    if (unprep.length) {
+      setNotice(`Preparing ${unprep.length} résumé${unprep.length === 1 ? "" : "s"} (~30s each)… tabs open when ready.`);
+      await Promise.allSettled(unprep.map((a) => api.tailorApp(a.id)));
+      qc.invalidateQueries({ queryKey: PENDING_KEY });
+    }
     // Prefer the EXTENSION to open tabs (chrome.tabs.create — no pop-up blocker). The bridge content
     // script marks the page with data-ah-ext when the extension is installed.
     if (typeof document !== "undefined" && document.documentElement.getAttribute("data-ah-ext") === "1") {

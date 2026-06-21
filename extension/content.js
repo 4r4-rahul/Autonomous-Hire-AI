@@ -699,6 +699,8 @@
     const resumeCandidates = fileInputs.filter((el) => el !== coverInput && !looksCover(el));
     const resumeInput = resumeCandidates.find(looksResume) || resumeCandidates.find(acceptsDoc);
     if (resumeInput && !(resumeInput.files && resumeInput.files.length)) {
+      const _rb = document.getElementById("__ah_badge");
+      if (_rb) _rb.textContent = "📎 AutonomousHire: attaching résumé…";
       // Use the fetch we started at the top of the fill (parallel with form-fill) — already done by now.
       let r = await _resumeEarly;
       // Tailor-on-demand: opening this form told the backend to start tailoring (data.tailoring).
