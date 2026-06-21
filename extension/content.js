@@ -29,6 +29,13 @@
     }
   } catch (_) {}
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  // Kick off the résumé fetch NOW, in parallel with scraping + form-fill, so the slowest attach step
+  // (and any on-demand tailoring it triggers) overlaps everything else instead of running after it.
+  // The attach block below awaits this instead of starting a fresh fetch.
+  const _resumeEarly = (async () => {
+    try { return await chrome.runtime.sendMessage({ type: "resume", url: location.href, referrer: document.referrer }); }
+    catch (e) { return null; }
+  })();
   const clean = (s) => (s || "").replace(/\s+/g, " ").replace(/\*+/g, "").trim();
   const visible = (el) => {
     const r = el.getBoundingClientRect();
@@ -692,9 +699,8 @@
     const resumeCandidates = fileInputs.filter((el) => el !== coverInput && !looksCover(el));
     const resumeInput = resumeCandidates.find(looksResume) || resumeCandidates.find(acceptsDoc);
     if (resumeInput && !(resumeInput.files && resumeInput.files.length)) {
-      let r = await chrome.runtime.sendMessage({
-        type: "resume", url: location.href, referrer: document.referrer,
-      });
+      // Use the fetch we started at the top of the fill (parallel with form-fill) — already done by now.
+      let r = await _resumeEarly;
       // Tailor-on-demand: opening this form told the backend to start tailoring (data.tailoring).
       // The résumé isn't ready instantly (~20-30s of Opus) — poll until it lands, then attach.
       if ((!r || !r.ok) && data.tailoring) {
