@@ -271,7 +271,14 @@ def migrate(quiet: bool = False) -> dict:
                         confirmation_url     = app_raw.get("confirmation_url"),
                         rejection_reason     = app_raw.get("rejection_reason"),
                         submitted_at         = _parse_dt(app_raw.get("submitted_at")),
-                        created_at           = _parse_dt(app_raw.get("submitted_at")) or datetime.now(timezone.utc),
+                        # TRUE creation time (when the app entered the queue) — was wrongly set to
+                        # submitted_at/now, which made created_at the SYNC time for pending apps and
+                        # broke "added X ago" sorting. Prefer the JSON created_at, then the job's
+                        # discovered_at, then submitted_at, then now.
+                        created_at           = (_parse_dt(app_raw.get("created_at"))
+                                                or _parse_dt(app_raw.get("discovered_at"))
+                                                or _parse_dt(app_raw.get("submitted_at"))
+                                                or datetime.now(timezone.utc)),
                     ))
                     apps_inserted += 1
 

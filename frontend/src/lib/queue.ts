@@ -51,6 +51,38 @@ export function daysOld(postedAt: string | null | undefined): number | null {
   return Math.max(0, Math.floor((Date.now() - t) / 86_400_000));
 }
 
+/** Minutes since the app entered the queue (created_at), with second precision. null if unknown. */
+export function minutesSince(iso: string | null | undefined): number | null {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return null;
+  return Math.max(0, (Date.now() - t) / 60_000);
+}
+
+// "Added within" windows (minutes) for catching freshly-discovered roles fast.
+export const ADDED_WINDOWS: { key: string; label: string; minutes: number }[] = [
+  { key: "5m",  label: "5 min",  minutes: 5 },
+  { key: "15m", label: "15 min", minutes: 15 },
+  { key: "30m", label: "30 min", minutes: 30 },
+  { key: "1h",  label: "1 hour", minutes: 60 },
+  { key: "2h",  label: "2 hours", minutes: 120 },
+  { key: "3h",  label: "3 hours", minutes: 180 },
+  { key: "4h",  label: "4 hours", minutes: 240 },
+  { key: "5h",  label: "5 hours", minutes: 300 },
+  { key: "12h", label: "12 hours", minutes: 720 },
+  { key: "24h", label: "24 hours", minutes: 1440 },
+];
+
+/** Compact "added 4m ago" / "added 2h ago" / "added 3d ago" from created_at. */
+export function addedAgo(iso: string | null | undefined): string | null {
+  const m = minutesSince(iso);
+  if (m === null) return null;
+  if (m < 1) return "just now";
+  if (m < 60) return `${Math.floor(m)}m ago`;
+  if (m < 1440) return `${Math.floor(m / 60)}h ago`;
+  return `${Math.floor(m / 1440)}d ago`;
+}
+
 export function freshnessBucket(d: number | null): string {
   if (d === null) return "Unknown date";
   if (d === 0) return "Today";
@@ -84,7 +116,8 @@ export function sortApps(apps: Application[], key: SortKey): Application[] {
     fresh:       (a, b) => (daysOld(a.posted_at) ?? 1e9) - (daysOld(b.posted_at) ?? 1e9) || tie(a, b),
     fit:         (a, b) => scoreOf(b) - scoreOf(a) || tie(a, b),
     company:     (a, b) => (a.company_name || "").localeCompare(b.company_name || "") || tie(a, b),
-    added:       (a, b) => (b.updated_at || "").localeCompare(a.updated_at || "") || tie(a, b),
+    // "Recently added" = when it ENTERED the queue (created_at), not last-touched (updated_at).
+    added:       (a, b) => ((b.created_at || b.updated_at) || "").localeCompare((a.created_at || a.updated_at) || "") || tie(a, b),
   };
   return [...apps].sort(cmp[key]);
 }
@@ -94,6 +127,7 @@ export interface QueueFilters {
   freshOnly: boolean;     // posted within 7 days
   preparedOnly: boolean;  // résumé already tailored
   ats: string;            // "" = any, else a specific ATS label
+  addedWithinMin: number; // 0 = any; else only apps that entered the queue within N minutes
 }
 
 export function filterApps(apps: Application[], f: QueueFilters): Application[] {
@@ -103,6 +137,7 @@ export function filterApps(apps: Application[], f: QueueFilters): Application[] 
     if (f.freshOnly) { const d = daysOld(a.posted_at); if (d === null || d > 7) return false; }
     if (f.preparedOnly && !isPrepared(a)) return false;
     if (f.ats && atsOf(a.ats_url) !== f.ats) return false;
+    if (f.addedWithinMin > 0) { const m = minutesSince(a.created_at); if (m === null || m > f.addedWithinMin) return false; }
     return true;
   });
 }
