@@ -6,6 +6,13 @@
   "permissions": ["activeTab", "scripting", "tabs", "storage"],
   "host_permissions": ["http://localhost:8000/*", "<all_urls>"],
   "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["http://localhost/*", "http://127.0.0.1/*"],
+      "js": ["dashboard_bridge.js"],
+      "run_at": "document_idle"
+    }
+  ],
   "action": {
     "default_popup": "popup.html",
     "default_title": "AutonomousHire Autofill"

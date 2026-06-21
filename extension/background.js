@@ -77,6 +77,28 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     return true;
   }
 
+  if (msg && msg.type === "open_tabs") {
+    // Open a batch of apply URLs as background tabs (no pop-up blocker, unlike the page's
+    // window.open). Staggered ~280ms so opening many GREENHOUSE tabs doesn't trip its burst
+    // rate-limit (the 406). Arms them so the popup's "Fill ALL" fills each.
+    (async () => {
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const ids = [];
+      for (const url of (msg.urls || []).slice(0, 20)) {
+        try { const t = await chrome.tabs.create({ url, active: false }); if (t && t.id) ids.push(t.id); }
+        catch (e) {}
+        await sleep(280);
+      }
+      if (msg.arm !== false && ids.length) {
+        const a = await _getArmed();
+        ids.forEach((id) => a.add(id));
+        await _setArmed(a);
+      }
+      sendResponse({ ok: true, opened: ids.length });
+    })();
+    return true;
+  }
+
   if (msg && msg.type === "open_incognito") {
     // Reopen a URL in an INCOGNITO window — a fresh session clears cookie/fingerprint-based bot
     // blocks (PerimeterX on TEKsystems 403s a normal tab but lets an incognito one through). Reuse
