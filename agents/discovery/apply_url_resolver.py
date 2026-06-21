@@ -213,11 +213,18 @@ async def _fetch_company_postings(company: str) -> list | None:
         # (job-boards.greenhouse.io/{slug}/jobs/{id}) 302-REDIRECTS to the company's branded careers
         # SPA for many employers (e.g. Stripe → stripe.com/jobs/search?gh_jid=…, a LISTING, not the
         # form). The embed endpoint never redirects off-site, so it's the reliable apply target.
+        def _embed_from_url(u):  # canonical job-boards.greenhouse.io/{slug}/jobs/{id} → embed form
+            m = re.search(r"greenhouse\.io/([a-z0-9_.-]+)/jobs/(\d+)", u or "", re.I)
+            return f"https://boards.greenhouse.io/embed/job_app?for={m.group(1)}&token={m.group(2)}" if m else None
         out = []
         for p in (j or {}).get("jobs", []):
             jid = p.get("id")
-            url = (f"https://boards.greenhouse.io/embed/job_app?for={slug}&token={jid}" if slug and jid
-                   else p.get("absolute_url"))
+            # ALWAYS land on the embed form. When slug isn't passed, derive it from the absolute_url
+            # (slug+id are in it) instead of falling back to the canonical URL, which 302s to a branded
+            # SPA / 406s — the leak that put 169 canonical URLs in the queue.
+            url = ((f"https://boards.greenhouse.io/embed/job_app?for={slug}&token={jid}" if slug and jid else None)
+                   or _embed_from_url(p.get("absolute_url"))
+                   or p.get("absolute_url"))
             out.append({"ats": "greenhouse", "title": p.get("title"), "url": url,
                         "location": (p.get("location") or {}).get("name", ""),
                         # Use the MORE RECENT of first_published/updated_at: many open Greenhouse reqs
