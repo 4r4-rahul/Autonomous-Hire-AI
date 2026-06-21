@@ -41,6 +41,7 @@ class ApplicationOut(BaseModel):
     pipeline_step: Optional[str]
     submitted_at: Optional[datetime]
     updated_at: datetime
+    created_at: Optional[datetime] = None    # when the app entered the queue ("added X ago" sorting)
     # Denormalized from job
     company_name: Optional[str] = None
     role_title: Optional[str] = None

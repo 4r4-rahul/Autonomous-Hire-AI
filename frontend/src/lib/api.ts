@@ -65,6 +65,7 @@ export interface Application {
   pipeline_step: string | null;
   submitted_at: string | null;
   updated_at: string;
+  created_at: string | null;   // when the app entered the queue ("added X ago")
   company_name: string | null;
   role_title: string | null;
   posted_at: string | null;

@@ -12,7 +12,7 @@ import { ReferralModal } from "@/components/ReferralModal";
 import { FormAnswersModal } from "@/components/FormAnswersModal";
 import { ScoreBadge } from "@/components/ScoreBadge";
 import {
-  SORT_OPTIONS, GROUP_OPTIONS, atsOf, daysOld, scoreOf,
+  SORT_OPTIONS, GROUP_OPTIONS, ADDED_WINDOWS, atsOf, daysOld, scoreOf, addedAgo,
   sortApps, filterApps, groupApps, distinctAts,
   type SortKey, type GroupKey,
 } from "@/lib/queue";
@@ -53,6 +53,7 @@ export default function ApprovalsPage() {
   const [freshOnly, setFreshOnly] = useState(false);
   const [preparedOnly, setPreparedOnly] = useState(false);
   const [hideStale, setHideStale] = useState(false);
+  const [addedWithinMin, setAddedWithinMin] = useState(0); // 0 = any; else minutes-since-added window
   const [atsFilter, setAtsFilter] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [focusedId, setFocusedId] = useState<string | null>(null);
@@ -153,13 +154,13 @@ export default function ApprovalsPage() {
   // ── Derived view: filter → sort → group ────────────────────────────────────
   const all = useMemo(() => pending ?? [], [pending]);
   const filtered = useMemo(() => {
-    let f = filterApps(all, { search, freshOnly, preparedOnly, ats: atsFilter });
+    let f = filterApps(all, { search, freshOnly, preparedOnly, ats: atsFilter, addedWithinMin });
     if (hideStale) f = f.filter((a) => { const d = daysOld(a.posted_at); return d === null || d <= 21; });
     return sortApps(f, sortBy);
-  }, [all, search, freshOnly, preparedOnly, hideStale, atsFilter, sortBy]);
+  }, [all, search, freshOnly, preparedOnly, hideStale, addedWithinMin, atsFilter, sortBy]);
   const groups = useMemo(() => groupApps(filtered, groupBy), [filtered, groupBy]);
   const atsList = useMemo(() => distinctAts(all), [all]);
-  const filtersActive = !!search || freshOnly || preparedOnly || hideStale || !!atsFilter;
+  const filtersActive = !!search || freshOnly || preparedOnly || hideStale || addedWithinMin > 0 || !!atsFilter;
 
   // Follow-up lane: submitted 3–30 days ago — old enough to follow up, not so old it's dead. A short
   // follow-up or (better) a referral here is the highest-leverage post-apply move.
@@ -299,6 +300,19 @@ export default function ApprovalsPage() {
           >
             Hide stale
           </button>
+          <select
+            value={addedWithinMin}
+            onChange={(e) => setAddedWithinMin(Number(e.target.value))}
+            title="Show only roles that entered the queue within this window — catch fresh discoveries fast"
+            className={`text-xs rounded-lg border px-2 py-1.5 focus:outline-none cursor-pointer ${
+              addedWithinMin > 0 ? "bg-green-600/25 border-green-500/50 text-green-300" : "bg-slate-800/60 border-slate-700 text-slate-400"
+            }`}
+          >
+            <option value={0} className="bg-slate-800">Added: any time</option>
+            {ADDED_WINDOWS.map((w) => (
+              <option key={w.key} value={w.minutes} className="bg-slate-800">Added ≤ {w.label}</option>
+            ))}
+          </select>
           {atsList.length > 1 && (
             <select
               value={atsFilter}
@@ -322,7 +336,7 @@ export default function ApprovalsPage() {
             </span>
             {filtersActive && (
               <button
-                onClick={() => { setSearch(""); setFreshOnly(false); setPreparedOnly(false); setHideStale(false); setAtsFilter(""); }}
+                onClick={() => { setSearch(""); setFreshOnly(false); setPreparedOnly(false); setHideStale(false); setAddedWithinMin(0); setAtsFilter(""); }}
                 className="text-slate-500 hover:text-slate-300 underline"
               >
                 clear
@@ -502,6 +516,11 @@ function PendingRow({ app, h, focused }: { app: Application; h: RowHandlers; foc
         </div>
         <ScoreBadge score={app.quality_score} fit={app.fit_score} />
         <PostedBadge postedAt={app.posted_at} />
+        {addedAgo(app.created_at) && (
+          <span className="text-[11px] px-1.5 py-0.5 rounded border border-slate-600/40 bg-slate-700/20 text-slate-500 hidden md:inline-block" title={`Entered your queue ${addedAgo(app.created_at)}`}>
+            added {addedAgo(app.created_at)}
+          </span>
+        )}
         <AtsBadge url={app.ats_url} />
       </div>
       <div className="flex items-center gap-2 shrink-0 ml-4">
