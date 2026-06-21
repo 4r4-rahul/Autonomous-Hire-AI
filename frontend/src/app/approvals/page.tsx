@@ -129,13 +129,21 @@ export default function ApprovalsPage() {
     const batch = openable.slice(0, OPEN_CAP);
     if (!batch.length) { setNotice("Nothing to bulk-open here (no direct apply URLs, or all need the incognito flow)."); return; }
     if (batch.length > 6 && !window.confirm(`Open ${batch.length} application tabs? Then click the extension's “Fill ALL”.`)) return;
+    const tail = (openable.length > OPEN_CAP ? ` (first ${OPEN_CAP} of ${openable.length}; repeat for the rest.)` : "")
+      + (skippedPX ? ` ${skippedPX} skipped — PerimeterX; use “Reopen in incognito”.` : "");
+    // Prefer the EXTENSION to open tabs (chrome.tabs.create — no pop-up blocker). The bridge content
+    // script marks the page with data-ah-ext when the extension is installed.
+    if (typeof document !== "undefined" && document.documentElement.getAttribute("data-ah-ext") === "1") {
+      window.postMessage({ source: "ah-dashboard", type: "open_tabs", urls: batch.map((a) => a.ats_url) }, "*");
+      setNotice(`Opening ${batch.length} tab${batch.length === 1 ? "" : "s"} via the extension — then click its “Fill ALL”.${tail}`);
+      return;
+    }
+    // Fallback (extension not installed): window.open — subject to the pop-up blocker.
     let blocked = 0;
     for (const a of batch) { if (!window.open(a.ats_url as string, "_blank", "noopener")) blocked++; }
     const parts = [`Opened ${batch.length - blocked} tab${batch.length - blocked === 1 ? "" : "s"} — now click the extension's “Fill ALL”.`];
-    if (blocked) parts.push(`${blocked} blocked by the pop-up blocker — allow pop-ups for this site, then retry.`);
-    if (openable.length > OPEN_CAP) parts.push(`(first ${OPEN_CAP} of ${openable.length}; repeat for the rest.)`);
-    if (skippedPX) parts.push(`${skippedPX} skipped — PerimeterX; use “Reopen in incognito”.`);
-    setNotice(parts.join(" "));
+    if (blocked) parts.push(`${blocked} blocked by the pop-up blocker — allow pop-ups for this site (or reload the extension to open tabs directly).`);
+    setNotice(parts.join(" ") + tail);
   };
 
   // Batch-tailor the un-prepared résumés in a group so Open-all → Fill-All has them ready.
