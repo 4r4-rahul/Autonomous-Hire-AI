@@ -3,12 +3,16 @@
 // them, and shows an overlay of what was filled vs. what needs the user. No submission —
 // the user reviews, solves any CAPTCHA, and submits natively.
 (async () => {
-  // Idempotency: a frame can be injected twice (Fill-All direct-inject + the discard re-arm, or a
-  // re-click). Skip if a fill is already running here, or finished < 20s ago — so we never
-  // double-scrape or double-attach the résumé.
-  if (window.__ahRunning) return;
-  if (window.__ahDoneAt && Date.now() - window.__ahDoneAt < 20000) return;
+  // Idempotency — but RECOVERABLE. A frame can be injected twice (Fill-All inject + discard re-arm /
+  // re-click). Skip a run that's genuinely in progress or just finished. CRUCIAL: a background tab
+  // throttles timers to ~1/min, so a fill there can stall for many minutes; the guard must NOT lock
+  // the tab forever — once a run is >40s old (stuck/throttled), a fresh inject (e.g. when you focus
+  // the tab + re-click Fill) SUPERSEDES it and recovers the tab.
+  const _ahNow = Date.now();
+  if (window.__ahRunning && window.__ahRunningSince && (_ahNow - window.__ahRunningSince) < 40000) return;
+  if (window.__ahDoneAt && _ahNow - window.__ahDoneAt < 20000) return;
   window.__ahRunning = true;
+  window.__ahRunningSince = _ahNow;
   const _ahDone = () => { window.__ahRunning = false; window.__ahDoneAt = Date.now(); };
   // Instant proof-of-injection badge: appears the MOMENT this frame is injected (DOM ops aren't
   // throttled in background tabs), so when you switch to a Fill-All'd tab you can SEE it was hit —
