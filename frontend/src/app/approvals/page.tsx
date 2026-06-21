@@ -55,7 +55,7 @@ export default function ApprovalsPage() {
   const [hideStale, setHideStale] = useState(false);
   const [addedWithinMin, setAddedWithinMin] = useState(0); // 0 = any; else minutes-since-added window
   const [atsFilter, setAtsFilter] = useState("");
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(new Set()); // groups default COLLAPSED (folder view)
   const [focusedId, setFocusedId] = useState<string | null>(null);
 
   const qc = useQueryClient();
@@ -202,11 +202,18 @@ export default function ApprovalsPage() {
   }, [filtered, focusedId, modalOpen]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleGroup = (label: string) =>
-    setCollapsed((c) => {
+    setExpanded((c) => {
       const n = new Set(c);
       if (n.has(label)) n.delete(label); else n.add(label);
       return n;
     });
+
+  // Mark every role in a group as Applied (after you've actually submitted them).
+  const appliedAll = (items: Application[], label: string) => {
+    if (!items.length) return;
+    if (!window.confirm(`Mark all ${items.length} role${items.length === 1 ? "" : "s"} at ${label || "this group"} as Applied? Do this only after you've actually submitted them.`)) return;
+    items.forEach((a) => decide.mutate({ id: a.id, action: "approve" }));
+  };
 
   return (
     <div>
@@ -359,21 +366,12 @@ export default function ApprovalsPage() {
                   onClick={() => toggleGroup(g.label)}
                   className="flex items-center gap-2 flex-1 min-w-0 text-left hover:opacity-80 transition-opacity"
                 >
-                  <ChevronRight className={`w-4 h-4 text-slate-500 transition-transform shrink-0 ${collapsed.has(g.label) ? "" : "rotate-90"}`} />
+                  <ChevronRight className={`w-4 h-4 text-slate-500 transition-transform shrink-0 ${expanded.has(g.label) ? "rotate-90" : ""}`} />
                   {groupBy === "company" && <Building2 className="w-3.5 h-3.5 text-slate-500 shrink-0" />}
                   <span className="text-sm font-semibold text-slate-200 truncate">{g.label || "All"}</span>
                   <span className="text-xs text-slate-500 shrink-0">· {g.items.length}</span>
                   {g.avgScore != null && <span className="text-xs text-slate-600 shrink-0">· avg {g.avgScore}</span>}
                 </button>
-                {unprepCount > 0 && (
-                  <button
-                    onClick={() => prepareAll(g.items)}
-                    title="Tailor résumés for the un-prepared roles in this group (Opus, ~$0.11 each)"
-                    className="flex items-center gap-1.5 bg-purple-600/20 hover:bg-purple-600/40 border border-purple-500/40 text-purple-300 text-xs font-medium px-2.5 py-1 rounded-lg transition-colors shrink-0"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" /> Prepare all ({Math.min(unprepCount, PREP_CAP)})
-                  </button>
-                )}
                 {openableCount > 1 && (
                   <button
                     onClick={() => openAll(g.items)}
@@ -383,9 +381,34 @@ export default function ApprovalsPage() {
                     <ExternalLink className="w-3.5 h-3.5" /> Open all ({Math.min(openableCount, OPEN_CAP)})
                   </button>
                 )}
+                {unprepCount > 0 && (
+                  <button
+                    onClick={() => prepareAll(g.items)}
+                    title="Tailor résumés for the un-prepared roles in this group (Opus, ~$0.11 each)"
+                    className="flex items-center gap-1.5 bg-purple-600/20 hover:bg-purple-600/40 border border-purple-500/40 text-purple-300 text-xs font-medium px-2.5 py-1 rounded-lg transition-colors shrink-0"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" /> Prepare all ({Math.min(unprepCount, PREP_CAP)})
+                  </button>
+                )}
+                <button
+                  onClick={() => appliedAll(g.items, g.label)}
+                  title="Mark every role in this group as Applied — only after you've actually submitted them"
+                  className="flex items-center gap-1.5 bg-green-600/20 hover:bg-green-600/40 border border-green-500/40 text-green-400 text-xs font-medium px-2.5 py-1 rounded-lg transition-colors shrink-0"
+                >
+                  <Check className="w-3.5 h-3.5" /> Applied all ({g.items.length})
+                </button>
+                {groupBy === "company" && g.items[0] && (
+                  <button
+                    onClick={() => setReferralApp(g.items[0])}
+                    title={`Find connections + referral notes at ${g.label}`}
+                    className="flex items-center gap-1.5 bg-amber-600/15 hover:bg-amber-600/30 border border-amber-500/40 text-amber-300 text-xs font-medium px-2.5 py-1 rounded-lg transition-colors shrink-0"
+                  >
+                    <Users className="w-3.5 h-3.5" /> Referral
+                  </button>
+                )}
               </div>
             )}
-            {!collapsed.has(g.label) && (
+            {(groupBy === "none" || expanded.has(g.label)) && (
               <div className="space-y-2 mt-1">
                 {g.items.map((app) => <PendingRow key={app.id} app={app} h={rowHandlers} focused={focusedId === app.id} />)}
               </div>
