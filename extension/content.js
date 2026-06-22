@@ -765,6 +765,23 @@
             : "✋ Couldn't auto-attach résumé on this uploader — click 'Upload File' and pick it (opens via 'View attached')";
         resumeViewUrl = "http://localhost:8000/api/v1/autofill/resume?url=" +
           encodeURIComponent(location.href) + "&referrer=" + encodeURIComponent(document.referrer);
+        // Upload-immediately widgets (Kforce) push the file to THEIR server on attach (the progress
+        // bar). Chrome throttles that upload in a BACKGROUND tab → it stalls. If the file is attached
+        // but an upload/progress element is present AND this tab is hidden, tell the user to focus it,
+        // and re-kick the upload (re-fire change) the instant they do — so it finishes at full speed.
+        const _uploadBar = (resumeInput.closest("[class*='upload' i],[class*='field' i],[class*='resume' i]") || document.body)
+          .querySelector("progress, [role='progressbar'], [class*='progress' i], [class*='uploading' i], [class*='spinner' i]");
+        if (hasFile && _uploadBar && document.hidden) {
+          resumeStatus = "📎 Résumé attached — FOCUS this tab to finish the upload (the site uploads it now; that stalls in a background tab).";
+          let _kicked = false;
+          const _onVis = () => {
+            if (document.hidden || _kicked) return;
+            _kicked = true;
+            document.removeEventListener("visibilitychange", _onVis);
+            try { resumeInput.dispatchEvent(new Event("change", { bubbles: true })); } catch (e) {}
+          };
+          document.addEventListener("visibilitychange", _onVis);
+        }
       } else {
         resumeStatus = data.tailoring
           ? "⏳ Résumé still tailoring — wait a few seconds and re-click the extension to attach it"
