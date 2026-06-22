@@ -769,18 +769,38 @@
         // bar). Chrome throttles that upload in a BACKGROUND tab → it stalls. If the file is attached
         // but an upload/progress element is present AND this tab is hidden, tell the user to focus it,
         // and re-kick the upload (re-fire change) the instant they do — so it finishes at full speed.
-        const _uploadBar = (resumeInput.closest("[class*='upload' i],[class*='field' i],[class*='resume' i]") || document.body)
+        const _uploadBox = resumeInput.closest("[class*='upload' i],[class*='field' i],[class*='resume' i]");
+        const _uploadBar = (_uploadBox || document.body)
           .querySelector("progress, [role='progressbar'], [class*='progress' i], [class*='uploading' i], [class*='spinner' i]");
-        if (hasFile && _uploadBar && document.hidden) {
-          resumeStatus = "📎 Résumé attached — FOCUS this tab to finish the upload (the site uploads it now; that stalls in a background tab).";
-          let _kicked = false;
-          const _onVis = () => {
-            if (document.hidden || _kicked) return;
-            _kicked = true;
-            document.removeEventListener("visibilitychange", _onVis);
-            try { resumeInput.dispatchEvent(new Event("change", { bubbles: true })); } catch (e) {}
-          };
-          document.addEventListener("visibilitychange", _onVis);
+        if (hasFile && _uploadBar) {
+          // Upload-immediately widget (Kforce): it pushes the file to THEIR server now, and a
+          // programmatically-attached file often can't complete that upload (browser security +
+          // background throttle). Drop a one-click fallback right by the field — save the EXACT
+          // tailored PDF, then "Choose file" → pick it (a real pick always uploads).
+          try {
+            const _blobUrl = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
+            if (!document.getElementById("__ah_resume_dl")) {
+              const _dl = document.createElement("a");
+              _dl.id = "__ah_resume_dl";
+              _dl.href = _blobUrl;
+              _dl.download = r.filename || "resume.pdf";
+              _dl.textContent = "⬇ Résumé upload stuck? Save it here, then click ‘Choose file’ and pick it";
+              _dl.style.cssText = "display:block;margin-top:8px;padding:6px 10px;background:#1e3a8a;color:#dbeafe;" +
+                "font:12px -apple-system,sans-serif;border-radius:6px;text-decoration:none;width:fit-content;cursor:pointer";
+              (_uploadBox || resumeInput.parentElement || document.body).appendChild(_dl);
+            }
+          } catch (e) {}
+          if (document.hidden) {
+            resumeStatus = "📎 Résumé attached — FOCUS this tab to finish the upload (the site uploads it now; that stalls in a background tab).";
+            let _kicked = false;
+            const _onVis = () => {
+              if (document.hidden || _kicked) return;
+              _kicked = true;
+              document.removeEventListener("visibilitychange", _onVis);
+              try { resumeInput.dispatchEvent(new Event("change", { bubbles: true })); } catch (e) {}
+            };
+            document.addEventListener("visibilitychange", _onVis);
+          }
         }
       } else {
         resumeStatus = data.tailoring
