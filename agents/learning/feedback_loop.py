@@ -123,6 +123,8 @@ async def run(state: JobSearchState) -> JobSearchState:
             "title": title, "role": _role_pattern(title),
             "source": job.get("source") or "?", "ats": ats_by_job.get(jid) or "?",
             "band": _fit_band(fit.get("score")), "outcome": oc,
+            "status": app.get("status"),
+            "at": app.get("interview_at") or app.get("updated_at") or app.get("submitted_at"),
         })
     if ghosted:
         logger.info("learning_ghosting_sweep", marked=ghosted, after_days=_GHOST_DAYS)
@@ -212,6 +214,11 @@ async def run(state: JobSearchState) -> JobSearchState:
                    "has_response_signal": has_signal},
         "by_company": dims["company"], "by_role": dims["role"], "by_fit_band": dims["band"],
         "by_source": dims["source"], "by_ats": dims["ats"], "learnings_written": written,
+        # The actual wins, for the dashboard — first-party interviews/offers, newest first.
+        "interviews": sorted(
+            [{"company": r["company"], "role": r["title"], "status": r["status"], "at": r["at"]}
+             for r in recs if r["outcome"] == "positive"],
+            key=lambda x: x.get("at") or "", reverse=True),
     }
     try:
         _REPORT_JSON.write_text(json.dumps(report, indent=2))
