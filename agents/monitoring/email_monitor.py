@@ -67,6 +67,50 @@ def _company_from_sender(sender: str) -> Optional[str]:
     cand = labels[-2] if len(labels) >= 2 else (labels[0] if labels else "")
     return cand if cand and cand not in _NON_COMPANY_DOMAINS else None
 
+
+# ── Sender purification: real first-party employer responses vs staffing/third-party noise ────────
+# A "Snowflake interview" from steneral.com is a staffing contract role, NOT Snowflake. And your own
+# sent replies (from your inbox address) must never count as employer responses.
+_ATS_SENDER_DOMAINS = ("greenhouse.io", "greenhouse-mail.io", "us.greenhouse-mail.io", "lever.co",
+                       "hire.lever.co", "ashbyhq.com", "myworkdayjobs.com", "myworkday.com",
+                       "icims.com", "smartrecruiters.com", "workable.com", "workablemail.com",
+                       "jobvite.com", "bamboohr.com", "breezy.hr", "eightfold.ai", "gem.com",
+                       "rippling.com", "paradox.ai", "phenompeople.com")
+_STAFFING_SENDER_DOMAINS = ("steneral.com", "mondo.com", "nityo.com", "nityoinfotech.com",
+                            "1pointsys.com", "3pillarglobal.com", "teksystems.com", "kforce.com",
+                            "insightglobal.com", "diversant.com", "apexsystems.com", "collabera.com",
+                            "cybercoders.com", "motionrecruitment.com", "roberthalf.com",
+                            "randstad.com", "experis.com", "judge.com", "syntricate.com")
+_STAFFING_DOMAIN_HINTS = ("staffing", "consult", "recruit", "talent", "infotech", "resourc",
+                          "softwaresol", "itsolution", "globaltech")
+
+
+def _email_domain(sender: str) -> str:
+    m = re.search(r"@([\w.-]+)", sender or "")
+    return (m.group(1).lower() if m else "")
+
+
+def _classify_sender(sender: str, company: Optional[str], own_addr: str = "") -> str:
+    """Return self | first_party | ats | staffing | third_party — so staffing/agency noise and your
+    own sent mail don't count as real employer responses. first_party + ats = REAL."""
+    s = (sender or "").lower()
+    dom = _email_domain(sender)
+    own = (own_addr or "").lower()
+    if own and own in s:
+        return "self"
+    if any(dom == d or dom.endswith("." + d) for d in _STAFFING_SENDER_DOMAINS):
+        return "staffing"
+    if any(dom == d or dom.endswith("." + d) for d in _ATS_SENDER_DOMAINS):
+        return "ats"
+    reg = dom.split(".")[-2] if dom.count(".") >= 1 else dom          # robinhood.com -> robinhood
+    co = re.sub(r"[^a-z0-9]", "", (company or "").lower())
+    if reg and co and (reg in co or co in reg):
+        return "first_party"
+    if any(h in dom for h in _STAFFING_DOMAIN_HINTS):
+        return "staffing"
+    return "third_party"            # claims a company but the domain doesn't match it / isn't an ATS
+
+
 _CATEGORIZE_SYSTEM = """You are an email classifier for a job search pipeline.
 Given an email subject and body, extract:
 - category: one of "interview_invite", "rejection", "offer", "application_received", "info_request", "follow_up_needed", "other"
@@ -421,9 +465,21 @@ async def run(state: JobSearchState) -> JobSearchState:
 
     logger.info("email_monitor_processing", count=len(new_emails))
 
+    # The monitored inbox address — used to drop your OWN sent mail (it isn't an employer response).
+    own_addr = ""
+    try:
+        own_addr = service.users().getProfile(userId="me").execute().get("emailAddress", "")
+    except Exception:
+        pass
+
     llm = get_llm("email_monitor", model="claude-haiku-4-5")
 
     for email in new_emails:
+        # Drop your own sent mail before spending an LLM call — it can't be an employer response.
+        if _classify_sender(email["sender"], None, own_addr) == "self":
+            logger.info("email_skipped_self", gmail_id=email["id"])
+            continue
+
         classification = await _categorize_email(
             llm,
             subject=email["subject"],
@@ -434,6 +490,7 @@ async def run(state: JobSearchState) -> JobSearchState:
         category = classification["category"]
         company_name = classification["company_name"]
         summary = classification["summary"]
+        sender_class = _classify_sender(email["sender"], company_name, own_addr)
 
         event: EmailEvent = {
             "id": str(uuid.uuid4()),
@@ -445,11 +502,16 @@ async def run(state: JobSearchState) -> JobSearchState:
             "company_name": company_name,
             "job_id": None,
             "summary": summary,
+            "sender_class": sender_class,
             "actioned": False,
         }
         updated_state["email_events"].append(event)
 
-        _update_application_status(updated_state, category, company_name, summary)
+        # Only a REAL first-party / company-ATS email updates the application's outcome. A staffing
+        # agency ("Snowflake interview" from steneral.com) or unmatched third party is recorded but
+        # NEVER marks the company's app as interview/rejected — that's the purification.
+        if sender_class in ("first_party", "ats"):
+            _update_application_status(updated_state, category, company_name, summary)
 
         # Auto-learn a per-company application cap from limit/auto-close policy emails (Roblox etc.),
         # regardless of category. Apply a 1-app safety margin (our submission counts undercount the
