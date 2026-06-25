@@ -140,6 +140,7 @@ export interface Insights {
   by_source: Record<string, InsightCell>;
   by_ats: Record<string, InsightCell>;
   learnings_written: string[];
+  interviews?: { company: string; role: string; status: string; at: string | null }[];
 }
 
 export const api = {

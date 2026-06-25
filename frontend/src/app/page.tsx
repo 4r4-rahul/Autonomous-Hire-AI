@@ -18,6 +18,9 @@ function KPI({ label, value, sub, color }: { label: string; value: number | stri
 export default function DashboardPage() {
   const { data: stats }  = useQuery({ queryKey: ["stats"],           queryFn: api.stats,          refetchInterval: 10_000 });
   const { data: status } = useQuery({ queryKey: ["pipeline-status"], queryFn: api.pipelineStatus, refetchInterval: 3_000  });
+  const { data: insights } = useQuery({ queryKey: ["insights"],      queryFn: api.insights,       refetchInterval: 30_000 });
+  const t = insights?.totals;
+  const interviews = insights?.interviews ?? [];
 
   return (
     <div>
@@ -44,6 +47,39 @@ export default function DashboardPage() {
         <KPI label="Pending Review" value={stats?.pending_review ?? "—"}  color="border-yellow-500" />
         <KPI label="Manual Submit"  value={stats?.pending_manual ?? "—"}  color="border-orange-500" />
         <KPI label="Blocked"        value={stats?.blocked ?? "—"}         color="border-red-500"    />
+      </div>
+
+      {/* Outcomes — the results that matter (first-party only, staffing/self filtered out) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <KPI label="Interviews / Offers" value={t?.interviews_or_offers ?? "—"} color="border-emerald-500" sub="real employer responses" />
+        <KPI label="Responses"           value={t?.responded ?? "—"}           color="border-teal-500"    sub="first-party + ATS" />
+        <KPI label="Response Rate"       value={t ? `${(t.response_rate * 100).toFixed(1)}%` : "—"} color="border-cyan-500" />
+        <KPI label="Ghosted"             value={t?.ghosted ?? "—"}             color="border-slate-500"   sub="no reply 21d+" />
+      </div>
+
+      {/* Interviews & offers — the wins, front and center */}
+      <div className="mb-8">
+        <h2 className="text-sm font-semibold text-emerald-300 uppercase tracking-wider mb-3 flex items-center gap-2">
+          🎯 Interviews &amp; Offers {interviews.length ? `(${interviews.length})` : ""}
+        </h2>
+        {interviews.length ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {interviews.map((iv, i) => (
+              <div key={`${iv.company}-${i}`} className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl px-4 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-sm font-semibold text-slate-100 truncate">{iv.company}</div>
+                  <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shrink-0">{iv.status}</span>
+                </div>
+                <div className="text-xs text-slate-400 truncate mt-0.5">{iv.role}</div>
+                {iv.at && <div className="text-[11px] text-slate-500 mt-1">{fmtRelative(iv.at)}</div>}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-sm text-slate-600 bg-slate-800/30 border border-slate-800 rounded-xl px-4 py-6 text-center">
+            No interviews recorded yet — they appear here automatically as real employers respond.
+          </div>
+        )}
       </div>
 
       {/* Pipeline step visualizer */}
