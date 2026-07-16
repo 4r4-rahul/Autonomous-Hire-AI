@@ -1,7 +1,7 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { api } from "@/lib/api";
+import { api, BASE } from "@/lib/api";
 import { fmtDate, STATUS_COLOR, STATUS_LABEL } from "@/lib/utils";
 import { ExternalLink, Search, Eye } from "lucide-react";
 import { ProofModal } from "@/components/ProofModal";
@@ -39,6 +39,15 @@ export default function ApplicationsPage() {
     queryFn: () => api.listApps(params || "limit=200"),
     refetchInterval: 15_000,
   });
+
+  // Companies that have a generated interview-prep brief (from the insights report) — used to show
+  // a "Prep" link on interview rows. Same source the dashboard uses.
+  const { data: insights } = useQuery({ queryKey: ["insights"], queryFn: api.insights, refetchInterval: 30_000 });
+  const prepCompanies = new Set(
+    (insights?.interviews ?? [])
+      .filter((iv) => iv.prep_doc_path)
+      .map((iv) => iv.company.trim().toLowerCase())
+  );
 
   return (
     <div>
@@ -110,6 +119,16 @@ export default function ApplicationsPage() {
                       <span className={`text-xs px-2 py-0.5 rounded-full border ${STATUS_COLOR[app.status] ?? "bg-slate-500/20 text-slate-400 border-slate-500/40"}`}>
                         {STATUS_LABEL[app.status] ?? app.status}
                       </span>
+                      {app.status === "interview" && prepCompanies.has((app.company_name ?? "").trim().toLowerCase()) && (
+                        <a
+                          href={`${BASE}/insights/prep?company=${encodeURIComponent(app.company_name ?? "")}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block mt-1 text-[10px] uppercase tracking-wide text-sky-300 hover:text-sky-200"
+                        >
+                          📋 Prep
+                        </a>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-center"><ScoreBadge score={app.quality_score} /></td>
                     <td className="px-4 py-3">

@@ -157,6 +157,14 @@ def build_digest(write: bool = True) -> dict:
     ev_today = [e for e in events if (e.get("received_at") or "")[:10] == today]
     ev_counts = Counter(e.get("category") for e in ev_today)
 
+    # Prep briefs ready for upcoming interviews (interview_prep writes meetings_scheduled.prep_doc_path).
+    _role_by_co = {(a.get("company_name") or "").strip().lower(): a.get("role_title")
+                   for a in apps if a.get("status") == "interview"}
+    prep_ready = [{"company": m.get("company_name"),
+                   "role": _role_by_co.get((m.get("company_name") or "").strip().lower(), ""),
+                   "prep_doc_path": m.get("prep_doc_path")}
+                  for m in st.get("meetings_scheduled", []) or [] if m.get("prep_doc_path")]
+
     health = system_health(probe_llm=False)  # cheap for the digest
 
     # Referral opportunities — for the freshest queued roles, surface the LinkedIn connections
@@ -197,6 +205,7 @@ def build_digest(write: bool = True) -> dict:
         },
         "response_rate": st.get("response_rate", 0.0),
         "interview_rate": st.get("interview_rate", 0.0),
+        "prep_ready": prep_ready,
         "health": {c["name"]: c["status"] for c in health["checks"]},
         "health_ok": health["ok"],
     }
@@ -237,6 +246,12 @@ def _render_digest(d: dict, health: dict) -> str:
         f"Response rate: {d['response_rate']:.0%}  ·  Interview rate: {d['interview_rate']:.0%}",
         "",
     ]
+    prep = d.get("prep_ready") or []
+    if prep:
+        L += ["## 📋 Interview prep ready"]
+        L += [f"- **{r['company']}**{' — ' + r['role'] if r.get('role') else ''}: `{r['prep_doc_path']}`"
+              for r in prep]
+        L += [""]
     refs = d.get("referrals") or []
     if refs:
         L += ["## 🤝 Referral opportunities (biggest callback lever — ask before applying cold)"]

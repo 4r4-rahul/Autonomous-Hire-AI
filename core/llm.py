@@ -64,7 +64,7 @@ class LLMClient:
         #     and the core discovery loop). Capping these froze the whole pipeline once an Opus-heavy
         #     day hit the limit. Only Opus-tier SPECULATIVE/scheduled work is gated.
         from core import budget_guard
-        _exempt = self._agent in ("on_demand_tailor", "autofill")
+        _exempt = self._agent in ("on_demand_tailor", "autofill", "mock_interviewer")
         _cheap = "haiku" in (self._model or "").lower()
         if not _exempt and not _cheap and budget_guard.over_budget():
             logger.warning("llm_daily_budget_exceeded", agent=self._agent,

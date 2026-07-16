@@ -1,8 +1,16 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { api, BASE } from "@/lib/api";
 import { fmtRelative } from "@/lib/utils";
 import { STEPS } from "@/lib/steps";
+
+// Standalone Live Meeting Assistant (coach window). Deep-linked with ?company= so it auto-loads
+// the prep brief from /insights/prep. Opened as a small window (coach sits beside your call).
+const LMA_URL = process.env.NEXT_PUBLIC_LMA_URL ?? "http://localhost:3100";
+function openCoach(company: string, role: string) {
+  const qs = new URLSearchParams({ company, role, mode: "coach" }).toString();
+  window.open(`${LMA_URL}/?${qs}`, "lma_coach", "width=460,height=820");
+}
 
 function KPI({ label, value, sub, color }: { label: string; value: number | string; sub?: string; color: string }) {
   return (
@@ -71,7 +79,33 @@ export default function DashboardPage() {
                   <span className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shrink-0">{iv.status}</span>
                 </div>
                 <div className="text-xs text-slate-400 truncate mt-0.5">{iv.role}</div>
-                {iv.at && <div className="text-[11px] text-slate-500 mt-1">{fmtRelative(iv.at)}</div>}
+                <div className="flex items-center justify-between gap-2 mt-1">
+                  {iv.at ? <div className="text-[11px] text-slate-500">{fmtRelative(iv.at)}</div> : <span />}
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {iv.prep_doc_path && (
+                      <a
+                        href={`${BASE}/insights/prep?company=${encodeURIComponent(iv.company)}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/40 hover:bg-sky-500/30"
+                      >
+                        📋 Prep
+                      </a>
+                    )}
+                    <button
+                      onClick={() => openCoach(iv.company, iv.role)}
+                      className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-300 border border-violet-500/40 hover:bg-violet-500/30"
+                    >
+                      🎤 Coach
+                    </button>
+                    <a
+                      href={`/mock?company=${encodeURIComponent(iv.company)}&role=${encodeURIComponent(iv.role)}`}
+                      className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30"
+                    >
+                      🎯 Mock
+                    </a>
+                  </div>
+                </div>
               </div>
             ))}
           </div>

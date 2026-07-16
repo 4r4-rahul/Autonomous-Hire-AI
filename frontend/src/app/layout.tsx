@@ -13,8 +13,11 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  // suppressHydrationWarning: the AutonomousHire browser extension injects data-ah-ext="1" onto
+  // <html> before React hydrates; without this the attribute mismatch logs a console error. It is
+  // scoped to <html> only — it does NOT suppress hydration warnings for any child element.
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full dark`}>
+    <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} h-full dark`}>
       <body className="h-full bg-[#0f172a] text-slate-100 antialiased">
         <Providers>
           <div className="flex h-full">
