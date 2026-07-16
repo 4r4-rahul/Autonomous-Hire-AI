@@ -1,4 +1,4 @@
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
+export const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
 
 async function req<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
@@ -140,7 +140,7 @@ export interface Insights {
   by_source: Record<string, InsightCell>;
   by_ats: Record<string, InsightCell>;
   learnings_written: string[];
-  interviews?: { company: string; role: string; status: string; at: string | null }[];
+  interviews?: { company: string; role: string; status: string; at: string | null; prep_doc_path?: string | null }[];
 }
 
 export const api = {
@@ -173,4 +173,6 @@ export const api = {
   getAppProof:     (id: string)      => req<AppProof>(`/applications/${id}/proof`),
   getFormAnswers:  (id: string)      => req<{ count: number; answers: { question: string; answer: string; updated_at: string }[] }>(`/applications/${id}/form-answers`),
   pipelineRuns:    ()                => req<PipelineRun[]>("/pipeline/runs"),
+  mockInterviewer: (body: { company: string; role: string; history: string }) =>
+    req<{ question: string }>("/mock/interviewer", { method: "POST", body: JSON.stringify(body) }),
 };

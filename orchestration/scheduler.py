@@ -174,6 +174,16 @@ async def job_email_monitor() -> None:
     try:
         state = _load_state()
         updated = await run(state)
+        # New interview → generate a prep brief grounded in the experience bank + scope notes,
+        # and wire MeetingScheduled.prep_doc_path. Runs BEFORE the learning loop so this cycle's
+        # insights report can join interviews against the fresh prep records. Idempotent.
+        try:
+            from agents.application.interview_prep import prep_new_interviews
+            n_prep = await prep_new_interviews(updated)
+            if n_prep:
+                logger.info("scheduled_interview_prep_done", generated=n_prep)
+        except Exception as e:
+            logger.warning("scheduled_interview_prep_failed", error=str(e)[:140])
         # Capture → learn: convert outcomes into learnings + insights report.
         try:
             from agents.learning.feedback_loop import run as learn_run

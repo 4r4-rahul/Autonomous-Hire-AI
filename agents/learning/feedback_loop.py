@@ -200,6 +200,12 @@ async def run(state: JobSearchState) -> JobSearchState:
                      f"— DEPRIORITIZE this role type.", ["outcome", "negative", "role"])
 
     # 4) Insights report.
+    # Company → prep-brief path, from the interview-prep records (interview_prep.prep_new_interviews
+    # writes these). Lets the dashboard link "Prep ready" on each interview card.
+    _prep_by_company = {
+        (m.get("company_name") or "").strip().lower(): m.get("prep_doc_path")
+        for m in state.get("meetings_scheduled", []) or [] if m.get("prep_doc_path")
+    }
     band_lines = []
     for band in ("65-69", "70-79", "80-89", "90-100"):
         g = dims["band"].get(band)
@@ -214,9 +220,11 @@ async def run(state: JobSearchState) -> JobSearchState:
                    "has_response_signal": has_signal},
         "by_company": dims["company"], "by_role": dims["role"], "by_fit_band": dims["band"],
         "by_source": dims["source"], "by_ats": dims["ats"], "learnings_written": written,
-        # The actual wins, for the dashboard — first-party interviews/offers, newest first.
+        # The actual wins, for the dashboard — first-party interviews/offers, newest first. Joined
+        # against meetings_scheduled (by company) so the card can link the generated prep brief.
         "interviews": sorted(
-            [{"company": r["company"], "role": r["title"], "status": r["status"], "at": r["at"]}
+            [{"company": r["company"], "role": r["title"], "status": r["status"], "at": r["at"],
+              "prep_doc_path": _prep_by_company.get((r["company"] or "").strip().lower())}
              for r in recs if r["outcome"] == "positive"],
             key=lambda x: x.get("at") or "", reverse=True),
     }

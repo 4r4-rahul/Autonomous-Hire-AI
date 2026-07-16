@@ -14,6 +14,7 @@ from api.applications import router as apps_router
 from api.autofill import router as autofill_router
 from api.insights import router as insights_router
 from api.jobs import router as jobs_router
+from api.mock import router as mock_router
 from api.pipeline import router as pipeline_router
 
 app = FastAPI(
@@ -24,7 +25,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:8501"],
+    allow_origins=["http://localhost:3000", "http://localhost:8501", "http://localhost:3100"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -35,6 +36,7 @@ app.include_router(jobs_router,     prefix="/api/v1")
 app.include_router(apps_router,     prefix="/api/v1")
 app.include_router(insights_router, prefix="/api/v1")
 app.include_router(autofill_router, prefix="/api/v1")
+app.include_router(mock_router,     prefix="/api/v1")
 
 # Serve screenshots so the frontend can display submission evidence
 _SCREENSHOT_DIR = Path(__file__).parent.parent / "data" / "screenshots"
