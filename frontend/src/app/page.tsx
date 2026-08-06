@@ -7,9 +7,15 @@ import { STEPS } from "@/lib/steps";
 // Standalone Live Meeting Assistant (coach window). Deep-linked with ?company= so it auto-loads
 // the prep brief from /insights/prep. Opened as a small window (coach sits beside your call).
 const LMA_URL = process.env.NEXT_PUBLIC_LMA_URL ?? "http://localhost:3100";
-function openCoach(company: string, role: string) {
-  const qs = new URLSearchParams({ company, role, mode: "coach" }).toString();
-  window.open(`${LMA_URL}/?${qs}`, "lma_coach", "width=460,height=820");
+function openCoach(company: string, role: string, round?: string) {
+  const qs = new URLSearchParams({ company, role, mode: "coach", ...(round ? { round } : {}) }).toString();
+  // Interview-sized, resizable window (drag it to a second monitor as a teleprompter). Tall enough for
+  // system-design deep-dives + diagrams without constant scrolling.
+  window.open(
+    `${LMA_URL}/?${qs}`,
+    "lma_coach",
+    "width=720,height=1040,resizable=yes,scrollbars=yes",
+  );
 }
 
 function KPI({ label, value, sub, color }: { label: string; value: number | string; sub?: string; color: string }) {
@@ -81,29 +87,57 @@ export default function DashboardPage() {
                 <div className="text-xs text-slate-400 truncate mt-0.5">{iv.role}</div>
                 <div className="flex items-center justify-between gap-2 mt-1">
                   {iv.at ? <div className="text-[11px] text-slate-500">{fmtRelative(iv.at)}</div> : <span />}
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    {iv.prep_doc_path && (
-                      <a
-                        href={`${BASE}/insights/prep?company=${encodeURIComponent(iv.company)}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/40 hover:bg-sky-500/30"
-                      >
-                        📋 Prep
-                      </a>
-                    )}
-                    <button
-                      onClick={() => openCoach(iv.company, iv.role)}
-                      className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-300 border border-violet-500/40 hover:bg-violet-500/30"
-                    >
-                      🎤 Coach
-                    </button>
+                  {iv.prep_doc_path && (
                     <a
-                      href={`/mock?company=${encodeURIComponent(iv.company)}&role=${encodeURIComponent(iv.role)}`}
-                      className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/40 hover:bg-amber-500/30"
+                      href={`${BASE}/insights/prep?company=${encodeURIComponent(iv.company)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded bg-sky-500/20 text-sky-300 border border-sky-500/40 hover:bg-sky-500/30 shrink-0"
                     >
-                      🎯 Mock
+                      📋 Prep
                     </a>
+                  )}
+                </div>
+
+                {/* Practice tools — grouped: live Coach (drag to a 2nd monitor) vs Mock interviewer */}
+                <div className="mt-2.5 space-y-1.5">
+                  <div className="flex items-start gap-2">
+                    <span className="w-10 shrink-0 pt-1 text-[9px] font-semibold uppercase tracking-wider text-violet-300/70">Coach</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { label: "🎤 General",       on: () => openCoach(iv.company, iv.role) },
+                        { label: "🎥 Deep Dive",     on: () => openCoach(iv.company, iv.role, "deepdive") },
+                        { label: "📐 System Design", on: () => openCoach(iv.company, iv.role, "architecture") },
+                        { label: "🐧 Linux",         on: () => openCoach(iv.company, iv.role, "linux") },
+                      ].map((b) => (
+                        <button
+                          key={b.label}
+                          onClick={b.on}
+                          className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded bg-violet-500/15 text-violet-300 border border-violet-500/30 hover:bg-violet-500/30"
+                        >
+                          {b.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2">
+                    <span className="w-10 shrink-0 pt-1 text-[9px] font-semibold uppercase tracking-wider text-amber-300/70">Mock</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {[
+                        { label: "🎯 Behavioral",    q: "" },
+                        { label: "📐 System Design", q: "&mode=system_design" },
+                        { label: "🐧 Linux",         q: "&mode=linux" },
+                      ].map((b) => (
+                        <a
+                          key={b.label}
+                          href={`/mock?company=${encodeURIComponent(iv.company)}&role=${encodeURIComponent(iv.role)}${b.q}`}
+                          className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded bg-amber-500/15 text-amber-300 border border-amber-500/30 hover:bg-amber-500/30"
+                        >
+                          {b.label}
+                        </a>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>

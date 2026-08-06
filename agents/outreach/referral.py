@@ -207,3 +207,56 @@ def _humanize(t: str) -> str:
                  ("“", '"'), ("”", '"'), ("…", "...")):
         t = t.replace(a, b)
     return re.sub(r"\s+,", ",", re.sub(r" {2,}", " ", t)).strip()
+
+
+async def prepare_referral_targets(limit: int = 5, min_fit: int | None = None) -> dict:
+    """Route HIGH-FIT roles through the referral channel BEFORE they're cold-applied — referrals
+    convert ~10x better than the ATS pile. Finds the top pending_review apps at/above the high-fit
+    bar that don't yet have a kit, drafts one for each, and flags the app `referral_first` so the
+    review queue surfaces the warm-intro path first. Bounded by `limit` (each kit is one Haiku call).
+
+    Kits are drafted OUTSIDE the state lock (slow LLM); only the flag/kit persist happens under the
+    lock, so concurrent writers aren't blocked. Idempotent — apps that already have a kit are skipped.
+    """
+    from agents.discovery.targeting import HIGH_FIT_REFERRAL
+    from core.state_store import mutate_state
+    bar = HIGH_FIT_REFERRAL if min_fit is None else min_fit
+
+    state = json.loads(_STATE.read_text())
+    fits = {f.get("job_id"): (f.get("score") or 0) for f in state.get("fit_scores", [])}
+    cands = []
+    for a in state.get("applications", []):
+        if a.get("status") != "pending_review" or a.get("referral_kit") or a.get("referral_first"):
+            continue
+        fit = fits.get(a.get("job_id"), 0)
+        if fit >= bar:
+            cands.append((fit, a.get("id"), a.get("company_name")))
+    cands.sort(key=lambda x: x[0], reverse=True)
+    targets = cands[:max(0, limit)]
+    if not targets:
+        logger.info("referral_prep_none_eligible", bar=bar)
+        return {"prepared": 0, "bar": bar, "companies": []}
+
+    kits: dict[str, dict] = {}
+    for _fit, aid, co in targets:
+        try:
+            kit = await build_referral_kit(app_id=aid, draft=True)
+            if kit and not kit.get("error"):
+                kits[aid] = kit
+        except Exception as e:
+            logger.warning("referral_prep_kit_failed", app_id=aid, error=str(e)[:90])
+
+    prepared = 0
+    with mutate_state() as st:
+        by_id = {a.get("id"): a for a in st.get("applications", [])}
+        for aid, kit in kits.items():
+            app = by_id.get(aid)
+            if app is None:
+                continue
+            app["referral_kit"] = kit
+            app["referral_first"] = True
+            prepared += 1
+
+    companies = [t[2] for t in targets]
+    logger.info("referral_prep_done", prepared=prepared, bar=bar, companies=companies)
+    return {"prepared": prepared, "bar": bar, "companies": companies}

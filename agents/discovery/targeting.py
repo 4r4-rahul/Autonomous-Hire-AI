@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
@@ -19,6 +20,20 @@ from core.state import JobSearchState, JobListing
 
 _ROOT = Path(__file__).parent.parent.parent
 _SPONSORS_FILE = _ROOT / "data" / "h1b_sponsors.json"
+
+# Apply-selection tuning (env-overridable, same style as auto_apply constants):
+#   MIN_APPLY_FIT   — drop a REAL (record-present) fit below this from the apply ranking. 0 = off.
+#                     Unscored leads keep their neutral prior (scored downstream), so this only
+#                     removes genuinely weak fits — being a "top applicant" means not applying to
+#                     roles we don't fit. Default 55 (below the queue's ~70 cluster; safe).
+#   APPLY_FRESH_DAYS/BOOST — a posting younger than FRESH_DAYS gets its priority multiplied by
+#                     BOOST so the freshest roles are applied EARLIEST (callback odds fall fast
+#                     after ~48h). Default: <2 days → +12%.
+_MIN_APPLY_FIT = int(os.getenv("MIN_APPLY_FIT", "55"))
+_FRESH_DAYS = float(os.getenv("APPLY_FRESH_DAYS", "2"))
+_FRESH_BOOST = float(os.getenv("APPLY_FRESH_BOOST", "1.12"))
+# High-fit bar at/above which a role is worth a REFERRAL before cold-applying (referral > ATS pile).
+HIGH_FIT_REFERRAL = int(os.getenv("REFERRAL_MIN_FIT", "78"))
 
 # Hard knock-outs for a sponsorship-needing candidate (citizen-only / clearance / no-sponsor).
 _BLOCK_PHRASES = [
@@ -126,6 +141,27 @@ def priority(fit_0_100: float, sponsor_score: float, recency_0_1: float) -> floa
     return round(_W_FIT * fit + _W_SPONSOR * sponsor_score + _W_RECENCY * recency_0_1, 4)
 
 
+def age_days(job: JobListing, now: datetime | None = None) -> float | None:
+    """Age of the posting in days from posted_at (fallback discovered_at). None if unknown."""
+    now = now or datetime.now(timezone.utc)
+    ts = job.get("posted_at") or job.get("discovered_at")
+    if not ts:
+        return None
+    try:
+        dt = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return max(0.0, (now - dt).total_seconds() / 86400.0)
+    except Exception:
+        return None
+
+
+def is_fresh(job: JobListing, now: datetime | None = None) -> bool:
+    """True if the posting is younger than APPLY_FRESH_DAYS — apply to these EARLIEST."""
+    a = age_days(job, now)
+    return a is not None and a < _FRESH_DAYS
+
+
 _INSIGHTS_FILE = _ROOT / "data" / "learning_insights.json"
 _RESP_MIN_SAMPLE = 3        # need ≥3 resolved (responded+ghosted) apps before trusting the signal
 _RESP_BASELINE = 0.15       # response rate that maps to a neutral 1.0 multiplier
@@ -166,9 +202,15 @@ def learned_non_sponsors(state: JobSearchState) -> set[str]:
 
 
 def rank_for_application(jobs: list[JobListing], fit_by_id: dict, profile: dict,
-                         state: JobSearchState | None = None) -> list[dict]:
+                         state: JobSearchState | None = None, *,
+                         min_fit: int | None = None) -> list[dict]:
     """Drop hard-blocked jobs; return the rest ordered by priority (best first).
-    Each item: {job, fit, sponsor_label, sponsor_reason, recency, priority}."""
+    Each item: {job, fit, sponsor_label, sponsor_reason, recency, fresh, referral_worthy, priority}.
+
+    min_fit (default _MIN_APPLY_FIT): drop jobs whose REAL fit (a fit_score record exists) is below
+    it — unscored leads keep their neutral prior and survive (scored downstream). Fresh postings
+    (< APPLY_FRESH_DAYS) get a priority boost so we apply to them earliest."""
+    floor = _MIN_APPLY_FIT if min_fit is None else min_fit
     requires = bool(profile.get("work_authorization", {}).get("requires_sponsorship"))
     learned_no = learned_non_sponsors(state) if state else set()
     resp_mult = response_multipliers()          # learned: favor companies that actually respond
@@ -179,17 +221,26 @@ def rank_for_application(jobs: list[JobListing], fit_by_id: dict, profile: dict,
         # Unscored jobs (no fit_score record yet) get a NEUTRAL prior — the apply pipeline
         # scores them downstream. Without this, fit=0 buries unscored known-sponsors below
         # a rare pre-scored staffing firm. A real low score (record present) is respected.
-        fit = fs["score"] if isinstance(fs, dict) and "score" in fs else 60
+        scored = isinstance(fs, dict) and "score" in fs
+        fit = fs["score"] if scored else 60
+        # FIT FLOOR (A1): only drop on a REAL score below the floor — never on the neutral prior.
+        if scored and floor and fit < floor:
+            continue
         label, sscore, reason = sponsorship_signal(
             job.get("company_name", ""), job.get("description", ""), requires, learned_no)
         if label == "blocked":
             continue
         rec = recency_score(job, now)
         rmult = resp_mult.get(_norm(job.get("company_name", "")), 1.0)
+        fresh = is_fresh(job, now)
+        pri = priority(fit, sscore, rec) * rmult
+        if fresh:                                # APPLY-EARLY (A2): freshest roles jump the queue
+            pri *= _FRESH_BOOST
         ranked.append({
             "job": job, "fit": fit, "sponsor_label": label, "sponsor_reason": reason,
-            "recency": rec, "response_mult": rmult,
-            "priority": round(priority(fit, sscore, rec) * rmult, 4),
+            "recency": rec, "response_mult": rmult, "fresh": fresh,
+            "referral_worthy": fit >= HIGH_FIT_REFERRAL,
+            "priority": round(pri, 4),
         })
     ranked.sort(key=lambda r: r["priority"], reverse=True)
     return ranked

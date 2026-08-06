@@ -99,6 +99,12 @@ def auto_submit_gate(app: dict, job: JobListing, fit_score: dict, profile: dict,
     if company_counts.get(co, 0) >= cap:
         reasons.append(f"per-company cap {cap:g} reached for {job.get('company_name')}")
 
+    # 5) Referral-first: a high-fit role flagged for a warm intro should NOT be cold-auto-applied —
+    # a referral converts ~10x the ATS pile, so defer to the human's referral outreach. Cleared once
+    # the user acts (referral_done) so it can never be stuck in limbo forever.
+    if app.get("referral_first") and not app.get("referral_done"):
+        reasons.append("referral-first: warm intro pending (defer cold auto-apply)")
+
     return (len(reasons) == 0, reasons)
 
 

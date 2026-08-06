@@ -270,6 +270,8 @@ def migrate(quiet: bool = False) -> dict:
                         ats_url              = url,
                         confirmation_url     = app_raw.get("confirmation_url"),
                         rejection_reason     = app_raw.get("rejection_reason"),
+                        referral_first       = bool(app_raw.get("referral_first", False)),
+                        referral_done        = bool(app_raw.get("referral_done", False)),
                         submitted_at         = _parse_dt(app_raw.get("submitted_at")),
                         # TRUE creation time (when the app entered the queue) — was wrongly set to
                         # submitted_at/now, which made created_at the SYNC time for pending apps and

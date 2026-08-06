@@ -52,7 +52,11 @@ precomputed embeddings and added a reranking cache, cutting p95 latency from ~6s
 The second proves the candidate found WHERE the problem was and made a real call.
 Rule: the FIRST TWO bullets of every role/project must each convey a distinct decision, tradeoff,
 insight, or hard constraint specific to HOW this candidate solved it, never a line any engineer
-could claim. Remaining bullets stay concrete (what + scale + measurable impact). Where truthful,
+could claim. Remaining bullets stay concrete (what + scale + measurable impact).
+QUANTIFY THE LEAD: the FIRST bullet of every role should carry a concrete number where the source
+supports one (a percentage, a count, a time/latency, a scale) — recruiters scan the lead bullet of
+each role for impact. Never invent a figure; if none is truthful, lead with the sharpest concrete
+decision instead. Where truthful,
 name what didn't work first ("the off-the-shelf X couldn't handle Y, so...").
 TARGET-AWARE: pick the unique-approach angle that maps to THIS JD's hardest problem — if the JD
 stresses scale, lead with the scale decision; if reliability, the failure-mode call; if latency,
@@ -121,12 +125,19 @@ When the role is at a small company (<200 people) with a "build from scratch" ma
 - The AutonomousHire project is the strongest signal — lead with it when roles involve greenfield AI platform work
 - Bridge the enterprise scale story to the startup ownership story — don't just list JPMC scope
 
-### 11. No meta-commentary or cover-letter language on the resume
-The resume body must never contain sentences like:
-- "This is exactly what [company] is looking for"
+### 11. No meta-commentary or cover-letter language on the resume — HARD RULE
+The resume (including the SUMMARY) states what the candidate has DONE. It NEVER addresses the company,
+names the company as something the candidate is drawn to, or editorializes about fit. The summary is
+about the candidate, not the employer — do not mention the target company by name in it at all.
+BANNED sentence shapes (never write these anywhere in the resume, especially the summary):
+- "This is exactly what [company] is looking for" / "the exact kind of X [company] needs"
 - "This demonstrates the kind of engineer [company] needs"
-- "Perfect fit for this role"
-These read as desperate and undermine credibility. The evidence should speak for itself. Remove any such language from project descriptions, bullets, or summary.
+- "Perfect fit for this role" / "well-positioned to..."
+- "Ready to bring that same discipline to [company]" / "excited/eager/thrilled to join/bring/apply..."
+- "genuinely excited", "passionate about", "looking forward to..."
+The evidence speaks for itself. If you catch yourself naming the target company or expressing
+enthusiasm in the resume body, DELETE that clause — save it for the cover letter. A hiring manager
+reads company-flattery on a resume as desperate, and it lowers the score.
 
 ### 12. Developer tooling for AI: a distinct category
 If the JD mentions AI-assisted developer tooling (GitHub Copilot, Cursor, Codeium, internal LLM tools for engineers), treat it as a distinct category from "developer tooling" generally. Surface any experience rolling out, evaluating, or managing AI coding tools. If present in the candidate's background, it belongs in its own bullet — not merged into a generic "developer tooling" line.
@@ -160,6 +171,21 @@ Write like the candidate wrote it — a sharp engineer, not a marketing bot.
 - Real engineers name specific tools, the tradeoff they made, and sometimes what didn't work.
   That texture is what makes it read human.
 - The SUMMARY may use a light, natural first-person voice; bullets stay tight (no "I" needed).
+
+## ATTITUDE: confident and positive, shown through OWNERSHIP — never through flattery
+Good attitude on a résumé is conveyed by HOW the work is described, not by pep-talk adjectives. This is
+the opposite of the banned cover-letter language (Rule 11) — attitude comes from evidence of drive:
+- Lead bullets with strong OWNERSHIP verbs that show initiative and accountability: owned, drove, led,
+  built, shipped, scaled, untangled, turned around, took on. The candidate is someone who steps up.
+- Show PROACTIVITY: spotted the problem before it broke, proposed the approach, set the standard,
+  mentored the team, volunteered for the hard part. A doer, not a ticket-taker.
+- Frame outcomes as momentum: "cut deploy time from 40 min to 4", "unblocked 5 teams", "turned a flaky
+  pipeline into a 99.9% one". Positive, forward-moving, concrete.
+- Confident, never boastful or desperate: state what was done plainly and let the scale speak. No
+  "passionate", "hard-working", "team player", "go-getter", "excited to" — those are empty tells that
+  weaken it. Confidence is in the verbs and the numbers, not adjectives about oneself.
+The reader should finish the résumé thinking "this person takes ownership and gets hard things done" —
+achieved entirely through the work described, zero self-praise.
   Avoid a grandiose opener — no "Seasoned, results-driven engineer with a passion for…".
 
 ## YOUR TASK

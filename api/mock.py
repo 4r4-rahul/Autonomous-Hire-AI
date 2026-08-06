@@ -15,6 +15,8 @@ from pydantic import BaseModel
 from agents.application.interview_context import (
     ANSWER_AS_ME_SYSTEM,
     INTERVIEWER_SYSTEM,
+    LINUX_INTERVIEWER_SYSTEM,
+    SYSTEM_DESIGN_INTERVIEWER_SYSTEM,
     assemble_interview_context,
 )
 from core.logger import get_logger
@@ -28,6 +30,9 @@ class MockRequest(BaseModel):
     role: str = ""
     jd: str = ""
     history: str = ""   # "Interviewer: …\nCandidate: …" transcript so far (capped client-side)
+    mode: str = "behavioral"   # "behavioral" (mixed) | "system_design" (architecture) | "linux" (troubleshooting)
+    fault: str = ""            # linux mode only: the hidden root cause to simulate (steers away from the
+                               # model's cert-fault prior). Picked once per session client-side, sent every turn.
 
 
 class ContextResponse(BaseModel):
@@ -46,14 +51,31 @@ def context(company: str = "", role: str = "", jd: str = "") -> dict:
 async def interviewer(req: MockRequest) -> dict:
     """The interviewer's next turn (one question), grounded in the candidate's full background."""
     ctx = assemble_interview_context(req.company, req.role, req.jd)["context"]
-    system = INTERVIEWER_SYSTEM + "\n\n" + ctx
-    user = (
-        f"CONVERSATION SO FAR:\n{req.history or '(none yet — open the interview)'}\n\n"
-        f"Give your next interviewer turn (one question)."
+    persona = {
+        "system_design": SYSTEM_DESIGN_INTERVIEWER_SYSTEM,
+        "linux": LINUX_INTERVIEWER_SYSTEM,
+    }.get(req.mode, INTERVIEWER_SYSTEM)
+    # Steer the linux sim's hidden fault (the model otherwise always picks the cert/config fault). The
+    # client picks one at random per session and sends it every turn so the fault stays fixed.
+    if req.mode == "linux" and req.fault.strip():
+        persona += (
+            f"\n\nFOR THIS SESSION, use EXACTLY this hidden root cause: {req.fault.strip()}. Do not pick "
+            f"another; keep every command's output consistent with it; never reveal or name it directly — "
+            f"the candidate must diagnose it. Commands that wouldn't expose this fault return healthy output."
+        )
+    system = persona + "\n\n" + ctx
+    # Linux mode plays the terminal too — journalctl/df dumps need more room than a single question.
+    max_tokens = 700 if req.mode == "linux" else 400
+    prompt = (
+        "Give your next turn: if the candidate's last line is a shell command, return the box's terminal "
+        "output for it (raw text, consistent with the hidden fault); otherwise respond as the interviewer."
+        if req.mode == "linux"
+        else "Give your next interviewer turn (one question)."
     )
+    user = f"CONVERSATION SO FAR:\n{req.history or '(none yet — open the interview)'}\n\n{prompt}"
     from core.llm import get_llm
     llm = get_llm("mock_interviewer", model="claude-sonnet-4-6")
-    text = await llm.chat(system=system, messages=[{"role": "user", "content": user}], max_tokens=400)
+    text = await llm.chat(system=system, messages=[{"role": "user", "content": user}], max_tokens=max_tokens)
     return {"question": (text or "").strip()}
 
 

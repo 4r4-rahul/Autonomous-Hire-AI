@@ -361,14 +361,28 @@ async def job_auto_submit() -> None:
         logger.error("scheduled_auto_submit_failed", error=str(e))
 
 
+async def job_referral_prep() -> None:
+    """Route the highest-fit reviewed roles through the REFERRAL channel FIRST — draft a warm-intro
+    kit and flag each app `referral_first` so the review queue surfaces the referral path before a
+    cold apply. Referrals convert ~10x the ATS pile, so the best-fit roles should never go in cold
+    without at least offering the warm path. Bounded to a few cheap Haiku calls per run."""
+    try:
+        from agents.outreach.referral import prepare_referral_targets
+        res = await prepare_referral_targets(limit=5)
+        await _sync_db()
+        logger.info("scheduled_referral_prep_done", **res)
+    except Exception as e:
+        logger.error("scheduled_referral_prep_failed", error=str(e)[:140])
+
+
 # ── Scheduler factory ──────────────────────────────────────────────────────
 
 # Which jobs are LIVE. The LinkedIn apply pipeline (scan → fill → park) plus the
 # capture→learn loop. Recruiter-outreach jobs are SLEPT to keep the focus clear —
 # add "contact_finder"/"outreach_runner" back here to wake them.
 _ACTIVE_JOBS = {"linkedin_health", "linkedin_scanner", "board_scanner", "teksystems_scanner",
-                "kforce_scanner", "insightglobal_scanner", "apply_pipeline", "auto_submit",
-                "email_monitor", "digest"}
+                "kforce_scanner", "insightglobal_scanner", "apply_pipeline", "referral_prep",
+                "auto_submit", "email_monitor", "digest"}
 
 # id → (func, base_interval_seconds, display_name, misfire_grace_time)
 _JOB_SPECS = {
@@ -381,6 +395,7 @@ _JOB_SPECS = {
     "kforce_scanner":  (job_kforce_scan,     21600, "Kforce Scanner (Azure Search API, 6h)",   600),
     "insightglobal_scanner": (job_insight_global_scan, 21600, "Insight Global Scanner (Jibe API, 6h)", 600),
     "apply_pipeline":  (job_apply_pipeline,  3600,  "Apply Pipeline (score+park cheap, 1h)",   600),
+    "referral_prep":   (job_referral_prep,   7200,  "Referral Prep (high-fit warm-intro kits, 2h)", 300),
     "auto_submit":     (job_auto_submit,     43200, "Auto-Submit Safe Apps (opt-in)",         600),
     "email_monitor":   (job_email_monitor,   3600,  "Gmail Email Monitor (1h)",               120),
     "digest":          (job_digest,          86400, "Daily Health + Activity Digest",          600),

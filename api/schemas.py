@@ -39,6 +39,8 @@ class ApplicationOut(BaseModel):
     confirmation_url: Optional[str]
     rejection_reason: Optional[str]
     pipeline_step: Optional[str]
+    referral_first: bool = False      # high-fit role routed to a warm intro before cold-applying (A3)
+    referral_done: bool = False
     submitted_at: Optional[datetime]
     updated_at: datetime
     created_at: Optional[datetime] = None    # when the app entered the queue ("added X ago" sorting)
