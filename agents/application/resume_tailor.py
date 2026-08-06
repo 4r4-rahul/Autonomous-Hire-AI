@@ -601,6 +601,16 @@ _KW_STOP = {"and", "the", "for", "with", "from", "into", "your", "you", "our", "
             "of", "to", "in", "on", "at", "or", "as", "by", "is", "are", "be", "experience",
             "strong", "ability", "knowledge", "understanding", "using", "across", "including"}
 
+# JD marketing/noun-phrase words that must NEVER anchor an injected "skill". These are how a JD
+# describes its product/mission, not skills a candidate has — pasting them into CORE SKILLS
+# ("AI Search", "agent era", "enterprise workflows", "real-time information") reads as blatant
+# keyword-stuffing to a reviewer and undercuts credibility. Any keyword containing one is rejected.
+_KW_MARKETING = {"era", "workflows", "workflow", "information", "systems", "solutions", "native",
+                 "powered", "modern", "seamless", "cutting-edge", "next-gen", "world-class",
+                 "enterprise", "mission", "trusted", "reliable", "scalable", "innovative",
+                 "real-time", "realtime", "search", "layer", "space", "landscape", "ecosystem",
+                 "journey", "capabilities", "experiences", "stack", "products", "tooling"}
+
 
 def _profile_text(profile: dict) -> str:
     """All free-text in the candidate profile, lowercased — the ground truth for what they have."""
@@ -679,10 +689,18 @@ def _inject_missing_keywords(md: str, ats_keywords: list[str], profile: dict, ca
         k = (kw or "").lower().strip()
         if len(k) < 3:
             return False
+        words = re.findall(r"[a-z0-9+#.\-]+", k)
+        # Reject JD marketing/noun-phrases outright — they're the product's mission, not skills.
+        if any(w in _KW_MARKETING for w in words):
+            return False
         if k in ptext:
             return True
         toks = [t for t in re.findall(r"[a-z0-9+#.]+", k) if len(t) > 2 and t not in _KW_STOP]
         if not toks:
+            return False
+        # A multi-word keyword must resolve to a real skill THEME (contain a recognized tech token) —
+        # otherwise it's a JD phrase that merely shares one profile word ("AI Search" → "search").
+        if len(words) > 1 and not _skill_themes(k):
             return False
         hits = sum(1 for t in toks if t in ptext)
         return hits / len(toks) >= 0.8   # nearly every meaningful token is in the profile

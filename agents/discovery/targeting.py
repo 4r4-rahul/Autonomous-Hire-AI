@@ -187,6 +187,56 @@ def response_multipliers() -> dict[str, float]:
     return out
 
 
+# ---------------------------------------------------------------------------
+# Profile-fit: Rahul is a strong backend / data-platform engineer who ships
+# LLM-powered *application* systems (RAG, agents, inference cost/latency). He
+# has NO professional ML-research/modeling track record and NO developer-
+# advocacy/public-speaking footprint. So some AI-titled roles are a structural
+# mismatch no résumé wording fixes. This down-weights those and keeps the
+# applied-AI-SWE / backend / data-platform roles he actually wins on top.
+# Multiplier only (never a hard drop) — mismatches sink but stay visible.
+_FIT_BAD = 0.60      # research/scientist, devrel/SA/forward-deployed — half the JD is off-profile
+_FIT_WEAK = 0.80     # ML-modeling engineer — needs training/modeling depth he can't defend
+_FIT_GOOD = 1.08     # applied-AI/LLM eng + backend/data-platform SWE — his sweet spot
+
+_FIT_RESEARCH = re.compile(
+    r"\b(research scientist|ml scientist|machine learning scientist|applied scientist|"
+    r"research engineer|foundation model|deep learning|nlp scientist|phd)\b", re.I)
+_FIT_DEVREL = re.compile(
+    r"\b(developer advocate|dev\s?rel|developer relations|advocacy|evangelis|"
+    r"forward[- ]deployed|field engineer|solutions? (architect|engineer)|sales engineer)\b", re.I)
+_FIT_HEAVY_ML = re.compile(
+    r"\b(ml engineer|machine learning engineer|mlops engineer|model training|"
+    r"training pipelines|ranking|recommendation|computer vision|nlp engineer|"
+    r"deep learning engineer|research)\b", re.I)
+_FIT_APPLIED = re.compile(
+    r"\b(ai engineer|applied ai|llm|genai|gen ai|generative ai|rag|agent(ic)?|"
+    r"ai[- ]powered|ai platform|ai infrastructure|ai product|ai application)\b", re.I)
+_FIT_SWE = re.compile(
+    r"\b(software engineer|backend|full[- ]?stack|platform engineer|"
+    r"data (engineer|infrastructure|platform)|python engineer|sde|"
+    r"senior engineer|staff engineer|principal engineer)\b", re.I)
+
+
+def profile_fit(role_title: str, jd_text: str = "") -> tuple[float, str]:
+    """(multiplier, reason) for how well a role matches Rahul's real profile.
+    Title-first (titles are the reliable structural signal); JD only nudges a
+    borderline title. Applied-AI-SWE roles win; research/devrel roles sink."""
+    t = role_title or ""
+    blob = (t + " " + (jd_text or ""))[:4000]
+    # Structural mismatches — judged on TITLE (the honest signal of the role's core).
+    if _FIT_RESEARCH.search(t):
+        return _FIT_BAD, "research/scientist — needs ML-research depth he lacks"
+    if _FIT_DEVREL.search(t):
+        return _FIT_BAD, "devrel/SA/forward-deployed — weights public/community work he lacks"
+    if _FIT_HEAVY_ML.search(t):
+        return _FIT_WEAK, "ML-modeling engineer — needs training/modeling he can't defend"
+    # Good fits — applied-AI engineering or core backend/data-platform SWE.
+    if _FIT_APPLIED.search(blob) or _FIT_SWE.search(t):
+        return _FIT_GOOD, "applied-AI / backend-SWE — matches his real profile"
+    return 1.0, "neutral"
+
+
 def learned_non_sponsors(state: JobSearchState) -> set[str]:
     """Companies that rejected us citing sponsorship/visa → treat as non-sponsors."""
     out: set[str] = set()
@@ -233,12 +283,17 @@ def rank_for_application(jobs: list[JobListing], fit_by_id: dict, profile: dict,
         rec = recency_score(job, now)
         rmult = resp_mult.get(_norm(job.get("company_name", "")), 1.0)
         fresh = is_fresh(job, now)
-        pri = priority(fit, sscore, rec) * rmult
+        # PROFILE FIT: sink structural mismatches (research/devrel/heavy-ML), lift the
+        # applied-AI-SWE / backend / data-platform roles he actually wins. Multiplier only.
+        pfit, pfit_reason = profile_fit(
+            job.get("role_title") or job.get("title", ""), job.get("description", ""))
+        pri = priority(fit, sscore, rec) * rmult * pfit
         if fresh:                                # APPLY-EARLY (A2): freshest roles jump the queue
             pri *= _FRESH_BOOST
         ranked.append({
             "job": job, "fit": fit, "sponsor_label": label, "sponsor_reason": reason,
             "recency": rec, "response_mult": rmult, "fresh": fresh,
+            "profile_fit": round(pfit, 3), "profile_fit_reason": pfit_reason,
             "referral_worthy": fit >= HIGH_FIT_REFERRAL,
             "priority": round(pri, 4),
         })
