@@ -231,6 +231,7 @@ Produce a tailored resume as a JSON object:
 Rules:
 - NEVER fabricate experience, titles, companies, or metrics
 - Job TITLES, EMPLOYERS, and DATES are immutable — copy them VERBATIM from the base résumé. Even for an AI/ML target, do NOT re-title a role (e.g. the JPMorgan role stays "Senior Software Engineer, Data Platforms"; never rename it to an AI/ML title). Reframe the BULLETS, never the title.
+- SUMMARY SELF-TITLE: open the summary with the candidate's REAL title — "Senior Software Engineer" (or a genuine domain title like "Senior Data Engineer" / "Senior Platform Engineer" when the JD is squarely that). NEVER self-title as "AI Engineer", "ML Engineer", "AI/ML Engineer", or "GenAI Engineer" — the candidate is a software/platform engineer who BUILDS AI systems, not an AI/ML-titled specialist. Describe the AI work in the body; keep the headline a software-engineering title.
 - ONLY reframe real experience using the company's language
 - Keep all factual claims truthful — reorder, re-emphasize, re-phrase, but never invent
 - Include 4-6 bullets per role (not more)
