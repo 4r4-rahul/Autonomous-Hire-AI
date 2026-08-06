@@ -32,6 +32,7 @@ def get_total_calls() -> int:
 _MODEL_COSTS: dict[str, dict[str, float]] = {
     "claude-opus-4-8": {"input": 5.00, "output": 25.00, "cache_write": 6.25, "cache_read": 0.50},
     "claude-sonnet-4-6": {"input": 3.00, "output": 15.00, "cache_write": 3.75, "cache_read": 0.30},
+    "claude-sonnet-5": {"input": 3.00, "output": 15.00, "cache_write": 3.75, "cache_read": 0.30},
     "claude-haiku-4-5": {"input": 0.80, "output": 4.00, "cache_write": 1.00, "cache_read": 0.08},
     # DeepSeek V4 (cache_read = cached-prefix rate; no separate cache-write charge)
     "deepseek-v4-pro": {"input": 0.435, "output": 0.87, "cache_write": 0.435, "cache_read": 0.03},
@@ -185,13 +186,22 @@ class LLMClient:
                         if use_cache else system
                     )
                     # Opus 4.7+ removed temperature/top_p/top_k — passing them returns 400
-                    _no_sampling = "opus-4-7" in self._model or "opus-4-8" in self._model
+                    # Opus 4.7+ and the Claude 5 family (opus-4-8, sonnet-5, fable-5) removed
+                    # temperature/top_p/top_k — passing them returns 400.
+                    _no_sampling = any(m in self._model for m in
+                                       ("opus-4-7", "opus-4-8", "sonnet-5", "fable-5"))
                     params: dict = dict(
                         model=self._model, max_tokens=max_tokens,
                         system=system_param, messages=messages,
                     )
                     if not _no_sampling:
                         params["temperature"] = temperature
+                    # Sonnet 5 defaults thinking ON (Opus 4.8 defaults it off); with thinking on,
+                    # reasoning eats max_tokens and can empty `content`. These are deterministic
+                    # generation tasks — disable thinking so the budget applies to the answer.
+                    # Accepted on opus-4-8 / opus-4-7 / sonnet-5 (fable-5 would 400, but we don't use it).
+                    if any(m in self._model for m in ("opus-4-8", "opus-4-7", "sonnet-5")):
+                        params["thinking"] = {"type": "disabled"}
                     response = await self._client.messages.create(**params)
                     usage = response.usage
                     in_tok = usage.input_tokens
@@ -203,7 +213,10 @@ class LLMClient:
                         + getattr(usage, "cache_creation_input_tokens", 0) * rates["cache_write"]
                         + cache_read_tok * rates["cache_read"]
                     ) / 1_000_000
-                    text = response.content[0].text
+                    # Extended/interleaved thinking puts a ThinkingBlock first, so content[0] may
+                    # not be text — concatenate all TEXT blocks (skip thinking/tool blocks).
+                    text = "".join(getattr(b, "text", "") for b in response.content
+                                   if getattr(b, "type", None) == "text")
 
                 elapsed = time.monotonic() - t0
                 _total_cost_usd += cost
