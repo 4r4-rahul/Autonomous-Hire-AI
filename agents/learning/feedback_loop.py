@@ -15,6 +15,7 @@ Design (conservative, scales with data):
 from __future__ import annotations
 
 import json
+import re
 from collections import defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -86,6 +87,44 @@ def _outcome(app, now) -> str | None:
             return "ghosted"
         return "pending"
     return None
+
+
+# Interview stages in rough progression order (later = more advanced), used to label
+# meeting cards and to collapse duplicate same-role meetings to the furthest stage.
+_STAGE_ORDER = ["recruiter screen", "hr screen", "phone screen", "screen", "coding",
+                "technical", "system design", "project deepdive", "sre deepdive",
+                "behavioral", "onsite", "final"]
+_STAGE_RANK = {s: i for i, s in enumerate(_STAGE_ORDER)}
+# Longest-first so multi-word stages match before their sub-words (recruiter_screen > screen).
+_PREP_STAGE_SLUGS = ("recruiter_screen", "phone_screen", "hr_screen", "system_design",
+                     "sre_deepdive", "project_deepdive", "behavioral", "technical",
+                     "coding", "onsite", "final", "screen")
+
+
+def _meeting_role_stage(meeting: dict, company: str) -> tuple[str, str | None]:
+    """Best-effort (role, stage) for a scheduled meeting. Prefers explicit fields; falls
+    back to parsing the prep-brief filename (interview_prep names them
+    `<company>_<role>_<stage>_prep.md`), because meetings_scheduled often lands with
+    role_title/stage null even though the interview is real."""
+    role = (meeting.get("role_title") or "").strip()
+    stage = (meeting.get("stage") or "").strip() or None
+    if role and stage:
+        return role, stage
+    stem = Path(meeting.get("prep_doc_path") or "").stem
+    if stem.endswith("_prep"):
+        stem = stem[:-5]
+    co_slug = re.sub(r"[^a-z0-9]+", "_", (company or "").lower()).strip("_")
+    if co_slug and stem.startswith(co_slug + "_"):
+        stem = stem[len(co_slug) + 1:]
+    if not stage:
+        for s in _PREP_STAGE_SLUGS:
+            if stem == s or stem.endswith("_" + s):
+                stage = s.replace("_", " ")
+                stem = stem[: -(len(s) + 1)] if stem.endswith("_" + s) else ""
+                break
+    if not role:
+        role = stem.replace("_", " ").title()
+    return role, stage
 
 
 async def run(state: JobSearchState) -> JobSearchState:
@@ -206,6 +245,46 @@ async def run(state: JobSearchState) -> JobSearchState:
         (m.get("company_name") or "").strip().lower(): m.get("prep_doc_path")
         for m in state.get("meetings_scheduled", []) or [] if m.get("prep_doc_path")
     }
+    # Interviews for the dashboard = every booked interview, from two sources unioned:
+    #   1) applications whose outcome went positive (status interview/offer), and
+    #   2) meetings_scheduled — the authoritative "interview booked" signal (email_monitor /
+    #      interview_prep). For multi-role companies (e.g. Robinhood) this is often the ONLY
+    #      record, because the strict email→app match won't flip a single ambiguous app's
+    #      status, and referral/recruiter-sourced interviews never had an application row.
+    # Dedup by (company, role); a meeting is skipped when that company already has a
+    # positive-outcome card, and same-role meetings collapse to the furthest stage.
+    _interviews: list[dict] = []
+    _seen: dict[tuple, dict] = {}
+    _positive_companies = {(r["company"] or "").strip().lower()
+                           for r in recs if r["outcome"] == "positive"}
+    for r in recs:
+        if r["outcome"] != "positive":
+            continue
+        key = ((r["company"] or "").strip().lower(), (r["title"] or "").strip().lower())
+        row = {"company": r["company"], "role": r["title"], "status": r["status"],
+               "at": r["at"],
+               "prep_doc_path": _prep_by_company.get((r["company"] or "").strip().lower())}
+        _seen[key] = row
+        _interviews.append(row)
+    for m in state.get("meetings_scheduled", []) or []:
+        co = (m.get("company_name") or "").strip()
+        if not co or co.lower() in _positive_companies:
+            continue
+        role, stage = _meeting_role_stage(m, co)
+        at = m.get("scheduled_time") or m.get("when") or m.get("created_at")
+        key = (co.lower(), (role or "").strip().lower())
+        prev = _seen.get(key)
+        if prev is not None:  # same company+role (e.g. Robinhood SRE screen vs onsite) → keep furthest stage
+            if _STAGE_RANK.get(stage or "", -1) > _STAGE_RANK.get(prev.get("status") or "", -1):
+                prev["status"] = stage or prev["status"]
+                prev["at"] = at or prev.get("at")
+                prev["prep_doc_path"] = m.get("prep_doc_path") or prev.get("prep_doc_path")
+            continue
+        row = {"company": co, "role": role, "status": stage or m.get("status") or "interview",
+               "at": at, "prep_doc_path": m.get("prep_doc_path")}
+        _seen[key] = row
+        _interviews.append(row)
+
     band_lines = []
     for band in ("65-69", "70-79", "80-89", "90-100"):
         g = dims["band"].get(band)
@@ -220,13 +299,9 @@ async def run(state: JobSearchState) -> JobSearchState:
                    "has_response_signal": has_signal},
         "by_company": dims["company"], "by_role": dims["role"], "by_fit_band": dims["band"],
         "by_source": dims["source"], "by_ats": dims["ats"], "learnings_written": written,
-        # The actual wins, for the dashboard — first-party interviews/offers, newest first. Joined
-        # against meetings_scheduled (by company) so the card can link the generated prep brief.
-        "interviews": sorted(
-            [{"company": r["company"], "role": r["title"], "status": r["status"], "at": r["at"],
-              "prep_doc_path": _prep_by_company.get((r["company"] or "").strip().lower())}
-             for r in recs if r["outcome"] == "positive"],
-            key=lambda x: x.get("at") or "", reverse=True),
+        # The actual wins, for the dashboard — interviews/offers, newest first (built above
+        # from positive-outcome apps ∪ meetings_scheduled), each linked to its prep brief.
+        "interviews": sorted(_interviews, key=lambda x: x.get("at") or "", reverse=True),
     }
     try:
         _REPORT_JSON.write_text(json.dumps(report, indent=2))

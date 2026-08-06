@@ -99,13 +99,19 @@ export function isPrepared(a: Application): boolean {
   return a.quality_score != null;
 }
 
+/** A high-fit role flagged for a warm intro that the user hasn't acted on yet — surface it first. */
+export function isReferralFirst(a: Application): boolean {
+  return !!a.referral_first && !a.referral_done;
+}
+
 /** Expected-value blend used by the default "Recommended" sort. */
 export function recommendedScore(a: Application): number {
   const fit = (a.quality_score ?? a.fit_score ?? 50) / 100;     // 0..1
   const d = daysOld(a.posted_at);
   const fresh = d === null ? 0.4 : Math.exp(-d / 14);           // freshness decays over ~2 weeks
   const prepared = isPrepared(a) ? 1 : 0;                       // résumé already tailored → apply now
-  return 0.45 * fit + 0.35 * fresh + 0.2 * prepared;
+  const referral = isReferralFirst(a) ? 0.15 : 0;              // warm-intro roles bubble to the top
+  return 0.45 * fit + 0.35 * fresh + 0.2 * prepared + referral;
 }
 
 const tie = (a: Application, b: Application) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0); // stable

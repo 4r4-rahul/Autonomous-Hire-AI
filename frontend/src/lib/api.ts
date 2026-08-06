@@ -63,6 +63,8 @@ export interface Application {
   confirmation_url: string | null;
   rejection_reason: string | null;
   pipeline_step: string | null;
+  referral_first: boolean;   // high-fit role routed to a warm intro before cold-applying (A3)
+  referral_done: boolean;
   submitted_at: string | null;
   updated_at: string;
   created_at: string | null;   // when the app entered the queue ("added X ago")
@@ -173,6 +175,6 @@ export const api = {
   getAppProof:     (id: string)      => req<AppProof>(`/applications/${id}/proof`),
   getFormAnswers:  (id: string)      => req<{ count: number; answers: { question: string; answer: string; updated_at: string }[] }>(`/applications/${id}/form-answers`),
   pipelineRuns:    ()                => req<PipelineRun[]>("/pipeline/runs"),
-  mockInterviewer: (body: { company: string; role: string; history: string }) =>
+  mockInterviewer: (body: { company: string; role: string; history: string; mode?: string; fault?: string }) =>
     req<{ question: string }>("/mock/interviewer", { method: "POST", body: JSON.stringify(body) }),
 };

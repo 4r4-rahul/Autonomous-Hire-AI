@@ -90,23 +90,8 @@ def _slug(s: str) -> str:
 # 4 accounts, 23 contributors), never "millions of X". The prompt forbids these, but the model still
 # slips them in, so we deterministically strip any sentence carrying one. For an interview brief a
 # fabricated number the candidate might repeat out loud is the worst failure mode.
-_FAB_VOLUME = re.compile(
-    r"\b(millions|billions|hundreds of millions|tens of millions|hundreds of thousands|thousands)\s+of\s+"
-    r"(records|rows|requests|events|transactions|messages|users|customers|queries|data ?points)\b",
-    re.I,
-)
-
-
-def _scrub_fabricated_numbers(md: str) -> tuple[str, int]:
-    """Drop any sentence containing an ungrounded vague-magnitude volume claim. Returns (clean, n)."""
-    removed = 0
-    out: list[str] = []
-    for line in md.splitlines():
-        parts = re.split(r"(?<=\.)\s+", line)   # split into sentences, keeping terminal periods
-        kept = [p for p in parts if not _FAB_VOLUME.search(p)]
-        removed += len(parts) - len(kept)
-        out.append(" ".join(kept).rstrip())
-    return "\n".join(out), removed
+# vague-magnitude fabrication scrub — shared single source of truth (core/text_scrub)
+from core.text_scrub import scrub_fabricated_numbers as _scrub_fabricated_numbers
 
 
 def _load_profile() -> dict:

@@ -8,6 +8,8 @@ import asyncio
 from typing import Any
 import anthropic
 from anthropic import AsyncAnthropic
+import openai
+from openai import AsyncOpenAI
 from core.config import get_settings
 from core.logger import get_logger
 
@@ -31,18 +33,62 @@ _MODEL_COSTS: dict[str, dict[str, float]] = {
     "claude-opus-4-8": {"input": 5.00, "output": 25.00, "cache_write": 6.25, "cache_read": 0.50},
     "claude-sonnet-4-6": {"input": 3.00, "output": 15.00, "cache_write": 3.75, "cache_read": 0.30},
     "claude-haiku-4-5": {"input": 0.80, "output": 4.00, "cache_write": 1.00, "cache_read": 0.08},
+    # DeepSeek V4 (cache_read = cached-prefix rate; no separate cache-write charge)
+    "deepseek-v4-pro": {"input": 0.435, "output": 0.87, "cache_write": 0.435, "cache_read": 0.03},
+    "deepseek-v4-flash": {"input": 0.14, "output": 0.28, "cache_write": 0.14, "cache_read": 0.03},
 }
 _DEFAULT_COSTS = _MODEL_COSTS["claude-opus-4-8"]
 
+# Tier detection: agents request Claude model names. "haiku" marks the cheap/high-volume tier
+# (scoring, classification, intake); everything else is the quality tier (tailoring, cover, prep).
+_CHEAP_TIER_HINTS = ("haiku", "flash")
+
+# In "auto" thinking mode, only reason when the answer budget can absorb reasoning tokens without
+# truncating the content (tight-budget calls like short summaries would come back empty otherwise).
+_THINK_MIN_TOKENS = 1024
+# When thinking is enabled, add this many tokens on top of the caller's budget for the reasoning
+# trace, so the answer isn't truncated (max_tokens caps reasoning + answer combined).
+_REASONING_HEADROOM = 3072
+
+
+def _is_cheap(requested_model: str) -> bool:
+    return any(h in (requested_model or "").lower() for h in _CHEAP_TIER_HINTS)
+
+
+def _resolve_model(requested_model: str, provider: str, cfg) -> str:
+    """Map a requested Claude model name to the actual model id for the active provider, preserving
+    tier (cheap -> flash, quality -> pro). Requesting a native deepseek id passes through."""
+    if provider != "deepseek":
+        return requested_model
+    if requested_model.startswith("deepseek"):
+        return requested_model
+    return cfg.deepseek_model_flash if _is_cheap(requested_model) else cfg.deepseek_model_pro
+
 
 class LLMClient:
-    """Async Anthropic client with retries, structured logging, and cost tracking."""
+    """Async LLM client (Anthropic or DeepSeek/OpenAI-compatible) with retries, logging, cost tracking."""
 
     def __init__(self, agent_name: str = "unknown", model: str | None = None):
         self._agent = agent_name
         cfg = get_settings()
-        self._client = AsyncAnthropic(api_key=cfg.anthropic_api_key)
-        self._model = model or cfg.anthropic_model
+        self._provider = (cfg.llm_provider or "anthropic").lower()
+        self._think_mode = str(getattr(cfg, "deepseek_thinking", "auto")).lower()
+        # The Claude-style name the agent asked for — drives tier logic and budget exemptions.
+        self._requested = model or cfg.anthropic_model
+        self._cheap = _is_cheap(self._requested)
+        # The concrete model id actually sent to the provider.
+        self._model = _resolve_model(self._requested, self._provider, cfg)
+        if self._provider == "deepseek":
+            self._key_missing = not cfg.deepseek_api_key
+            # Construct with a placeholder if the key isn't set yet so get_llm() never crashes on
+            # import; chat() raises a clear error instead of a bare 401.
+            self._client = AsyncOpenAI(
+                api_key=cfg.deepseek_api_key or "MISSING_DEEPSEEK_KEY",
+                base_url=cfg.deepseek_base_url,
+            )
+        else:
+            self._key_missing = not cfg.anthropic_api_key
+            self._client = AsyncAnthropic(api_key=cfg.anthropic_api_key or "MISSING_ANTHROPIC_KEY")
 
     async def chat(
         self,
@@ -56,6 +102,11 @@ class LLMClient:
         """Send a chat request. Returns the text content of the first message block."""
         global _total_cost_usd, _total_calls
 
+        if self._key_missing:
+            raise RuntimeError(
+                f"LLM_PROVIDER={self._provider} but its API key is not set in .env "
+                f"({'DEEPSEEK_API_KEY' if self._provider == 'deepseek' else 'ANTHROPIC_API_KEY'})")
+
         # Hard daily spend cap — restrains EXPENSIVE SPECULATIVE work only. Exemptions:
         #   • USER-TRIGGERED apply-time work — on-demand tailoring AND autofill (drafting answers
         #     while the user fills a real application form). These are the "real one" signal and must
@@ -65,7 +116,7 @@ class LLMClient:
         #     day hit the limit. Only Opus-tier SPECULATIVE/scheduled work is gated.
         from core import budget_guard
         _exempt = self._agent in ("on_demand_tailor", "autofill", "mock_interviewer")
-        _cheap = "haiku" in (self._model or "").lower()
+        _cheap = self._cheap
         if not _exempt and not _cheap and budget_guard.over_budget():
             logger.warning("llm_daily_budget_exceeded", agent=self._agent,
                            spent=round(budget_guard.spent_today(), 2), cap=budget_guard.daily_cap())
@@ -73,46 +124,80 @@ class LLMClient:
                 f"daily LLM budget ${budget_guard.daily_cap()} reached "
                 f"(spent ${budget_guard.spent_today():.2f}) — skipping until tomorrow")
 
-        system_param: list | str
-        if use_cache:
-            # Cache the system prompt — large, rarely changes, saves ~90% cost on repeated calls
-            system_param = [
-                {
-                    "type": "text",
-                    "text": system,
-                    "cache_control": {"type": "ephemeral"},
-                }
-            ]
-        else:
-            system_param = system
-
-        # Opus 4.7+ removed temperature/top_p/top_k — passing them returns 400
-        _no_sampling = "opus-4-7" in self._model or "opus-4-8" in self._model
-
+        rates = _MODEL_COSTS.get(self._model, _DEFAULT_COSTS)
         last_error: Exception | None = None
         for attempt in range(retries):
             try:
                 t0 = time.monotonic()
-                params: dict = dict(
-                    model=self._model,
-                    max_tokens=max_tokens,
-                    system=system_param,
-                    messages=messages,
-                )
-                if not _no_sampling:
-                    params["temperature"] = temperature
-                response = await self._client.messages.create(**params)
-                elapsed = time.monotonic() - t0
 
-                # Cost tracking (per-model rates)
-                usage = response.usage
-                rates = _MODEL_COSTS.get(self._model, _DEFAULT_COSTS)
-                cost = (
-                    usage.input_tokens * rates["input"] / 1_000_000
-                    + usage.output_tokens * rates["output"] / 1_000_000
-                    + getattr(usage, "cache_creation_input_tokens", 0) * rates["cache_write"] / 1_000_000
-                    + getattr(usage, "cache_read_input_tokens", 0) * rates["cache_read"] / 1_000_000
-                )
+                if self._provider == "deepseek":
+                    # OpenAI-compatible chat completion. DeepSeek auto-caches shared prompt prefixes
+                    # (no cache_control needed); usage reports cache hit/miss split for costing.
+                    full_messages = [{"role": "system", "content": system}] + list(messages)
+                    ds_params: dict = dict(
+                        model=self._model,
+                        messages=full_messages,
+                        max_tokens=max_tokens,
+                        temperature=temperature,
+                    )
+                    # Thinking improves quality but spends output tokens on reasoning, which empties
+                    # `content` when max_tokens is tight. Enable only for the quality tier with an
+                    # ample budget; otherwise disable so caller budgets apply to the answer.
+                    if self._think_mode == "on":
+                        think = True
+                    elif self._think_mode == "off":
+                        think = False
+                    else:  # "auto": quality tier (v4-pro, non-cheap) + room for reasoning
+                        think = (not self._cheap) and max_tokens >= _THINK_MIN_TOKENS
+                    if think:
+                        # max_tokens caps reasoning + answer together, so reasoning would eat into the
+                        # answer and truncate it. Give reasoning ADDITIVE headroom so the answer keeps
+                        # its full caller-requested budget.
+                        ds_params["max_tokens"] = max_tokens + _REASONING_HEADROOM
+                    else:
+                        ds_params["extra_body"] = {"thinking": {"type": "disabled"}}
+                    response = await self._client.chat.completions.create(**ds_params)
+                    usage = response.usage
+                    out_tok = usage.completion_tokens
+                    cache_read_tok = getattr(usage, "prompt_cache_hit_tokens", 0) or 0
+                    miss_tok = getattr(usage, "prompt_cache_miss_tokens", None)
+                    if miss_tok is None:
+                        miss_tok = max((usage.prompt_tokens or 0) - cache_read_tok, 0)
+                    in_tok = miss_tok
+                    cost = (
+                        miss_tok * rates["input"]
+                        + cache_read_tok * rates["cache_read"]
+                        + out_tok * rates["output"]
+                    ) / 1_000_000
+                    text = response.choices[0].message.content
+                else:
+                    # Anthropic. Cache the system prompt (large, rarely changes) for ~90% savings.
+                    system_param: list | str = (
+                        [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}]
+                        if use_cache else system
+                    )
+                    # Opus 4.7+ removed temperature/top_p/top_k — passing them returns 400
+                    _no_sampling = "opus-4-7" in self._model or "opus-4-8" in self._model
+                    params: dict = dict(
+                        model=self._model, max_tokens=max_tokens,
+                        system=system_param, messages=messages,
+                    )
+                    if not _no_sampling:
+                        params["temperature"] = temperature
+                    response = await self._client.messages.create(**params)
+                    usage = response.usage
+                    in_tok = usage.input_tokens
+                    out_tok = usage.output_tokens
+                    cache_read_tok = getattr(usage, "cache_read_input_tokens", 0)
+                    cost = (
+                        in_tok * rates["input"]
+                        + out_tok * rates["output"]
+                        + getattr(usage, "cache_creation_input_tokens", 0) * rates["cache_write"]
+                        + cache_read_tok * rates["cache_read"]
+                    ) / 1_000_000
+                    text = response.content[0].text
+
+                elapsed = time.monotonic() - t0
                 _total_cost_usd += cost
                 _total_calls += 1
                 budget_guard.record(cost)   # persist toward the daily cap
@@ -127,9 +212,8 @@ class LLMClient:
                         _f.write(_json.dumps({
                             "ts": _dt.now(_tz.utc).isoformat(),
                             "agent": self._agent, "model": self._model,
-                            "in": usage.input_tokens, "out": usage.output_tokens,
-                            "cache_read": getattr(usage, "cache_read_input_tokens", 0),
-                            "cost": round(cost, 6),
+                            "in": in_tok, "out": out_tok,
+                            "cache_read": cache_read_tok, "cost": round(cost, 6),
                         }) + "\n")
                 except Exception:
                     pass
@@ -140,23 +224,25 @@ class LLMClient:
                     details={
                         "agent": self._agent,
                         "model": self._model,
-                        "input_tokens": usage.input_tokens,
-                        "output_tokens": usage.output_tokens,
-                        "cache_read_tokens": getattr(usage, "cache_read_input_tokens", 0),
+                        "input_tokens": in_tok,
+                        "output_tokens": out_tok,
+                        "cache_read_tokens": cache_read_tok,
                         "cost_usd": round(cost, 6),
                         "latency_s": round(elapsed, 2),
                     },
                 )
 
-                return response.content[0].text
+                if text is None:
+                    raise RuntimeError("LLM returned empty content")
+                return text
 
-            except anthropic.RateLimitError as e:
+            except (anthropic.RateLimitError, openai.RateLimitError) as e:
                 wait = 2 ** attempt * 5  # 5s, 10s, 20s
                 logger.warning("llm_rate_limit", attempt=attempt + 1, wait_s=wait)
                 await asyncio.sleep(wait)
                 last_error = e
 
-            except anthropic.APIError as e:
+            except (anthropic.APIError, openai.APIError) as e:
                 logger.error("llm_api_error", attempt=attempt + 1, error=str(e))
                 if attempt < retries - 1:
                     await asyncio.sleep(2 ** attempt)

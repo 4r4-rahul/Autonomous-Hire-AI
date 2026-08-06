@@ -141,6 +141,9 @@ class Application(Base):
     confirmation_url: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
     rejection_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     pipeline_step: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    # Referral-first routing: a high-fit role flagged for a warm intro before cold-applying (A3).
+    referral_first: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    referral_done: Mapped[bool]  = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime]   = mapped_column(DateTime(timezone=True), default=_now)
     submitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_at: Mapped[datetime]   = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)

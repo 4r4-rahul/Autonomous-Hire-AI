@@ -11,9 +11,26 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+    # LLM provider routing: "anthropic" or "deepseek". DeepSeek is OpenAI-compatible and far
+    # cheaper; kept as a toggle so tailoring can flip back to Claude the moment it's preferred.
+    llm_provider: str = Field(default="anthropic", alias="LLM_PROVIDER")
+
     # Anthropic
-    anthropic_api_key: str = Field(..., alias="ANTHROPIC_API_KEY")
+    anthropic_api_key: str = Field(default="", alias="ANTHROPIC_API_KEY")
     anthropic_model: str = "claude-opus-4-8"
+
+    # DeepSeek (OpenAI-compatible, https://api.deepseek.com). v4-pro = quality path (tailoring),
+    # v4-flash = cheap high-volume path (scoring/classification/intake).
+    deepseek_api_key: str = Field(default="", alias="DEEPSEEK_API_KEY")
+    deepseek_base_url: str = Field(default="https://api.deepseek.com", alias="DEEPSEEK_BASE_URL")
+    deepseek_model_pro: str = Field(default="deepseek-v4-pro", alias="DEEPSEEK_MODEL_PRO")
+    deepseek_model_flash: str = Field(default="deepseek-v4-flash", alias="DEEPSEEK_MODEL_FLASH")
+    # v4 models "think" (emit reasoning) by default. Reasoning improves quality but burns output
+    # tokens/latency and empties `content` when max_tokens is tight. Mode:
+    #   "auto" (default) — think on the QUALITY tier (v4-pro: tailoring/cover/prep), NOT the cheap
+    #                      high-volume tier (v4-flash), and only when the token budget has room.
+    #   "on"            — always think.   "off" — never think.
+    deepseek_thinking: str = Field(default="auto", alias="DEEPSEEK_THINKING")
 
     # Google
     gmail_client_id: str = Field(default="", alias="GMAIL_CLIENT_ID")

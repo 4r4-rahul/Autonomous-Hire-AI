@@ -13,6 +13,7 @@ Output: tailored .md resume saved to data/resumes/{job_id}.md
 
 import asyncio
 import json
+import os
 import re
 import uuid
 import yaml
@@ -23,6 +24,7 @@ from core.state import JobListing, FitScore, Application, JobSearchState
 from core.memory import Memory
 from core.llm import get_llm
 from core.logger import get_logger
+from core.text_scrub import scrub_fabricated_numbers, clean_typography, finalize_resume_md
 from tools.search import get_search_client
 
 logger = get_logger("resume_tailor")
@@ -627,7 +629,42 @@ def _ats_coverage(md: str, ats_keywords: list[str]) -> float:
     return round(hit / len(ats_keywords), 3)
 
 
-def _inject_missing_keywords(md: str, ats_keywords: list[str], profile: dict) -> str:
+# Map a skill keyword to theme words that a skills-category LABEL might contain, so injected keywords
+# land in the right existing category instead of a mislabeled dump.
+_SKILL_THEME: list[tuple[tuple[str, ...], tuple[str, ...]]] = [
+    (("snowflake", "redshift", "bigquery", "kafka", "spark", "pyspark", "airflow", "etl", "elt",
+      "dbt", "warehouse", "lake", "streaming", "databricks", "delta", "flink", "hadoop"),
+     ("data", "streaming", "big data")),
+    (("terraform", "kubernetes", "docker", "eks", "ecs", "lambda", "cloud", "aws", "azure", "gcp",
+      "glue", "s3", "vpc", "iam", "helm", "ansible", "cicd", "ci/cd"),
+     ("cloud", "infrastructure", "devops", "platform")),
+    (("cloudwatch", "grafana", "prometheus", "datadog", "tracing", "logging", "observability"),
+     ("observability", "monitoring")),
+    (("llm", "rag", "vector", "embedding", "langchain", "langgraph", "prompt", "semantic", "agent"),
+     ("ai", "llm")),
+    (("mlops", "feature", "drift", "inference", "dataset", "training", "gpu", "model"),
+     ("mlops", "ml platform", "ml", "ai")),
+    (("python", "java", "scala", "sql", "golang", "typescript", "javascript", "rust"),
+     ("language", "backend")),
+    (("fastapi", "spring", "rest", "microservice", "postgres", "mysql", "graphql"),
+     ("backend", "data")),
+]
+
+
+def _skill_themes(kw: str) -> tuple[str, ...]:
+    kt = set(re.findall(r"[a-z0-9+#]+", (kw or "").lower()))
+    for keys, themes in _SKILL_THEME:
+        if kt & set(keys):
+            return themes
+    return ()
+
+
+# ATS coverage gate (B2): after tailoring, ensure at least this fraction of the JD's extracted
+# keywords appear verbatim — ATS rank on literal term coverage, so a low number buries the résumé.
+ATS_COVERAGE_TARGET = float(os.getenv("ATS_COVERAGE_TARGET", "0.80"))
+
+
+def _inject_missing_keywords(md: str, ats_keywords: list[str], profile: dict, cap: int = 8) -> str:
     """Append ONLY ATS keywords the candidate GENUINELY has (grounded in their profile) that the
     tailored résumé happens to omit. Never paste raw JD phrases the candidate can't back up —
     that's keyword-stuffing/fabrication and trips ATS down-ranking + recruiter rejection.
@@ -651,20 +688,42 @@ def _inject_missing_keywords(md: str, ats_keywords: list[str], profile: dict) ->
         return hits / len(toks) >= 0.8   # nearly every meaningful token is in the profile
 
     missing = [kw for kw in ats_keywords if kw.lower() not in md_lower and supported(kw)]
-    missing = list(dict.fromkeys(missing))[:8]   # dedup, cap
+    missing = list(dict.fromkeys(missing))[:cap]   # dedup, cap
     if not missing:
         return md
 
-    injection = " · ".join(missing)
     skills_marker = "## CORE SKILLS"
     sep_marker = "\n---"
-    if skills_marker in md:
-        insert_pos = md.find(sep_marker, md.find(skills_marker))
-        if insert_pos != -1:
-            # Folded into the real skills section (these are profile-true), not a JD dump footer.
-            return md[:insert_pos] + f"\n\nAlso: {injection}" + md[insert_pos:]
+    if skills_marker not in md:
+        return md
+    sec_start = md.find(skills_marker)
+    insert_pos = md.find(sep_marker, sec_start)
+    if insert_pos == -1:
+        return md
 
-    return md
+    # Merge each (profile-true) missing keyword INTO the best-matching existing skills line — never a
+    # labeled "Also:"/footer line, which reads as a keyword-stuffing afterthought to a reviewer. Placed
+    # by theme so it lands in the right category (Snowflake -> Data, Terraform -> Cloud), falling back
+    # to the longest line when the theme is unknown. Commas only (Rule 6); _clean_md normalizes later.
+    section = md[sec_start:insert_pos].rstrip("\n")
+    lines = section.split("\n")
+    content_idx = [i for i, l in enumerate(lines) if l.strip() and not l.strip().startswith("#")]
+    if not content_idx:
+        return md
+
+    def _place(kw: str) -> int:
+        themes = _skill_themes(kw)
+        for i in content_idx:
+            label = (lines[i].split(":", 1)[0] if ":" in lines[i] else lines[i]).lower()
+            if any(t in label for t in themes):
+                return i
+        return max(content_idx, key=lambda i: len(lines[i]))   # broadest bucket for unknowns
+
+    for kw in missing:
+        i = _place(kw)
+        lines[i] = lines[i].rstrip().rstrip(".,·• ").rstrip() + ", " + kw
+
+    return md[:sec_start] + "\n".join(lines) + md[insert_pos:]
 
 
 # ── Main entry point ───────────────────────────────────────────────────────
@@ -712,7 +771,20 @@ async def tailor_one(
     # Render to markdown, inject any ATS keywords the LLM missed, then save
     md = _render_markdown(tailored, job, profile)
     md = _inject_missing_keywords(md, ats_keywords, profile)
-    md = _clean_md(md)   # strip LLM-ish typographic symbols → clean, human plain text
+    # ATS COVERAGE GATE (B2): if literal JD-keyword coverage is below target, inject ALL remaining
+    # profile-true (never fabricated) keywords the résumé still omits, then re-measure. A shortfall
+    # that remains means the JD wants skills the candidate genuinely lacks (a fit gap, not fixable) —
+    # logged so it's visible, never faked.
+    _cov = _ats_coverage(md, ats_keywords)
+    if ats_keywords and _cov < ATS_COVERAGE_TARGET:
+        md = _inject_missing_keywords(md, ats_keywords, profile, cap=24)
+        _cov2 = _ats_coverage(md, ats_keywords)
+        logger.info("ats_coverage_gate", company=job.get("company_name"),
+                    before=_cov, after=_cov2, target=ATS_COVERAGE_TARGET,
+                    still_short=round(_cov2, 3) < ATS_COVERAGE_TARGET)
+    md, _scrub = finalize_resume_md(md, company=job.get("company_name", ""))   # clean + kill fabrication/meta/company-pitch (Rule 3)
+    if any(_scrub.values()):
+        logger.info("resume_scrubbed", company=job.get("company_name"), **_scrub)
     resume_path = _RESUME_DIR / f"{job['id']}.md"
     resume_path.write_text(md, encoding="utf-8")
 
@@ -725,8 +797,9 @@ async def tailor_one(
         try:
             cover_md = await _cover_letter(job, profile, llm, ats_keywords)
             if cover_md:
+                cover_md, _ = scrub_fabricated_numbers(_clean_md(cover_md))
                 cp = _COVER_DIR / f"{job['id']}.md"
-                cp.write_text(_clean_md(cover_md), encoding="utf-8")
+                cp.write_text(cover_md, encoding="utf-8")
                 cover_path = str(cp)
                 logger.info("cover_letter_written", company=job.get("company_name"), reason=cover_reason)
         except Exception as e:

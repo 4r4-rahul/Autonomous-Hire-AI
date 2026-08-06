@@ -13,7 +13,7 @@ import { FormAnswersModal } from "@/components/FormAnswersModal";
 import { ScoreBadge } from "@/components/ScoreBadge";
 import {
   SORT_OPTIONS, GROUP_OPTIONS, ADDED_WINDOWS, atsOf, daysOld, scoreOf, addedAgo,
-  sortApps, filterApps, groupApps, distinctAts,
+  sortApps, filterApps, groupApps, distinctAts, isReferralFirst,
   type SortKey, type GroupKey,
 } from "@/lib/queue";
 
@@ -544,7 +544,18 @@ function PendingRow({ app, h, focused }: { app: Application; h: RowHandlers; foc
     >
       <div className="flex items-center gap-4 min-w-0">
         <div className="min-w-0">
-          <div className="text-sm font-semibold text-slate-100 truncate">{app.company_name}</div>
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="text-sm font-semibold text-slate-100 truncate">{app.company_name}</div>
+            {isReferralFirst(app) && (
+              <button
+                onClick={() => h.setReferralApp(app)}
+                title="High-fit role — get a warm intro before applying cold (referrals lift response 5–10×). Click for the referral kit."
+                className="flex items-center gap-1 shrink-0 text-[11px] px-1.5 py-0.5 rounded border border-amber-500/50 bg-amber-500/15 text-amber-300 hover:bg-amber-500/30 transition-colors"
+              >
+                <Users className="w-3 h-3" /> Referral first
+              </button>
+            )}
+          </div>
           <div className="text-xs text-slate-400 truncate mt-0.5">{app.role_title}</div>
           {app.location && (
             <div className="text-[11px] text-slate-500 truncate mt-0.5">

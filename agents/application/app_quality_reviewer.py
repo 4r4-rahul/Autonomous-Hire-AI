@@ -24,6 +24,7 @@ from pathlib import Path
 from core.state import Application, JobListing, JobSearchState
 from core.config import get_settings
 from core.logger import get_logger
+from core.text_scrub import finalize_resume_md
 from core.llm import get_llm
 
 logger = get_logger("app_quality_reviewer")
@@ -255,6 +256,24 @@ async def review_application(
             updated["status"] = "blocked"
             return updated, report
 
+    # Deterministic quality gates (B1 AI-tells, B3 quantified-lead bullets) — merged into the review
+    # so the self-healing rewrite addresses them even when the LLM score passed. The prompt alone
+    # doesn't reliably enforce these (esp. on DeepSeek), so we catch them in code.
+    from core.text_scrub import ai_tells, roles_missing_quantified_lead
+    _tells = ai_tells(resume_text)
+    _noquant = roles_missing_quantified_lead(resume_text)
+    det_issues: list[str] = []
+    if _tells:
+        det_issues.append("Rewrite to remove AI-tell buzzwords (use plain engineer language): "
+                          + ", ".join(_tells))
+    if _noquant:
+        det_issues.append("Lead bullet has no metric for: " + "; ".join(_noquant)
+                          + ". Start each role's first bullet with a concrete number where truthful.")
+    if det_issues:
+        review["critical_issues"] = det_issues + list(review.get("critical_issues", []))
+        logger.info("quality_deterministic_issues", app_id=app["id"],
+                    ai_tells=_tells, non_quant_leads=_noquant)
+
     score = review.get("total_score", 0)
     passed = score >= cfg.min_app_quality
 
@@ -273,27 +292,45 @@ async def review_application(
         },
     )
 
-    # Self-healing: if failed, attempt one rewrite (only if close to threshold)
-    if not passed and auto_fix and score >= cfg.min_app_quality - 8:
+    # Self-healing: attempt one rewrite on a near-miss score. det_issues (B3 non-quant leads) were
+    # already merged into review["critical_issues"] above, so IF a fix runs it also addresses them —
+    # but we do NOT force a re-tailor for det_issues alone (too costly per résumé, and a number can't
+    # be fabricated). B1 AI-tells are handled deterministically in finalize, not here. A regression
+    # guard keeps the ORIGINAL résumé if the rewrite scores worse.
+    if auto_fix and not passed and score >= cfg.min_app_quality - 8:
         logger.info("quality_fix_triggered", score=score, target=cfg.min_app_quality)
+        orig_score, orig_review = score, review
         fixed_text = await _attempt_fix(app, job, review, llm_fix)  # use smarter model for fix
 
         if fixed_text:
-            # Save fixed resume (overwrite)
-            resume_path.write_text(fixed_text, encoding="utf-8")
+            # Finalize the rewrite through the SAME clean+scrub as the initial save, or the fix silently
+            # reintroduces typographic junk / fabrication / meta-commentary (it bypassed finalize before).
+            fixed_text, _fx = finalize_resume_md(fixed_text, company=job.get("company_name", ""))
+            if any(_fx.values()):
+                logger.info("quality_fix_scrubbed", title=job.get("title"), **_fx)
 
             # Re-review the fixed version (cheap model is fine for re-check)
             try:
-                review = await _review(fixed_text, job, llm)
-                score = review.get("total_score", 0)
-                passed = score >= cfg.min_app_quality
-                review["self_healed"] = True
-
-                logger.log_decision(
-                    action="quality_review_after_fix",
-                    outcome="passed" if passed else "still_failed",
-                    details={"score": score, "title": job["title"]},
-                )
+                new_review = await _review(fixed_text, job, llm)
+                new_score = new_review.get("total_score", 0)
+                # Deterministic re-check: did the fix actually clear the code-enforced issues?
+                new_det = bool(ai_tells(fixed_text) or roles_missing_quantified_lead(fixed_text))
+                # Keep the fix only if it doesn't regress the LLM score. Prefer it when it clears the
+                # deterministic issues at an equal-or-better score; otherwise keep the original.
+                if new_score >= orig_score:
+                    resume_path.write_text(fixed_text, encoding="utf-8")
+                    review, score = new_review, new_score
+                    passed = score >= cfg.min_app_quality
+                    review["self_healed"] = True
+                    review["deterministic_clean"] = not new_det
+                    logger.log_decision(action="quality_review_after_fix",
+                                        outcome="passed" if passed else "still_failed",
+                                        details={"score": score, "title": job["title"],
+                                                 "det_cleared": not new_det})
+                else:
+                    review, score = orig_review, orig_score   # regression guard: revert to original
+                    logger.info("quality_fix_reverted_regression", orig=orig_score, fixed=new_score,
+                                title=job["title"])
             except Exception:
                 pass
 
