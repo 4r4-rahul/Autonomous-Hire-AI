@@ -19,7 +19,9 @@ import re
 
 _FAB_VOLUME = re.compile(
     r"\b(millions|billions|hundreds of millions|tens of millions|hundreds of thousands|thousands)\s+of\s+"
-    r"(records|rows|requests|events|transactions|messages|users|customers|queries|data ?points)\b",
+    r"(?:[a-z]+(?:-[a-z]+)?\s+){0,3}"   # up to 3 adjectives, e.g. "millions of [daily] [concurrent] requests"
+    r"(records|rows|requests|events|transactions|messages|users|customers|queries|data ?points|"
+    r"jobs|API calls|api calls|operations|writes|reads|documents|files|payments|trades|signals|logs)\b",
     re.I,
 )
 
