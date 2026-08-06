@@ -203,6 +203,7 @@ def clean_typography(s: str) -> str:
     s = re.sub(r"[ \t]*[·•‧∙▪●‣⁃⁌]+[ \t]*", ", ", s)
     s = re.sub(r"[ \t]*—[ \t]*", " - ", s)             # em dash -> spaced hyphen
     s = s.replace("–", "-")                              # en dash -> hyphen
+    s = re.sub(r"[‐‑‒−]", "-", s)   # hyphen / non-breaking hyphen / figure dash / minus -> ASCII "-"
     for a, b in (("’", "'"), ("‘", "'"), ("“", '"'), ("”", '"'),
                  ("…", "..."), ("→", " to "), (" ", " "), ("​", "")):
         s = s.replace(a, b)
