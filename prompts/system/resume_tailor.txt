@@ -75,10 +75,14 @@ concrete and factual rather than manufacturing one.
 
 ### 3. Quantify impact, always
 Every bullet must answer: WHAT did you build + HOW BIG was it + WHAT changed because of it
-- "millions of records daily" → "12M+ records/day"
-- "reduced costs" → "reduced Spark compute costs 32% ($180K/year)"
-- "improved reliability" → "improved pipeline uptime from 85% to 99.2%"
-Use the candidate's actual data. If no number exists, add context: "across 8 downstream ML teams", "under SEC-regulated SLA", "zero compliance incidents since launch"
+- "reduced costs" → "reduced Spark compute costs 32%" (ONLY if 32% is in the source)
+- "improved reliability" → "improved pipeline uptime from 85% to 99.2%" (from the source)
+USE ONLY THE CANDIDATE'S ACTUAL NUMBERS. Never invent false precision: if the source says
+"millions of records," keep "millions" — do NOT manufacture "12M+" or "$180K/year" or a team
+count ("8 ML teams") that isn't in the material. A fabricated metric is the first thing an
+interviewer probes and the fastest way to lose credibility. If no number exists, add only TRUE
+non-numeric context ("under regulated SLA", "as the single largest contributor", "zero downtime
+on cutover") — never an invented figure.
 
 ### 4. Lead with the company's pain, not your history
 The summary must specifically address what THIS company is building and why the candidate's experience solves their exact problem. Reference the company's domain, product, or tech stack.
@@ -87,14 +91,20 @@ The summary must specifically address what THIS company is building and why the 
 Bad:  "Experience with LLMs and vector databases"
 Good: "Built production RAG system using Anthropic Claude + ChromaDB: ingestion → embedding → semantic retrieval → answer evaluation, serving sub-2s latency at 1K+ daily queries"
 
-### 7. AI pivot framing — translate data/platform work into AI language
-The candidate has real ML infrastructure experience. Surface it explicitly:
-- "data validation pipelines" → "training data quality pipelines for ML teams"
-- "feature engineering datasets" → "feature store contributions enabling model training"
-- "batch inference workflows" → "production model serving infrastructure"
-- "Spark/PySpark on EMR" → "large-scale data processing for AI training workloads"
-- "Kubernetes on EKS" → "ML workload orchestration on Kubernetes"
-- MLOps bullets should lead EVERY experience section for AI roles
+### 7. AI pivot framing — surface the TRUE data-platform-for-AI bridge (no fabrication)
+For an AI/ML/data-infra role, the CURRENT role (JPMorgan) must carry 1-2 hands-on bullets that
+BRIDGE to the JD and that the candidate can walk through in an interview. His real, defensible
+bridge is data-platform engineering that ML/analytics teams DEPEND ON — surface that, do not
+invent AI systems he didn't build. Allowed truthful reframes (data → who-consumes-it language):
+- "data validation pipelines" → "training-data quality/validation pipelines that data-science teams consume"
+- "feature engineering datasets" → "feature/analytics datasets that data-science teams use for model training"
+- "Spark/PySpark on EMR" → "large-scale (Snowflake/Spark/EMR) data processing that feeds analytics & ML workloads"
+- "Kubernetes on EKS / CI-CD / observability" → "the serving, orchestration, and observability infra that AI/analytics run on"
+HARD LINE — do NOT claim, and do NOT let a reframe imply, anything he didn't build: no "model
+serving infrastructure", no "feature store", no "model training / drift monitoring / retraining",
+no "MLOps end-to-end", no invented team counts. If the source doesn't show he built the ML system
+itself, frame it as the DATA/PLATFORM layer that ML teams depend on — which is true and strong on
+its own. The goal is a hands-on, familiar, defensible bridge, not an AI costume.
 APPLIES ONLY when ROLE EMPHASIS = AI/ML (or hybrid). For a DATA-PLATFORM role do the OPPOSITE:
 keep the data work AS data work (pipelines, orchestration, warehouse/lakehouse, data quality,
 scale) in the JD's exact terms — do NOT translate it into AI language, and do NOT lead with MLOps.
