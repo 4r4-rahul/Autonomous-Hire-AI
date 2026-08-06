@@ -71,11 +71,19 @@ class LLMClient:
     def __init__(self, agent_name: str = "unknown", model: str | None = None):
         self._agent = agent_name
         cfg = get_settings()
-        self._provider = (cfg.llm_provider or "anthropic").lower()
         self._think_mode = str(getattr(cfg, "deepseek_thinking", "auto")).lower()
         # The Claude-style name the agent asked for — drives tier logic and budget exemptions.
         self._requested = model or cfg.anthropic_model
         self._cheap = _is_cheap(self._requested)
+        # Per-tier provider: the QUALITY tier (résumé tailoring / cover / interview-prep / fix-loop)
+        # can run on a different provider than the cheap high-volume tier. LLM_QUALITY_PROVIDER lets
+        # the money-path use Claude (which follows the nuanced résumé rules reliably) while scoring/
+        # classification/intake stay on cheap DeepSeek. Empty → follow LLM_PROVIDER for all tiers.
+        provider = (cfg.llm_provider or "anthropic").lower()
+        qp = str(getattr(cfg, "llm_quality_provider", "") or "").lower()
+        if not self._cheap and qp:
+            provider = qp
+        self._provider = provider
         # The concrete model id actually sent to the provider.
         self._model = _resolve_model(self._requested, self._provider, cfg)
         if self._provider == "deepseek":

@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     # LLM provider routing: "anthropic" or "deepseek". DeepSeek is OpenAI-compatible and far
     # cheaper; kept as a toggle so tailoring can flip back to Claude the moment it's preferred.
     llm_provider: str = Field(default="anthropic", alias="LLM_PROVIDER")
+    # Optional per-tier override: when set (e.g. "anthropic"), the QUALITY tier (résumé tailoring,
+    # cover letters, interview prep, the quality-fix rewrite — anything NOT the cheap haiku tier)
+    # uses this provider while the cheap high-volume tier follows LLM_PROVIDER. Empty = same for all.
+    llm_quality_provider: str = Field(default="", alias="LLM_QUALITY_PROVIDER")
 
     # Anthropic
     anthropic_api_key: str = Field(default="", alias="ANTHROPIC_API_KEY")
