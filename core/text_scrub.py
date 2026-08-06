@@ -250,6 +250,24 @@ def scrub_company_from_summary(md: str, company: str) -> tuple[str, int]:
     return md[:start] + "\n".join(kept_lines) + md[end:], removed
 
 
+# The total-experience FLOOR claim only — the "N+ years" form (e.g. "6+ years building…"), which is
+# unambiguously a total-experience floor. Deliberately NOT a bare "5 years of Python" or "3 years in
+# ML" (specific skill/domain tenures), which must never be inflated.
+_YEARS_PLUS = re.compile(r"\b[1-6]\+\s*years\b", re.I)
+
+
+def enforce_years_floor(md: str, floor: int = 7) -> tuple[str, int]:
+    """User rule: every résumé presents at least `floor`+ years of TOTAL experience (truthful —
+    accumulated tenure is ~7.2 yrs). Summary-scoped; only rewrites the "N+ years" total-experience
+    floor claim where N < floor — never a per-role or per-skill tenure. Returns (md, n_rewrites)."""
+    bounds = _summary_bounds(md)
+    if not bounds:
+        return md, 0
+    start, end = bounds
+    body, n = _YEARS_PLUS.subn(f"{floor}+ years", md[start:end])
+    return md[:start] + body + md[end:], n
+
+
 def finalize_resume_md(md: str, company: str = "") -> tuple[str, dict]:
     """The ONE finalize step every résumé write must pass through (initial tailor AND the quality-fix
     rewrite) so a rewrite can't silently reintroduce fabrication, meta-commentary, company-pitch, or
@@ -260,5 +278,6 @@ def finalize_resume_md(md: str, company: str = "") -> tuple[str, dict]:
     md, comp = scrub_company_from_summary(md, company)
     md, tells = scrub_ai_tells(md)   # B1: guarantee no AI-tell buzzwords ship (100% human-sounding)
     md, promoted = promote_quantified_lead(md)   # B3: lead each role with a metric where one exists
+    md, yrs = enforce_years_floor(md, 7)          # user rule: always present 7+ years (truthful ~7.2)
     return md, {"fabrication": fab, "meta_commentary": meta, "company_pitch": comp,
-                "ai_tells": tells, "lead_promoted": promoted}
+                "ai_tells": tells, "lead_promoted": promoted, "years_bumped": yrs}
