@@ -268,6 +268,27 @@ def enforce_years_floor(md: str, floor: int = 7) -> tuple[str, int]:
     return md[:start] + body + md[end:], n
 
 
+# Summary self-title guard: the candidate is a software/platform engineer who builds AI, NOT an
+# AI/ML-titled specialist. Deterministically fix the HEADLINE self-title only (near the summary start).
+_SELFTITLE_RX = re.compile(r"\b(ai|ml|ai\s*/\s*ml|gen\s?ai|generative ai)\s+engineer\b", re.I)
+
+
+def scrub_summary_selftitle(md: str) -> tuple[str, int]:
+    """Replace an 'AI/ML/GenAI Engineer' HEADLINE self-title at the start of the summary with
+    'Software Engineer' (keeps any seniority prefix). Only the first occurrence and only near the
+    summary start, so a legit later mention isn't touched. Returns (md, n)."""
+    bounds = _summary_bounds(md)
+    if not bounds:
+        return md, 0
+    start, end = bounds
+    body = md[start:end]
+    m = _SELFTITLE_RX.search(body)
+    if m and (m.start() - len(body) + len(body.lstrip())) < 80:   # within the opening headline
+        body = body[:m.start()] + "Software Engineer" + body[m.end():]
+        return md[:start] + body + md[end:], 1
+    return md, 0
+
+
 def finalize_resume_md(md: str, company: str = "") -> tuple[str, dict]:
     """The ONE finalize step every résumé write must pass through (initial tailor AND the quality-fix
     rewrite) so a rewrite can't silently reintroduce fabrication, meta-commentary, company-pitch, or
@@ -279,5 +300,6 @@ def finalize_resume_md(md: str, company: str = "") -> tuple[str, dict]:
     md, tells = scrub_ai_tells(md)   # B1: guarantee no AI-tell buzzwords ship (100% human-sounding)
     md, promoted = promote_quantified_lead(md)   # B3: lead each role with a metric where one exists
     md, yrs = enforce_years_floor(md, 7)          # user rule: always present 7+ years (truthful ~7.2)
+    md, title = scrub_summary_selftitle(md)       # never self-title as AI/ML Engineer in the headline
     return md, {"fabrication": fab, "meta_commentary": meta, "company_pitch": comp,
-                "ai_tells": tells, "lead_promoted": promoted, "years_bumped": yrs}
+                "ai_tells": tells, "lead_promoted": promoted, "years_bumped": yrs, "selftitle_fixed": title}
