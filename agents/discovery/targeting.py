@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from core.state import JobSearchState, JobListing
+from core.employment import classify_employment
 
 _ROOT = Path(__file__).parent.parent.parent
 _SPONSORS_FILE = _ROOT / "data" / "h1b_sponsors.json"
@@ -294,6 +295,9 @@ def rank_for_application(jobs: list[JobListing], fit_by_id: dict, profile: dict,
             "job": job, "fit": fit, "sponsor_label": label, "sponsor_reason": reason,
             "recency": rec, "response_mult": rmult, "fresh": fresh,
             "profile_fit": round(pfit, 3), "profile_fit_reason": pfit_reason,
+            "employment_type": classify_employment(
+                job.get("source", ""), job.get("role_title") or job.get("title", ""),
+                job.get("description", "")),   # "w2" | "contract" | "unknown" — tag for sort/filter
             "referral_worthy": fit >= HIGH_FIT_REFERRAL,
             "priority": round(pri, 4),
         })
