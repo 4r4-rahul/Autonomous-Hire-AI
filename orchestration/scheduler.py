@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import random
 from datetime import datetime, timezone
 from pathlib import Path
@@ -338,7 +339,10 @@ async def job_auto_submit() -> None:
         from core.llm import get_llm
         state = _load_state()
         profile = yaml.safe_load(Path("data/user_profile.yaml").read_text())
-        sel = select_auto_submit(state, profile, get_settings().apply_max_per_day)
+        # Dedicated conservative cap for the HANDS-OFF lane (separate from the manual apply budget)
+        # — a brand-new irreversible sender should start small; raise AUTO_SUBMIT_MAX_PER_DAY once trusted.
+        _auto_cap = int(os.getenv("AUTO_SUBMIT_MAX_PER_DAY", "5"))
+        sel = select_auto_submit(state, profile, _auto_cap)
         if not sel["submit"]:
             logger.info("auto_submit_nothing_eligible", queued=len(sel["queue"]))
             return
