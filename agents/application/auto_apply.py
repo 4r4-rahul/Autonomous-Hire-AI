@@ -19,7 +19,8 @@ from pathlib import Path
 from core.state import JobSearchState, JobListing
 from core.logger import get_logger
 from core.company_caps import cap_for as _cap_for, count_against_cap as _counts_against_cap
-from agents.discovery.targeting import sponsorship_signal, rank_for_application
+from core.employment import classify_employment
+from agents.discovery.targeting import sponsorship_signal, rank_for_application, profile_fit
 
 logger = get_logger("auto_apply")
 
@@ -77,15 +78,21 @@ def auto_submit_gate(app: dict, job: JobListing, fit_score: dict, profile: dict,
     if label in ("blocked", "unlikely"):
         reasons.append(f"sponsorship: {label} ({why})")
 
-    # 2) Fit + quality bars (stricter than discovery).
-    fit = (fit_score or {}).get("score", 0) or 0
+    # 2) Fit + quality bars (stricter than discovery). Coerce — state persists these as STRINGS
+    # ("72"), and a str<int comparison raises; a hands-off lane must never crash on a bad type.
+    def _num(v) -> float:
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return 0.0
+    fit = _num((fit_score or {}).get("score", 0))
     if fit < MIN_FIT_AUTO:
-        reasons.append(f"fit {fit} < {MIN_FIT_AUTO}")
+        reasons.append(f"fit {fit:g} < {MIN_FIT_AUTO}")
     # Missing/zero quality = NOT reviewed → must fail the gate (was `if q and q<MIN`, which let an
     # un-reviewed résumé with quality_score=0 auto-submit). Require a real score >= threshold.
-    q = app.get("quality_score") or 0
+    q = _num(app.get("quality_score"))
     if q < MIN_QUALITY_AUTO:
-        reasons.append(f"quality {q} < {MIN_QUALITY_AUTO} (or not reviewed)")
+        reasons.append(f"quality {q:g} < {MIN_QUALITY_AUTO} (or not reviewed)")
 
     # 3) Tailored resume present + non-empty.
     rp = app.get("tailored_resume_path") or ""
@@ -104,6 +111,21 @@ def auto_submit_gate(app: dict, job: JobListing, fit_score: dict, profile: dict,
     # the user acts (referral_done) so it can never be stuck in limbo forever.
     if app.get("referral_first") and not app.get("referral_done"):
         reasons.append("referral-first: warm intro pending (defer cold auto-apply)")
+
+    # 6) W2-ONLY: hands-off auto-apply is restricted to direct-employer W2 roles. Never cold-submit a
+    # contract/staffing role automatically (they rarely sponsor and the terms need a human's eyes).
+    etype = classify_employment(job.get("source", ""),
+                                job.get("role_title") or job.get("title", ""),
+                                job.get("description", ""))
+    if etype != "w2":
+        reasons.append(f"employment: {etype} (auto-apply is W2-only)")
+
+    # 7) PROFILE FIT: don't auto-burn an apply slot on a structural mismatch (research/devrel/heavy-ML).
+    # Sink < 1.0 means off-profile — defer those to human judgement rather than a hands-off send.
+    pfit, pfit_reason = profile_fit(job.get("role_title") or job.get("title", ""),
+                                    job.get("description", ""))
+    if pfit < 1.0:
+        reasons.append(f"profile-fit {pfit:g}: {pfit_reason}")
 
     return (len(reasons) == 0, reasons)
 
