@@ -324,6 +324,21 @@ async def job_insight_global_scan() -> None:
         logger.error("scheduled_insightglobal_scan_failed", error=str(e)[:140])
 
 
+async def job_pretailor() -> None:
+    """Batch PRE-TAILOR the top un-tailored W2/contract roles on the CHEAP provider (DeepSeek) so
+    both lanes have résumés ready ahead of time: the hands-off W2 auto-apply lane can actually fire,
+    and contract roles are one-click-ready. Bounded per run (PRETAILOR_BATCH, default 15) to keep
+    spend small — DeepSeek runs ~$0.008/résumé (~30x cheaper than Opus)."""
+    try:
+        from agents.application.on_demand_tailor import pretailor_batch
+        n = int(os.getenv("PRETAILOR_BATCH", "15"))
+        r = await pretailor_batch(limit=n, provider="deepseek")
+        await _sync_db()
+        logger.info("scheduled_pretailor_done", **r)
+    except Exception as e:
+        logger.error("scheduled_pretailor_failed", error=str(e))
+
+
 async def job_auto_submit() -> None:
     """Auto-submit the safe (gate-passed, CAPTCHA-free) reviewed apps; queue the rest.
     No-ops unless AUTONOMOUSHIRE_AUTO_SUBMIT=1 and no kill-switch — so it's inert until
@@ -354,6 +369,21 @@ async def job_auto_submit() -> None:
             app = apps_by_job.get(job["id"])
             if not app:
                 continue
+            # Defensive re-finalize right before the IRREVERSIBLE send — guarantees no résumé ever
+            # goes out un-scrubbed (7+ years floor, no fabrication/AI-tells/company-pitch), even a
+            # stale artifact tailored by older code. Cheap deterministic pass; skip on any error.
+            try:
+                from core.text_scrub import finalize_resume_md
+                rp = app.get("tailored_resume_path") or ""
+                fp = Path(rp) if os.path.isabs(rp) else Path(rp)
+                if rp and fp.exists():
+                    _md, _fx = finalize_resume_md(fp.read_text(encoding="utf-8"),
+                                                  company=job.get("company_name", ""))
+                    if any(_fx.values()):
+                        fp.write_text(_md, encoding="utf-8")
+                        logger.info("auto_submit_prefinalize_scrubbed", company=job.get("company_name"), **_fx)
+            except Exception as e:
+                logger.warning("auto_submit_prefinalize_failed", error=str(e)[:120])
             r = await submit_application(app, job, profile, llm, headless=True, auto_safe=True)
             if app["id"] in by_id:
                 state["applications"][by_id[app["id"]]] = r
@@ -386,7 +416,7 @@ async def job_referral_prep() -> None:
 # add "contact_finder"/"outreach_runner" back here to wake them.
 _ACTIVE_JOBS = {"linkedin_health", "linkedin_scanner", "board_scanner", "teksystems_scanner",
                 "kforce_scanner", "insightglobal_scanner", "apply_pipeline", "referral_prep",
-                "auto_submit", "email_monitor", "digest"}
+                "pretailor", "auto_submit", "email_monitor", "digest"}
 
 # id → (func, base_interval_seconds, display_name, misfire_grace_time)
 _JOB_SPECS = {
@@ -400,6 +430,7 @@ _JOB_SPECS = {
     "insightglobal_scanner": (job_insight_global_scan, 21600, "Insight Global Scanner (Jibe API, 6h)", 600),
     "apply_pipeline":  (job_apply_pipeline,  3600,  "Apply Pipeline (score+park cheap, 1h)",   600),
     "referral_prep":   (job_referral_prep,   7200,  "Referral Prep (high-fit warm-intro kits, 2h)", 300),
+    "pretailor":       (job_pretailor,       7200,  "Pre-Tailor W2/contract on DeepSeek (cheap, 2h)", 600),
     "auto_submit":     (job_auto_submit,     43200, "Auto-Submit Safe Apps (opt-in)",         600),
     "email_monitor":   (job_email_monitor,   3600,  "Gmail Email Monitor (1h)",               120),
     "digest":          (job_digest,          86400, "Daily Health + Activity Digest",          600),

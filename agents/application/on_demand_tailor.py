@@ -26,8 +26,11 @@ _LOCK = Lock()
 _IN_FLIGHT: set[str] = set()   # job_ids currently being tailored — avoids double-spend on re-trigger
 
 
-async def tailor_application(app_id: str = "", *, job_id: str = "") -> dict:
+async def tailor_application(app_id: str = "", *, job_id: str = "",
+                             provider: str | None = None) -> dict:
     """Tailor a single parked application on demand. Identify by app_id or job_id.
+    `provider` overrides the tailoring provider (e.g. "deepseek" for cheap batch pre-tailoring;
+    None = config default, i.e. Claude on the quality tier for a user-engaged role).
     Returns {status, app_id, resume, quality} or {error}."""
     from agents.application.resume_tailor import tailor_one
     from agents.application.linkedin_apply_pipeline import _score_job
@@ -53,8 +56,12 @@ async def tailor_application(app_id: str = "", *, job_id: str = "") -> dict:
     _IN_FLIGHT.add(jid)
 
     profile = yaml.safe_load(_PROFILE.read_text()) if _PROFILE.exists() else {}
-    llm = get_llm("on_demand_tailor")                       # Opus (config default)
-    cheap = get_llm("on_demand_tailor", model="claude-haiku-4-5")
+    # provider=None → config default (Claude quality tier); provider="deepseek" → cheap batch lane.
+    # On DeepSeek, force thinking OFF: the large résumé JSON otherwise overruns max_tokens (reasoning
+    # eats the budget) and truncates mid-string. Deterministic generation doesn't need it.
+    _think = "off" if provider == "deepseek" else None
+    llm = get_llm("on_demand_tailor", provider=provider, think=_think)
+    cheap = get_llm("on_demand_tailor", model="claude-haiku-4-5", provider=provider, think=_think)
 
     try:
         fit = await _score_job(job, cheap)
@@ -95,3 +102,49 @@ async def tailor_application(app_id: str = "", *, job_id: str = "") -> dict:
                 company=app.get("company_name"), quality=app.get("quality_score"))
     return {"status": "tailored", "app_id": app.get("id"),
             "resume": app.get("tailored_resume_path"), "quality": app.get("quality_score")}
+
+
+async def pretailor_batch(limit: int = 20, provider: str = "deepseek") -> dict:
+    """Batch PRE-TAILOR the highest-priority un-tailored roles on the CHEAP provider (DeepSeek), so
+    both lanes have résumés ready ahead of time: the hands-off W2 auto-apply lane can actually fire,
+    and contract roles are ready for one-click manual apply. Picks W2 first (they feed auto-apply),
+    ranked by the same fit×sponsor×recency×profile-fit priority, capped per run to bound spend.
+    Returns {tailored, skipped, errors, picked}."""
+    import json as _json
+    from agents.discovery.targeting import rank_for_application
+    from core.employment import classify_employment
+
+    state = _json.loads(_STATE.read_text())
+    profile = yaml.safe_load(_PROFILE.read_text()) if _PROFILE.exists() else {}
+    jobs = {j.get("id"): j for j in state.get("job_listings", [])}
+    fits = {f.get("job_id"): f for f in state.get("fit_scores", [])}
+
+    # Un-tailored apps only (no résumé yet). Rank by priority; W2 ahead of contract within a tier.
+    untailored = [a for a in state.get("applications", [])
+                  if not a.get("tailored_resume_path") and a.get("job_id") in jobs]
+    ranked = rank_for_application([jobs[a["job_id"]] for a in untailored], fits, profile, state)
+    order = {r["job"]["id"]: i for i, r in enumerate(ranked)}
+
+    def _sort_key(a):
+        job = jobs[a["job_id"]]
+        w2_first = 0 if classify_employment(job.get("source", ""),
+                                            job.get("role_title") or job.get("title", ""),
+                                            job.get("description", "")) == "w2" else 1
+        return (w2_first, order.get(a["job_id"], 10**9))
+
+    picks = sorted(untailored, key=_sort_key)[:limit]
+    tailored = errors = 0
+    for a in picks:
+        try:
+            r = await tailor_application(a["id"], provider=provider)
+            if r.get("status") == "tailored":
+                tailored += 1
+            elif r.get("error"):
+                errors += 1
+        except Exception as e:
+            errors += 1
+            logger.error("pretailor_item_failed", app_id=a.get("id"), error=str(e)[:120])
+    logger.info("pretailor_batch_done", picked=len(picks), tailored=tailored,
+                errors=errors, provider=provider)
+    return {"tailored": tailored, "errors": errors, "picked": len(picks),
+            "skipped": len(untailored) - len(picks)}
