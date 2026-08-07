@@ -85,7 +85,10 @@ def auto_submit_gate(app: dict, job: JobListing, fit_score: dict, profile: dict,
             return float(v)
         except (TypeError, ValueError):
             return 0.0
-    fit = _num((fit_score or {}).get("score", 0))
+    # Fit lives in EITHER the state['fit_scores'] record OR on the app row (app['fit_score'], a
+    # string) depending on the scoring path — read the record first, fall back to the app, so the
+    # lane isn't silently blocked (fit=0) for apps whose fit was persisted on the row.
+    fit = _num((fit_score or {}).get("score")) or _num(app.get("fit_score"))
     if fit < MIN_FIT_AUTO:
         reasons.append(f"fit {fit:g} < {MIN_FIT_AUTO}")
     # Missing/zero quality = NOT reviewed → must fail the gate (was `if q and q<MIN`, which let an
