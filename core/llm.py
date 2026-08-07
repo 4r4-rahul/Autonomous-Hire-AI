@@ -140,10 +140,14 @@ def _resolve_model(requested_model: str, provider: str, cfg) -> str:
 class LLMClient:
     """Async LLM client (Anthropic or DeepSeek/OpenAI-compatible) with retries, logging, cost tracking."""
 
-    def __init__(self, agent_name: str = "unknown", model: str | None = None):
+    def __init__(self, agent_name: str = "unknown", model: str | None = None,
+                 provider: str | None = None, think: str | None = None):
         self._agent = agent_name
         cfg = get_settings()
-        self._think_mode = str(getattr(cfg, "deepseek_thinking", "auto")).lower()
+        # `think` ("on"|"off"|"auto") overrides the DeepSeek thinking mode for this client — batch
+        # pre-tailoring forces "off" so the full max_tokens goes to the (large) résumé JSON answer
+        # instead of reasoning, which otherwise truncates it mid-string.
+        self._think_mode = (think or str(getattr(cfg, "deepseek_thinking", "auto"))).lower()
         # The Claude-style name the agent asked for — drives tier logic and budget exemptions.
         self._requested = model or cfg.anthropic_model
         self._cheap = _is_cheap(self._requested)
@@ -151,11 +155,16 @@ class LLMClient:
         # can run on a different provider than the cheap high-volume tier. LLM_QUALITY_PROVIDER lets
         # the money-path use Claude (which follows the nuanced résumé rules reliably) while scoring/
         # classification/intake stay on cheap DeepSeek. Empty → follow LLM_PROVIDER for all tiers.
-        provider = (cfg.llm_provider or "anthropic").lower()
-        qp = str(getattr(cfg, "llm_quality_provider", "") or "").lower()
-        if not self._cheap and qp:
-            provider = qp
-        self._provider = provider
+        # An explicit `provider` arg overrides everything — e.g. batch PRE-TAILORING forces "deepseek"
+        # so the high-volume hands-off lane stays cheap while user-engaged tailoring uses Claude.
+        if provider:
+            eff_provider = provider.lower()
+        else:
+            eff_provider = (cfg.llm_provider or "anthropic").lower()
+            qp = str(getattr(cfg, "llm_quality_provider", "") or "").lower()
+            if not self._cheap and qp:
+                eff_provider = qp
+        self._provider = eff_provider
         # The concrete model id actually sent to the provider.
         self._model = _resolve_model(self._requested, self._provider, cfg)
         if self._provider == "deepseek":
@@ -372,5 +381,6 @@ class LLMClient:
             raise ValueError(f"LLM returned invalid JSON: {e}\nRaw: {text[:300]}") from e
 
 
-def get_llm(agent_name: str, model: str | None = None) -> LLMClient:
-    return LLMClient(agent_name=agent_name, model=model)
+def get_llm(agent_name: str, model: str | None = None,
+            provider: str | None = None, think: str | None = None) -> LLMClient:
+    return LLMClient(agent_name=agent_name, model=model, provider=provider, think=think)
