@@ -20,6 +20,77 @@ _total_cost_usd: float = 0.0
 _total_calls: int = 0
 
 
+# ── Dead-key watchdog ──────────────────────────────────────────────────────
+# A rotated/invalid API key on a long-running process (e.g. the launchd scheduler,
+# whose env is frozen at launch) fails silently: scans keep running, but every LLM
+# call 401s and nothing gets queued. This has bitten us twice for ~days at a time.
+# Track CONSECUTIVE auth failures process-wide; once past a threshold, fire ONE
+# Discord alert per cooldown window so a dead key surfaces in minutes, not days.
+_AUTH_FAIL_STREAK = 0
+_AUTH_ALERT_THRESHOLD = 5            # consecutive 401s before alerting
+_AUTH_ALERT_COOLDOWN_S = 1800        # 30 min between alerts (401s can fire thousands/min)
+_auth_last_alert_at: float = 0.0
+
+
+def _is_auth_error(e: Exception) -> bool:
+    """True for a 401/invalid-key error from either provider (Anthropic or OpenAI/DeepSeek)."""
+    if isinstance(e, (anthropic.AuthenticationError, openai.AuthenticationError)):
+        return True
+    if getattr(e, "status_code", None) == 401:
+        return True
+    msg = str(e).lower()
+    return "authentication_error" in msg or "api key is invalid" in msg or "invalid api key" in msg
+
+
+def _note_auth_failure(agent: str, model: str, error: str) -> None:
+    """Bump the consecutive-401 streak; alert once we cross the threshold (cooldown-gated)."""
+    global _AUTH_FAIL_STREAK, _auth_last_alert_at
+    _AUTH_FAIL_STREAK += 1
+    if _AUTH_FAIL_STREAK < _AUTH_ALERT_THRESHOLD:
+        return
+    now = time.monotonic()
+    if now - _auth_last_alert_at < _AUTH_ALERT_COOLDOWN_S:
+        return
+    _auth_last_alert_at = now
+    logger.error("llm_auth_dead_key", agent=agent, model=model,
+                 consecutive=_AUTH_FAIL_STREAK)
+    try:
+        settings = get_settings()
+        webhook = settings.discord_webhook_digest or settings.discord_webhook_review
+        if not webhook:
+            return
+        msg = (f"🔴 **Dead LLM API key** — {_AUTH_FAIL_STREAK} consecutive 401s "
+               f"(last: agent `{agent}`, model `{model}`). The pipeline is discovering "
+               f"roles but queuing ZERO. Likely a rotated key on the long-running scheduler "
+               f"(env frozen at launch). Fix: update the key, then restart the scheduler:\n"
+               f"`launchctl kickstart -k gui/$(id -u)/com.autonomoushire.scheduler`")
+
+        async def _post():
+            try:
+                import httpx
+                async with httpx.AsyncClient() as c:
+                    await c.post(webhook, json={"content": msg[:1900]}, timeout=5)
+            except Exception:
+                pass
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.ensure_future(_post())
+            else:
+                loop.run_until_complete(_post())
+        except Exception:
+            pass
+    except Exception as e:
+        logger.warning("auth_alert_failed", error=str(e))
+
+
+def _note_auth_success() -> None:
+    """Any successful call clears the streak — the key is alive again."""
+    global _AUTH_FAIL_STREAK
+    if _AUTH_FAIL_STREAK:
+        _AUTH_FAIL_STREAK = 0
+
+
 def get_total_cost() -> float:
     return round(_total_cost_usd, 6)
 
@@ -255,6 +326,7 @@ class LLMClient:
 
                 if text is None:
                     raise RuntimeError("LLM returned empty content")
+                _note_auth_success()          # key is alive — clear any 401 streak
                 return text
 
             except (anthropic.RateLimitError, openai.RateLimitError) as e:
@@ -265,6 +337,8 @@ class LLMClient:
 
             except (anthropic.APIError, openai.APIError) as e:
                 logger.error("llm_api_error", attempt=attempt + 1, error=str(e))
+                if _is_auth_error(e):         # dead/rotated key → watchdog (alerts past threshold)
+                    _note_auth_failure(self._agent, self._model, str(e))
                 if attempt < retries - 1:
                     await asyncio.sleep(2 ** attempt)
                 last_error = e
