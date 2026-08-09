@@ -43,31 +43,56 @@ def is_exempt(company: str) -> bool:
     return _norm(company) in {_norm(c) for c in _load().get("exempt", [])}
 
 
+# A cap entry is EITHER an int (max, uses the global window) OR a dict {"max": N, "window_days": W}
+# for employers whose policy names a different window (e.g. OpenAI = 5 per 180 days, not 30).
+def _cap_entry(company: str, cfg: dict | None = None):
+    cfg = cfg or _load()
+    caps = {_norm(k): v for k, v in {**cfg.get("learned", {}), **cfg.get("overrides", {})}.items()}
+    return caps.get(_norm(company))
+
+
+def _entry_max(entry, default):
+    if entry is None:
+        return default
+    return entry.get("max", default) if isinstance(entry, dict) else entry
+
+
 def cap_for(company: str) -> float:
-    """Max distinct apps allowed at this company within the window. Unlimited (inf) for exempt
+    """Max distinct apps allowed at this company within its window. Unlimited (inf) for exempt
     staffing agencies and for any company with no proven limit (default_max=null). A company is
     capped only via a manual `overrides` entry or an email-`learned` one."""
     cfg = _load()
     if is_exempt(company):
         return float("inf")
-    # learned (auto-detected from emails) + manual overrides; manual wins on conflict.
-    caps = {_norm(k): v for k, v in {**cfg.get("learned", {}), **cfg.get("overrides", {})}.items()}
-    val = caps.get(_norm(company), cfg.get("default_max"))
+    val = _entry_max(_cap_entry(company, cfg), cfg.get("default_max"))
     return float("inf") if val is None else float(val)
 
 
-def set_cap(company: str, max_apps: int, *, source: str = "email", note: str = "") -> None:
-    """Record a proven per-company limit (e.g. auto-learned from a rejection email). Writes to the
-    `learned` map so it survives restarts and is visible/auditable. Manual `overrides` still win."""
+def window_for(company: str) -> int:
+    """The rolling window (days) for a company's cap — a per-company `window_days` when the employer's
+    policy names one (OpenAI 180d), else the global default."""
+    entry = _cap_entry(company)
+    if isinstance(entry, dict) and entry.get("window_days"):
+        return int(entry["window_days"])
+    return window_days()
+
+
+def set_cap(company: str, max_apps: int, *, window_days: int | None = None,
+            source: str = "email", note: str = "") -> None:
+    """Record a proven per-company limit (auto-learned from a rejection email or set manually). Writes
+    to the `learned` map (survives restarts, auditable); manual `overrides` still win. Pass
+    `window_days` for policies with a non-default window (e.g. 180). Tightest max wins on re-learn."""
     company = _norm(company)
     cfg = _load()
     learned = cfg.get("learned", {}) or {}
     prev = learned.get(company)
-    new = int(max_apps) if prev is None else min(int(prev), int(max_apps))  # tightest wins
-    learned[company] = new
+    prev_max = _entry_max(prev, None)
+    new_max = int(max_apps) if prev_max is None else min(int(prev_max), int(max_apps))  # tightest wins
+    win = window_days if window_days is not None else (prev.get("window_days") if isinstance(prev, dict) else None)
+    learned[company] = {"max": new_max, "window_days": int(win)} if win else new_max
     cfg["learned"] = learned
     notes = cfg.get("_learned_notes", {}) or {}
-    notes[company] = f"{source}: max {max_apps}{(' — ' + note) if note else ''}"
+    notes[company] = f"{source}: max {max_apps}{f'/{win}d' if win else ''}{(' — ' + note) if note else ''}"
     cfg["_learned_notes"] = notes
     try:
         _FILE.write_text(json.dumps(cfg, indent=2))
@@ -89,15 +114,18 @@ def _within_window(app: dict, now: datetime, win: timedelta) -> bool:
     return True  # unknown date → count it (conservative, never under-count)
 
 
-def count_against_cap(app: dict, now: datetime | None = None, win_days: int | None = None) -> bool:
+def count_against_cap(app: dict, now: datetime | None = None, win_days: int | None = None,
+                      company: str | None = None) -> bool:
     """Does this application count toward its company's rolling-window cap?
     PENDING apps always count (they're a future submission); SUBMITTED apps count only if within the
-    window (older submissions age out, matching 'N per any 30-day period' policies)."""
+    window (older submissions age out, matching 'N per any W-day period' policies). Pass `company` so
+    a per-company window (e.g. OpenAI 180d) is honored instead of the global default."""
     status = app.get("status")
     if status in _PENDING_STATUSES:
         return True
     if status == "submitted":
         now = now or datetime.now(timezone.utc)
-        win = timedelta(days=win_days if win_days is not None else window_days())
-        return _within_window(app, now, win)
+        if win_days is None:
+            win_days = window_for(company) if company else window_days()
+        return _within_window(app, now, timedelta(days=win_days))
     return False

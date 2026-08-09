@@ -73,6 +73,7 @@ export interface Application {
   posted_at: string | null;
   location: string | null;
   multi_location: boolean;
+  employment_type: string;   // "w2" | "contract" | "unknown" — direct-hire vs staffing/C2C
 }
 
 export interface PipelineRun {

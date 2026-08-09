@@ -50,6 +50,7 @@ class ApplicationOut(BaseModel):
     posted_at: Optional[datetime] = None
     location: Optional[str] = None          # US-first display for multi-location roles
     multi_location: bool = False            # true when also offered abroad (apply to the US office)
+    employment_type: str = "unknown"        # "w2" | "contract" | "unknown" — for the queue W2/Contract filter
 
     class Config:
         from_attributes = True
