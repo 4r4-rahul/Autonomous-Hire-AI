@@ -1,0 +1,18 @@
+{
+  "_doc": "US IT-staffing/consulting H1B sponsors whose job portals are BROWSER-GATED (JobDiva/iCIMS/Bullhorn/custom JS SPAs) and therefore NOT directly HTTP-scrapable — see the contract-vendor investigation 2026-08-09. Rather than fragile headless scraping, we reach their roles via LinkedIn SYNDICATION: these firms push postings to LinkedIn/Indeed/Google Jobs, so the linkedin_scanner runs a bounded set of company-scoped queries for them. `platform` is the detected ATS (why they're gated). `linkedin_probe` = how many get company-scoped LinkedIn queries per scan (kept small for account safety).",
+  "linkedin_probe": 8,
+  "vendors": [
+    {"name": "Diverse Lynx", "platform": "jobdiva"},
+    {"name": "Net2Source", "platform": "jobdiva"},
+    {"name": "Intelliswift", "platform": "jobdiva"},
+    {"name": "Mitchell Martin", "platform": "jobdiva"},
+    {"name": "Russell Tobin", "platform": "jobdiva"},
+    {"name": "TalentBurst", "platform": "jobdiva"},
+    {"name": "Collabera", "platform": "custom"},
+    {"name": "Compunnel", "platform": "custom"},
+    {"name": "Artech", "platform": "custom"},
+    {"name": "Mindlance", "platform": "custom"},
+    {"name": "Cynet Systems", "platform": "workable"},
+    {"name": "Ampcus", "platform": "custom"}
+  ]
+}

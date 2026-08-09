@@ -176,14 +176,29 @@ async def _is_paused() -> bool:
     return False
 
 
+def _browser_gated_vendor_queries() -> list[str]:
+    """Company-scoped LinkedIn queries for staffing firms whose OWN portals are browser-gated
+    (JobDiva/iCIMS/Bullhorn/custom — not HTTP-scrapable). They SYNDICATE to LinkedIn, so a bounded
+    set of "<company> engineer" searches surfaces their roles here instead of via fragile scraping.
+    Bounded (linkedin_probe, default 8) to keep LinkedIn request volume/account-risk low."""
+    try:
+        import json
+        cfg = json.loads((_PROFILE_PATH.parent / "browser_gated_vendors.json").read_text())
+        n = int(cfg.get("linkedin_probe", 8))
+        return [quote_plus(f"{v['name']} engineer") for v in cfg.get("vendors", [])[:n] if v.get("name")]
+    except Exception:
+        return []
+
+
 def _load_search_queries() -> list[str]:
-    """Build search query strings from user profile target roles."""
+    """Build search query strings from user profile target roles + browser-gated vendor probes."""
     try:
         profile = yaml.safe_load(_PROFILE_PATH.read_text())
         roles = profile.get("target", {}).get("roles", [])[:10]
-        return [quote_plus(r) for r in roles]
+        base = [quote_plus(r) for r in roles]
     except Exception:
-        return [quote_plus("Senior Data Engineer"), quote_plus("Staff Platform Engineer")]
+        base = [quote_plus("Senior Data Engineer"), quote_plus("Staff Platform Engineer")]
+    return base + _browser_gated_vendor_queries()
 
 
 def _is_tech_role(title: str) -> bool:
