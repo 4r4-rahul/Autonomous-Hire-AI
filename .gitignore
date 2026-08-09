@@ -12,6 +12,7 @@ data/*
 !data/board_sponsors.json
 !data/company_seeds.yaml
 !data/company_caps.json
+!data/browser_gated_vendors.json
 !data/.gitkeep
 
 # ───────────────────────── heavy / generated ─────────────────────────

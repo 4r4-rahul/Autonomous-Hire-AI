@@ -49,6 +49,9 @@ STAFFING_COMPANIES = {
     "robert half", "randstad", "apex systems", "collabera", "judge group", "aditi consulting",
     "artech", "cognizant", "infosys", "wipro", "hcl", "sunrise systems",
     "sgs technologie", "softworld", "nous infosystems", "synechron", "fractal analytics",
+    # browser-gated vendors reached via LinkedIn syndication (data/browser_gated_vendors.json)
+    "diverse lynx", "net2source", "intelliswift", "mitchell martin", "russell tobin",
+    "talentburst", "compunnel", "mindlance", "cynet systems", "ampcus",
 }
 
 
