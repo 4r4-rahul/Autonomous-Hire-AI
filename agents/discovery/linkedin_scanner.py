@@ -176,6 +176,20 @@ async def _is_paused() -> bool:
     return False
 
 
+def _vendor_allowlist() -> list[str]:
+    """Lowercased browser-gated vendor names — these are DESIRED (we search LinkedIn for them), so
+    their roles must BYPASS _JUNK_COMPANY_PATTERNS (which otherwise drops any 'X Staffing' name)."""
+    try:
+        import json
+        cfg = json.loads((_PROFILE_PATH.parent / "browser_gated_vendors.json").read_text())
+        return [v["name"].lower() for v in cfg.get("vendors", []) if v.get("name")]
+    except Exception:
+        return []
+
+
+_VENDOR_ALLOW = _vendor_allowlist()
+
+
 def _browser_gated_vendor_queries() -> list[str]:
     """Company-scoped LinkedIn queries for staffing firms whose OWN portals are browser-gated
     (JobDiva/iCIMS/Bullhorn/custom — not HTTP-scrapable). They SYNDICATE to LinkedIn, so a bounded
@@ -369,7 +383,10 @@ async def _search_query(
                 continue
             if meta["easy_apply"]:
                 continue  # company-ATS only
-            if any(p in meta["company"].lower() for p in _JUNK_COMPANY_PATTERNS):
+            _co = meta["company"].lower()
+            # Browser-gated staffing vendors are DESIRED here (we searched for them), so allow their
+            # roles through even though the generic junk filter would drop a staffing/recruiting name.
+            if not any(v in _co for v in _VENDOR_ALLOW) and any(p in _co for p in _JUNK_COMPANY_PATTERNS):
                 continue
             apply_url = (f"https://www.linkedin.com/jobs/view/{meta['li_id']}/"
                          if meta["li_id"] else meta["href"])
