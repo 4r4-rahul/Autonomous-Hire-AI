@@ -38,6 +38,30 @@ def _is_staffing_source(source: str) -> bool:
     return any(s.startswith(p) or f":{p}" in s or f"_{p}" in s for p in _STAFFING_SOURCE_PREFIXES)
 
 
+# Known staffing/consulting firm NAMES (the company_name signal). The DB stores a coarse JobSource
+# ENUM that DROPS the staffing source prefix (a Phenom/Workday/Kforce role becomes `careers_page`),
+# so the UI/API can't classify from source alone — but company_name survives. Keep this in sync with
+# the discovery scanners (kforce/insight_global/phenom_scanner.PHENOM_HOSTS/workday_scanner.
+# WORKDAY_TENANTS) + staffing board-sponsors. Lowercased, exact match. JD-language stays the backstop.
+STAFFING_COMPANIES = {
+    "kforce", "insight global", "teksystems", "aston carter", "actalent", "ntt data", "genpact",
+    "accenture", "vaco", "mastech digital", "system soft technologies", "system soft", "stellent it",
+    "robert half", "randstad", "apex systems", "collabera", "judge group", "aditi consulting",
+    "artech", "cognizant", "infosys", "wipro", "hcl", "sunrise systems",
+    "sgs technologie", "softworld", "nous infosystems", "synechron", "fractal analytics",
+}
+
+
+def classify_employment_for_job(source: str = "", company: str = "",
+                                title: str = "", description: str = "") -> str:
+    """Company-aware classify for the UI/API path where the DB has lost the staffing source prefix.
+    Treats a KNOWN staffing firm (by company_name) as a staffing source, then defers to the
+    source-first classifier (so an explicit W2/direct-hire JD can still override to w2)."""
+    if (company or "").strip().lower() in STAFFING_COMPANIES:
+        source = "staffing:" + (source or "")
+    return classify_employment(source, title, description)
+
+
 def classify_employment(source: str = "", title: str = "", description: str = "") -> str:
     """Return "w2" | "contract" | "unknown". Source-first, JD-language override on explicit conflict."""
     blob = f"{title or ''}\n{(description or '')[:4000]}"

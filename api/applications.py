@@ -10,8 +10,11 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from api.schemas import ApplicationOut, ApproveIn
+from core.logger import get_logger
 from db.models import Application, ApplicationStatus, JobListing, PipelineEvent
 from db.session import get_async_session
+
+logger = get_logger("api.applications")
 
 _APPLIED_LOG    = Path(__file__).parent.parent / "data" / "applied_jobs.json"
 _SCREENSHOT_DIR = Path(__file__).parent.parent / "data" / "screenshots"
@@ -45,6 +48,12 @@ def _enrich(app: Application) -> ApplicationOut:
         disp, multi = us_first_location(app.job.location or "")
         out.location = disp
         out.multi_location = multi
+        # Tag W2 vs contract/C2C for the review-queue filter. The DB JobSource enum drops the staffing
+        # prefix (→ careers_page), so classify company-aware (company_name + JD language).
+        from core.employment import classify_employment_for_job
+        out.employment_type = classify_employment_for_job(
+            str(app.job.source or ""), app.job.company_name or "",
+            app.job.title or "", app.job.description or "")
     return out
 
 
@@ -249,8 +258,23 @@ async def decide_application(app_id: str, body: ApproveIn):
             status="applied" if body.action == "approve" else "skipped",
             message=body.reason,
         ))
+        _submitted_at = app.submitted_at.isoformat() if app.submitted_at else None
+        _job_id = str(app.job_id) if app.job_id else ""
+        _ats_url = app.ats_url or ""
 
     new_status = "submitted" if body.action == "approve" else "skipped"
+    # Mirror the decision into the pipeline's JSON store so the backend stops treating a
+    # just-submitted app as pending (prevents re-queue / duplicate apply). Forward-only + locked;
+    # never regresses. Best-effort — a JSON hiccup must not fail the user's decision.
+    # Pass BOTH app_id and job_id: the DB row id doesn't always equal the JSON app id (the two stores
+    # were seeded separately — ~6% mismatch), and write_decision_to_json falls back to job_id, so
+    # without it the inline mirror silently missed those apps and they stayed pending in the backend.
+    try:
+        from core.decision_sync import write_decision_to_json
+        write_decision_to_json(app_id=app_id, job_id=_job_id, ats_url=_ats_url,
+                               db_status=new_status, submitted_at=_submitted_at)
+    except Exception as e:
+        logger.warning("decision_json_sync_failed", app_id=app_id, error=str(e)[:120])
     return {"ok": True, "new_status": new_status}
 
 

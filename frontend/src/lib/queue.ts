@@ -130,10 +130,11 @@ export function sortApps(apps: Application[], key: SortKey): Application[] {
 
 export interface QueueFilters {
   search: string;
-  freshOnly: boolean;     // posted within 7 days
-  preparedOnly: boolean;  // résumé already tailored
-  ats: string;            // "" = any, else a specific ATS label
-  addedWithinMin: number; // 0 = any; else only apps that entered the queue within N minutes
+  freshOnly: boolean;      // posted within 7 days
+  preparedOnly: boolean;   // résumé already tailored
+  ats: string;             // "" = any, else a specific ATS label
+  addedWithinMin: number;  // 0 = any; else only apps that entered the queue within N minutes
+  employment: string;      // "" = any, else "w2" | "contract" — direct-hire vs staffing/C2C
 }
 
 export function filterApps(apps: Application[], f: QueueFilters): Application[] {
@@ -144,6 +145,7 @@ export function filterApps(apps: Application[], f: QueueFilters): Application[] 
     if (f.preparedOnly && !isPrepared(a)) return false;
     if (f.ats && atsOf(a.ats_url) !== f.ats) return false;
     if (f.addedWithinMin > 0) { const m = minutesSince(a.created_at); if (m === null || m > f.addedWithinMin) return false; }
+    if (f.employment && (a.employment_type || "unknown") !== f.employment) return false;
     return true;
   });
 }

@@ -9,7 +9,9 @@ budget-guarded LLM layer).
 """
 from __future__ import annotations
 
+import asyncio
 import json
+import os
 from pathlib import Path
 from threading import Lock
 
@@ -25,12 +27,31 @@ _PROFILE = Path("data/user_profile.yaml")
 _LOCK = Lock()
 _IN_FLIGHT: set[str] = set()   # job_ids currently being tailored — avoids double-spend on re-trigger
 
+# Concurrency gate: cap how many résumés tailor AT ONCE in this process. Without it, the UI's bulk
+# actions ("Open all" = 10, "Prepare all" = 5) fire that many Opus tailor jobs simultaneously via
+# Promise.allSettled; they then contend for Anthropic's rate limits and starve company_research
+# (every call times out at its 12s cap), so a résumé that finishes in ~15s alone drags to 45-60s in
+# the crowd — including the ONE the user is actively waiting on. Bounding concurrency keeps each job
+# fast and lets the rest queue quickly. Tunable via TAILOR_CONCURRENCY (default 3). The Semaphore is
+# created lazily inside the running loop so importing this module never needs an event loop.
+_TAILOR_CONCURRENCY = max(1, int(os.getenv("TAILOR_CONCURRENCY", "3")))
+_TAILOR_GATE: asyncio.Semaphore | None = None
+
+
+def _tailor_gate() -> asyncio.Semaphore:
+    global _TAILOR_GATE
+    if _TAILOR_GATE is None:
+        _TAILOR_GATE = asyncio.Semaphore(_TAILOR_CONCURRENCY)
+    return _TAILOR_GATE
+
 
 async def tailor_application(app_id: str = "", *, job_id: str = "",
-                             provider: str | None = None) -> dict:
+                             provider: str | None = None, force: bool = False) -> dict:
     """Tailor a single parked application on demand. Identify by app_id or job_id.
     `provider` overrides the tailoring provider (e.g. "deepseek" for cheap batch pre-tailoring;
     None = config default, i.e. Claude on the quality tier for a user-engaged role).
+    `force` RE-tailors even if a résumé already exists (used to refresh the queue after a rule
+    change, e.g. the mandatory-JPMorgan-AI-bullets rule) — overwrites data/resumes/{job_id}.md.
     Returns {status, app_id, resume, quality} or {error}."""
     from agents.application.resume_tailor import tailor_one
     from agents.application.linkedin_apply_pipeline import _score_job
@@ -42,7 +63,7 @@ async def tailor_application(app_id: str = "", *, job_id: str = "",
                 or (job_id and a.get("job_id") == job_id)), None)
     if not app:
         return {"error": "application not found"}
-    if app.get("tailored_resume_path"):
+    if app.get("tailored_resume_path") and not force:
         return {"status": "already_tailored", "app_id": app.get("id"),
                 "resume": app.get("tailored_resume_path")}
 
@@ -58,20 +79,31 @@ async def tailor_application(app_id: str = "", *, job_id: str = "",
     profile = yaml.safe_load(_PROFILE.read_text()) if _PROFILE.exists() else {}
     # provider=None → config default (Claude quality tier); provider="deepseek" → cheap batch lane.
     # On DeepSeek, force thinking OFF: the large résumé JSON otherwise overruns max_tokens (reasoning
-    # eats the budget) and truncates mid-string. Deterministic generation doesn't need it.
-    _think = "off" if provider == "deepseek" else None
+    # eats the budget) and truncates mid-string, AND — critically for the INTERACTIVE path a user is
+    # waiting on — reasoning triples v4-pro latency (~25s vs ~8s). Resolve the EFFECTIVE provider
+    # (not just the passed arg): the on-demand click sends provider=None but still lands on DeepSeek
+    # via LLM_QUALITY_PROVIDER / LLM_PROVIDER, so the literal `provider == "deepseek"` check missed it.
+    from core.config import get_settings
+    _cfg = get_settings()
+    _eff_provider = (provider or getattr(_cfg, "llm_quality_provider", "")
+                     or _cfg.llm_provider or "anthropic").lower()
+    _think = "off" if _eff_provider == "deepseek" else None
     llm = get_llm("on_demand_tailor", provider=provider, think=_think)
     cheap = get_llm("on_demand_tailor", model="claude-haiku-4-5", provider=provider, think=_think)
 
     try:
-        fit = await _score_job(job, cheap)
-        tailored = await tailor_one(job, fit, llm, profile, llm_cheap=cheap)
-        if not tailored:
-            return {"error": "tailoring returned nothing"}
-        try:
-            tailored, _ = await review_application(tailored, job, cheap)
-        except Exception:
-            pass
+        # Serialize the LLM-heavy work behind the concurrency gate so bulk fan-out doesn't collapse
+        # into all-slow contention. Acquired here (not around the whole fn) so the dedup/state I/O
+        # above stays lock-free and the gate only bounds the expensive score→tailor→review span.
+        async with _tailor_gate():
+            fit = await _score_job(job, cheap)
+            tailored = await tailor_one(job, fit, llm, profile, llm_cheap=cheap)
+            if not tailored:
+                return {"error": "tailoring returned nothing"}
+            try:
+                tailored, _ = await review_application(tailored, job, cheap)
+            except Exception:
+                pass
     except Exception as e:
         logger.error("on_demand_tailor_failed", app_id=app.get("id"), error=str(e)[:120])
         return {"error": str(e)[:160]}
@@ -86,10 +118,15 @@ async def tailor_application(app_id: str = "", *, job_id: str = "",
         app = next((a for a in state.get("applications", []) if a.get("id") == app_id_final), None)
         if app is None:
             return {"error": "application vanished during tailoring"}
+        # Preserve a DECIDED status: re-tailoring must never resurrect a submitted/skipped app back
+        # to pending_review (that reopened already-applied roles and drove duplicate applies).
+        _DECIDED = {"submitted", "skipped", "blocked", "interview", "approved", "rejected",
+                    "awaiting_confirmation", "pending_manual_submit"}
+        prior_status = app.get("status")
         for k, v in tailored.items():
-            if k not in ("id", "job_id"):
+            if k not in ("id", "job_id", "status"):   # never let the tailored dict overwrite status
                 app[k] = v
-        app["status"] = "pending_review"
+        app["status"] = prior_status if prior_status in _DECIDED else "pending_review"
         app["needs_tailoring"] = False
 
     try:

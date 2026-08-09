@@ -36,6 +36,13 @@ class Settings(BaseSettings):
     #   "on"            — always think.   "off" — never think.
     deepseek_thinking: str = Field(default="auto", alias="DEEPSEEK_THINKING")
 
+    # Hands-off auto-apply (the IRREVERSIBLE auto-submit lane). Routed through Settings — which loads
+    # .env — because auto_submit_enabled() previously read os.getenv directly, and nothing populates
+    # os.environ from .env, so the .env opt-in was a SILENT NO-OP (looked enabled, never fired).
+    # Default OFF: a new irreversible sender must be explicitly turned on. Cap is per CALENDAR DAY.
+    auto_submit_enabled: bool = Field(default=False, alias="AUTONOMOUSHIRE_AUTO_SUBMIT")
+    auto_submit_max_per_day: int = Field(default=5, alias="AUTO_SUBMIT_MAX_PER_DAY")
+
     # Google
     gmail_client_id: str = Field(default="", alias="GMAIL_CLIENT_ID")
     gmail_client_secret: str = Field(default="", alias="GMAIL_CLIENT_SECRET")

@@ -1,13 +1,29 @@
 {
-  "_doc": "Per-company application caps. POLICY: default is NO CAP — most employers (e.g. Databricks) don't limit applications, so we don't throw away reach. We only cap a company once it has PROVEN a limit: either a manually-known policy or one auto-learned from a rejection/auto-close email (see agents/monitoring/email_monitor cap-learning). `default_max: null` = unlimited. Override a company by normalized (lowercased) name in `overrides` (the cap = max distinct roles within `window_days`, counting PENDING + SUBMITTED-within-window). `exempt` = staffing agencies where each posting is a different end-client. `learned` records auto-detected limits with provenance.",
   "default_max": null,
   "window_days": 30,
-  "exempt": ["teksystems", "kforce", "insight global"],
+  "exempt": [
+    "teksystems",
+    "kforce",
+    "insight global"
+  ],
   "overrides": {
     "roblox": 4
   },
-  "learned": {},
+  "learned": {
+    "roblox": 4,
+    "openai": {
+      "max": 5,
+      "window_days": 180
+    },
+    "applied intuition": 1
+  },
+  "_doc": "Per-company application caps. POLICY: default is NO CAP \u2014 most employers (e.g. Databricks) don't limit applications, so we don't throw away reach. We only cap a company once it has PROVEN a limit: either a manually-known policy or one auto-learned from a rejection/auto-close email (see agents/monitoring/email_monitor cap-learning). `default_max: null` = unlimited. Override a company by normalized (lowercased) name in `overrides` (the cap = max distinct roles within `window_days`, counting PENDING + SUBMITTED-within-window). `exempt` = staffing agencies where each posting is a different end-client. `learned` records auto-detected limits with provenance.",
   "_known_hard_limits": {
-    "roblox": "5 applications per 30 days (auto-closes the 6th) — confirmed via no-reply@roblox.com 2026-06-18; we cap at 4 for a safety margin."
+    "roblox": "5 applications per 30 days (auto-closes the 6th) \u2014 confirmed via no-reply@roblox.com 2026-06-18; we cap at 4 for a safety margin."
+  },
+  "_learned_notes": {
+    "roblox": "email: max 4 \u2014 policy max 5 from auto-close email 2026-08-08T19:38:05+00:00",
+    "openai": "manual: max 5/180d \u2014 5 per 180 days \u2014 user-reported auto-reject 2026-08-09",
+    "applied intuition": "manual: max 1 \u2014 apply to one role at a time \u2014 user-reported auto-reject 2026-08-09"
   }
 }

@@ -54,15 +54,18 @@ def _captcha_risk(job: JobListing) -> float:
 
 
 def auto_submit_enabled() -> bool:
-    """Master switch: env opt-in AND no kill-switch file present."""
-    return os.getenv("AUTONOMOUSHIRE_AUTO_SUBMIT", "0") == "1" and not _KILL_SWITCH.exists()
+    """Master switch: config opt-in AND no kill-switch file present. Reads via Settings (which loads
+    .env) rather than os.getenv — the raw-env read was a silent no-op because nothing exports .env
+    into os.environ, so the opt-in never took effect. The kill-switch file still hard-disables."""
+    from core.config import get_settings
+    return get_settings().auto_submit_enabled and not _KILL_SWITCH.exists()
 
 
 def _company_counts(state: JobSearchState) -> Counter:
     """How many applications are already live (submitted/queued) per company."""
     c: Counter = Counter()
     for a in state.get("applications", []):
-        if _counts_against_cap(a):   # PENDING + SUBMITTED-within-window (rolling cap)
+        if _counts_against_cap(a, company=a.get("company_name")):   # PENDING + SUBMITTED-within-(per-company)-window
             c[(a.get("company_name") or "").strip().lower()] += 1
     return c
 

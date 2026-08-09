@@ -116,7 +116,8 @@ async def intake_jobs(discovered: list[dict], state: JobSearchState,
     # Window-aware per-company count: PENDING + SUBMITTED-within-window (NOT all-time pending-only —
     # that let submitted apps free unlimited slots, so we hit Roblox 6×). See core.company_caps.
     company_counts = Counter(_norm(a.get("company_name"))
-                             for a in updated.get("applications", []) if _counts_against_cap(a))
+                             for a in updated.get("applications", [])
+                             if _counts_against_cap(a, company=a.get("company_name")))
     # Reuse the learned quality gates: low-value companies (avg fit < 40 over ≥10 jobs) +
     # zero-pass title patterns (forward deployed, solutions engineer, sales…) + sponsorship
     # knock-outs. Keeps Palantir/Cloudflare/Veeva noise out of the queue.

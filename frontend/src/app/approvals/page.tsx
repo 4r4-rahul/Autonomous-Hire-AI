@@ -55,6 +55,7 @@ export default function ApprovalsPage() {
   const [hideStale, setHideStale] = useState(false);
   const [addedWithinMin, setAddedWithinMin] = useState(0); // 0 = any; else minutes-since-added window
   const [atsFilter, setAtsFilter] = useState("");
+  const [employment, setEmployment] = useState(""); // "" = any, else "w2" | "contract" (staffing/C2C)
   const [expanded, setExpanded] = useState<Set<string>>(new Set()); // groups default COLLAPSED (folder view)
   const [focusedId, setFocusedId] = useState<string | null>(null);
 
@@ -174,13 +175,17 @@ export default function ApprovalsPage() {
   // ── Derived view: filter → sort → group ────────────────────────────────────
   const all = useMemo(() => pending ?? [], [pending]);
   const filtered = useMemo(() => {
-    let f = filterApps(all, { search, freshOnly, preparedOnly, ats: atsFilter, addedWithinMin });
+    let f = filterApps(all, { search, freshOnly, preparedOnly, ats: atsFilter, addedWithinMin, employment });
     if (hideStale) f = f.filter((a) => { const d = daysOld(a.posted_at); return d === null || d <= 21; });
     return sortApps(f, sortBy);
-  }, [all, search, freshOnly, preparedOnly, hideStale, addedWithinMin, atsFilter, sortBy]);
+  }, [all, search, freshOnly, preparedOnly, hideStale, addedWithinMin, atsFilter, employment, sortBy]);
   const groups = useMemo(() => groupApps(filtered, groupBy), [filtered, groupBy]);
   const atsList = useMemo(() => distinctAts(all), [all]);
-  const filtersActive = !!search || freshOnly || preparedOnly || hideStale || addedWithinMin > 0 || !!atsFilter;
+  const empCounts = useMemo(() => ({
+    w2: all.filter((a) => (a.employment_type || "") === "w2").length,
+    contract: all.filter((a) => (a.employment_type || "") === "contract").length,
+  }), [all]);
+  const filtersActive = !!search || freshOnly || preparedOnly || hideStale || addedWithinMin > 0 || !!atsFilter || !!employment;
 
   // Follow-up lane: submitted 3–30 days ago — old enough to follow up, not so old it's dead. A short
   // follow-up or (better) a referral here is the highest-leverage post-apply move.
@@ -318,6 +323,25 @@ export default function ApprovalsPage() {
           >
             Prepared
           </button>
+          {/* Employment type — direct-hire W2 vs staffing/contract/C2C. Mutually exclusive toggles. */}
+          <button
+            onClick={() => setEmployment((v) => (v === "w2" ? "" : "w2"))}
+            title="Direct-employer W2 roles (company ATS / careers) — not staffing/contract"
+            className={`text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-colors ${
+              employment === "w2" ? "bg-sky-600/25 border-sky-500/50 text-sky-300" : "bg-slate-800/60 border-slate-700 text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            W2{empCounts.w2 ? ` (${empCounts.w2})` : ""}
+          </button>
+          <button
+            onClick={() => setEmployment((v) => (v === "contract" ? "" : "contract"))}
+            title="Contract / C2C / staffing-agency placements (Kforce, TEKsystems, Actalent, NTT, Genpact…)"
+            className={`text-xs font-medium px-2.5 py-1.5 rounded-lg border transition-colors ${
+              employment === "contract" ? "bg-amber-600/25 border-amber-500/50 text-amber-300" : "bg-slate-800/60 border-slate-700 text-slate-400 hover:text-slate-200"
+            }`}
+          >
+            Contract/C2C{empCounts.contract ? ` (${empCounts.contract})` : ""}
+          </button>
           <button
             onClick={() => setHideStale((v) => !v)}
             title="Hide postings older than 3 weeks — callback odds there are near zero"
@@ -363,7 +387,7 @@ export default function ApprovalsPage() {
             </span>
             {filtersActive && (
               <button
-                onClick={() => { setSearch(""); setFreshOnly(false); setPreparedOnly(false); setHideStale(false); setAddedWithinMin(0); setAtsFilter(""); }}
+                onClick={() => { setSearch(""); setFreshOnly(false); setPreparedOnly(false); setHideStale(false); setAddedWithinMin(0); setAtsFilter(""); setEmployment(""); }}
                 className="text-slate-500 hover:text-slate-300 underline"
               >
                 clear

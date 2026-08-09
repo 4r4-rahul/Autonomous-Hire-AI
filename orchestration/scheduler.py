@@ -193,6 +193,18 @@ async def job_email_monitor() -> None:
             logger.warning("scheduled_learning_failed", error=str(e))
         _save_state(updated)
         await _sync_db()
+        # Close the DB→JSON loop: UI "Mark Applied" and extension submits land in the DB; without
+        # this, the JSON keeps showing them pending_review and the two stores drift (the root cause of
+        # the queue-count wobble). reconcile is FORWARD-ONLY (rank-gated) so it only ADVANCES a JSON
+        # app to a decided status the DB already holds — never regresses a submitted app or resurrects
+        # a stale one. Safe to run every cycle now that the historical bogus-batch drift is cleaned.
+        try:
+            from core.decision_sync import reconcile_db_decisions_to_json
+            rec = await reconcile_db_decisions_to_json()
+            if rec.get("changed", {}).get("total"):
+                logger.info("scheduled_decision_reconcile_done", changed=rec["changed"])
+        except Exception as e:
+            logger.warning("scheduled_decision_reconcile_failed", error=str(e)[:140])
     except Exception as e:
         logger.error("scheduled_email_monitor_failed", error=str(e))
 
@@ -294,6 +306,23 @@ async def job_teksystems_scan() -> None:
         logger.error("scheduled_teksystems_scan_failed", error=str(e)[:140])
 
 
+async def job_phenom_scan() -> None:
+    """Off-LinkedIn DISCOVERY across Phenom-platform STAFFING firms (TEKsystems + Aston Carter +
+    Actalent, all Allegis Group H1B sponsors) via their PUBLIC sitemaps + JSON-LD — crawler-facing,
+    so no bot-fight, no browser. Cheap-parks fresh, US, on-target roles (Haiku scoring, tailor=False;
+    Opus tailoring stays on-demand). Supersedes the single-host teksystems_scanner. Contract roles —
+    sourced separately from the sponsor boards; the W2 gates + employment classifier handle them."""
+    try:
+        from core.state_store import load_state
+        from agents.discovery.phenom_scanner import run
+        state = load_state()
+        _, summary = await run(state, limit=400, tailor=False, persist=True, max_details=80)
+        await _sync_db()
+        logger.info("scheduled_phenom_scan_done", **summary)
+    except Exception as e:
+        logger.error("scheduled_phenom_scan_failed", error=str(e)[:140])
+
+
 async def job_kforce_scan() -> None:
     """Off-LinkedIn DISCOVERY for Kforce via its PUBLIC Azure Search API — plain HTTP, no browser,
     no bot-fight. Cheap-parks fresh, US, on-target roles (Haiku scoring, tailor=False; Opus tailoring
@@ -322,6 +351,22 @@ async def job_insight_global_scan() -> None:
         logger.info("scheduled_insightglobal_scan_done", **summary)
     except Exception as e:
         logger.error("scheduled_insightglobal_scan_failed", error=str(e)[:140])
+
+
+async def job_workday_scan() -> None:
+    """Off-LinkedIn DISCOVERY across big H1B-sponsoring IT-services firms on WORKDAY (NTT Data,
+    Genpact, Accenture) via the public cxs JSON API — plain HTTP, no browser, no key. US-filtered
+    (location facet where exposed + client-side). LOW-YIELD by nature (these firms are US-sparse and
+    India-heavy), but unlocks sponsors no board API reaches. Haiku scoring, tailor=False."""
+    try:
+        from core.state_store import load_state
+        from agents.discovery.workday_scanner import run
+        state = load_state()
+        _, summary = await run(state, limit=400, tailor=False, persist=True)
+        await _sync_db()
+        logger.info("scheduled_workday_scan_done", **summary)
+    except Exception as e:
+        logger.error("scheduled_workday_scan_failed", error=str(e)[:140])
 
 
 async def job_pretailor() -> None:
@@ -356,8 +401,21 @@ async def job_auto_submit() -> None:
         profile = yaml.safe_load(Path("data/user_profile.yaml").read_text())
         # Dedicated conservative cap for the HANDS-OFF lane (separate from the manual apply budget)
         # — a brand-new irreversible sender should start small; raise AUTO_SUBMIT_MAX_PER_DAY once trusted.
-        _auto_cap = int(os.getenv("AUTO_SUBMIT_MAX_PER_DAY", "5"))
-        sel = select_auto_submit(state, profile, _auto_cap)
+        # PER CALENDAR DAY, not per run: `limit` bounds a single select() call, so with the scheduler
+        # firing this job several times a day the raw cap could send N×5. Subtract what already went out
+        # today (any submit path — auto OR manual) so the lane never pushes the daily total past the cap.
+        _auto_cap = get_settings().auto_submit_max_per_day
+        _today = datetime.now(timezone.utc).date().isoformat()   # UTC day, matches stored submitted_at
+        _sent_today = sum(
+            1 for a in state.get("applications", [])
+            if a.get("status") == "submitted" and a.get("submitted_at")
+            and str(a.get("submitted_at"))[:10] == _today
+        )
+        _remaining = max(0, _auto_cap - _sent_today)
+        if _remaining <= 0:
+            logger.info("auto_submit_daily_cap_reached", cap=_auto_cap, sent_today=_sent_today)
+            return
+        sel = select_auto_submit(state, profile, _remaining)
         if not sel["submit"]:
             logger.info("auto_submit_nothing_eligible", queued=len(sel["queue"]))
             return
@@ -395,6 +453,18 @@ async def job_auto_submit() -> None:
         logger.error("scheduled_auto_submit_failed", error=str(e))
 
 
+async def job_dead_link_sweep() -> None:
+    """Prune postings that have CLOSED since they were queued (Greenhouse/Lever/Ashby jobs 404 the
+    moment they're filled — ~30-40/day here). Definitive-dead-only (ATS API 404/410), protects
+    already-applied apps, reversible (status→skipped). Keeps the review-queue count trustworthy."""
+    try:
+        from agents.application.queue_sweeper import sweep_dead_queue
+        r = await sweep_dead_queue(apply=True)
+        logger.info("scheduled_dead_link_sweep_done", **r)
+    except Exception as e:
+        logger.error("scheduled_dead_link_sweep_failed", error=str(e)[:140])
+
+
 async def job_referral_prep() -> None:
     """Route the highest-fit reviewed roles through the REFERRAL channel FIRST — draft a warm-intro
     kit and flag each app `referral_first` so the review queue surfaces the referral path before a
@@ -414,9 +484,10 @@ async def job_referral_prep() -> None:
 # Which jobs are LIVE. The LinkedIn apply pipeline (scan → fill → park) plus the
 # capture→learn loop. Recruiter-outreach jobs are SLEPT to keep the focus clear —
 # add "contact_finder"/"outreach_runner" back here to wake them.
-_ACTIVE_JOBS = {"linkedin_health", "linkedin_scanner", "board_scanner", "teksystems_scanner",
-                "kforce_scanner", "insightglobal_scanner", "apply_pipeline", "referral_prep",
-                "pretailor", "auto_submit", "email_monitor", "digest"}
+_ACTIVE_JOBS = {"linkedin_health", "linkedin_scanner", "board_scanner", "phenom_scanner",
+                "kforce_scanner", "insightglobal_scanner", "workday_scanner", "apply_pipeline",
+                "referral_prep", "pretailor", "auto_submit", "email_monitor", "digest",
+                "dead_link_sweep"}
 
 # id → (func, base_interval_seconds, display_name, misfire_grace_time)
 _JOB_SPECS = {
@@ -425,15 +496,18 @@ _JOB_SPECS = {
     "contact_finder":  (job_contact_finder,  21600, "LinkedIn Contact Finder",                300),
     "outreach_runner": (job_outreach_runner, 7200,  "LinkedIn Outreach Runner",               120),
     "board_scanner":   (job_board_scan,      3600,  "Board Scanner (off-LinkedIn discovery, 1h)", 600),
-    "teksystems_scanner": (job_teksystems_scan, 21600, "TEKsystems Scanner (sitemap discovery, 6h)", 600),
+    "teksystems_scanner": (job_teksystems_scan, 21600, "TEKsystems Scanner (single-host, superseded by phenom_scanner)", 600),
+    "phenom_scanner":  (job_phenom_scan,     21600, "Phenom Staffing Scanner (TEKsystems+Aston Carter+Actalent, 6h)", 600),
     "kforce_scanner":  (job_kforce_scan,     21600, "Kforce Scanner (Azure Search API, 6h)",   600),
     "insightglobal_scanner": (job_insight_global_scan, 21600, "Insight Global Scanner (Jibe API, 6h)", 600),
+    "workday_scanner": (job_workday_scan,    43200, "Workday IT-Services Scanner (NTT/Genpact/Accenture cxs, 12h)", 900),
     "apply_pipeline":  (job_apply_pipeline,  3600,  "Apply Pipeline (score+park cheap, 1h)",   600),
     "referral_prep":   (job_referral_prep,   7200,  "Referral Prep (high-fit warm-intro kits, 2h)", 300),
     "pretailor":       (job_pretailor,       7200,  "Pre-Tailor W2/contract on DeepSeek (cheap, 2h)", 600),
     "auto_submit":     (job_auto_submit,     43200, "Auto-Submit Safe Apps (opt-in)",         600),
     "email_monitor":   (job_email_monitor,   3600,  "Gmail Email Monitor (1h)",               120),
     "digest":          (job_digest,          86400, "Daily Health + Activity Digest",          600),
+    "dead_link_sweep": (job_dead_link_sweep, 21600, "Dead-Link Queue Sweep (prune closed postings, 6h)", 600),
 }
 
 
