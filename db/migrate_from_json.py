@@ -111,7 +111,11 @@ def _should_skip_prune(db_jobs: int, json_jobs: int, db_apps: int, json_apps: in
     return jobs_drop or apps_drop
 
 
-def migrate(quiet: bool = False) -> dict:
+def migrate(quiet: bool = False, force_prune: bool = False) -> dict:
+    """force_prune=True bypasses the >50%-drop tripwire for ONE deliberate run. Use only when the
+    JSON is verified healthy but the DB has grown so large (stale jobs never pruned) that JSON is
+    permanently under 50% of it — a deadlock where the tripwire blocks the very prune that fixes it.
+    Decided/submitted rows are still preserved by the prune logic below."""
     create_tables_sync()
 
     state_path   = _ROOT / "data" / "pipeline_state.json"
@@ -272,6 +276,7 @@ def migrate(quiet: bool = False) -> dict:
                         rejection_reason     = app_raw.get("rejection_reason"),
                         referral_first       = bool(app_raw.get("referral_first", False)),
                         referral_done        = bool(app_raw.get("referral_done", False)),
+                        employment_type      = app_raw.get("employment_type", "") or "",
                         submitted_at         = _parse_dt(app_raw.get("submitted_at")),
                         # TRUE creation time (when the app entered the queue) — was wrongly set to
                         # submitted_at/now, which made created_at the SYNC time for pending apps and
@@ -299,7 +304,7 @@ def migrate(quiet: bool = False) -> dict:
             select(func.count(Application.id))
             .where(Application.status.notin_(list(_DECIDED_STATUSES)))).scalar() or 0
         json_app_count = len(written_app_job_ids)
-        if _should_skip_prune(db_job_count, json_job_count, db_app_count, json_app_count):
+        if not force_prune and _should_skip_prune(db_job_count, json_job_count, db_app_count, json_app_count):
             counts_note = (f"prune SKIPPED — tripwire: json={json_job_count}/{json_app_count} "
                            f"jobs/apps vs db={db_job_count}/{db_app_count} (>50% drop). "
                            f"Investigate the state file before re-syncing.")

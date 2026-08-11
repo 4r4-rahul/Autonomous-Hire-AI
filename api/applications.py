@@ -48,10 +48,11 @@ def _enrich(app: Application) -> ApplicationOut:
         disp, multi = us_first_location(app.job.location or "")
         out.location = disp
         out.multi_location = multi
-        # Tag W2 vs contract/C2C for the review-queue filter. The DB JobSource enum drops the staffing
-        # prefix (→ careers_page), so classify company-aware (company_name + JD language).
+        # Tag W2 vs contract/C2C for the review-queue split. PREFER the classification persisted at
+        # intake (which used the ATS's structured contract flag — cleanest); fall back to a live
+        # company/JD classify for legacy rows that predate persistence.
         from core.employment import classify_employment_for_job
-        out.employment_type = classify_employment_for_job(
+        out.employment_type = (getattr(app, "employment_type", "") or "") or classify_employment_for_job(
             str(app.job.source or ""), app.job.company_name or "",
             app.job.title or "", app.job.description or "")
     return out

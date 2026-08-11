@@ -225,12 +225,18 @@ async def _fetch_company_postings(company: str) -> list | None:
             url = ((f"https://boards.greenhouse.io/embed/job_app?for={slug}&token={jid}" if slug and jid else None)
                    or _embed_from_url(p.get("absolute_url"))
                    or p.get("absolute_url"))
+            # Greenhouse has no reliable structured employment-type field — a metadata entry named
+            # like "Employment Type"/"Job Type" is the best we get (else "" → fall back to JD/source).
+            _gh_et = next((str(m.get("value")) for m in (p.get("metadata") or [])
+                           if "employ" in (m.get("name") or "").lower()
+                           or "job type" in (m.get("name") or "").lower()), "")
             out.append({"ats": "greenhouse", "title": p.get("title"), "url": url,
                         "location": (p.get("location") or {}).get("name", ""),
                         # Use the MORE RECENT of first_published/updated_at: many open Greenhouse reqs
                         # were first posted long ago but are actively maintained (recent updated_at).
                         # Keying freshness off first_published alone flags ~84% of OPEN roles "stale".
                         "posted_at": _newer_iso(p.get("updated_at"), p.get("first_published")),
+                        "employment_type": _gh_et,
                         "description": _strip_html(p.get("content", ""))})
         return out
 
@@ -247,6 +253,8 @@ async def _fetch_company_postings(company: str) -> list | None:
                         "url": p.get("applyUrl") or p.get("hostedUrl"),
                         "location": " | ".join([loc] + [x for x in allloc if x != loc]),
                         "posted_at": _epoch_ms_to_iso(p.get("createdAt")),
+                        # Lever's STRUCTURED commitment: "Full-time" | "Contract" | "Temporary" | ...
+                        "employment_type": cats.get("commitment", ""),
                         "description": "\n".join(x for x in parts if x)})
         return out
 
@@ -260,6 +268,8 @@ async def _fetch_company_postings(company: str) -> list | None:
             out.append({"ats": "ashby", "title": p.get("title"),
                         "url": p.get("applyUrl") or p.get("jobUrl"), "location": loc.strip(),
                         "posted_at": p.get("publishedAt") or "",
+                        # Ashby STRUCTURED employmentType: "FullTime" | "Contract" | "Temporary" | ...
+                        "employment_type": p.get("employmentType", ""),
                         "description": p.get("descriptionPlain") or _strip_html(p.get("descriptionHtml", ""))})
         return out
 
@@ -278,6 +288,8 @@ async def _fetch_company_postings(company: str) -> list | None:
             url = f"https://jobs.smartrecruiters.com/{slug}/{pid}" if pid else None
             out.append({"ats": "smartrecruiters", "title": p.get("name"), "url": url,
                         "location": loc_str, "posted_at": p.get("releasedDate") or "",
+                        # SmartRecruiters STRUCTURED typeOfEmployment: {label: "Full-time"|"Contract"}
+                        "employment_type": (p.get("typeOfEmployment") or {}).get("label", ""),
                         "description": ""})
         return out
 
@@ -290,6 +302,7 @@ async def _fetch_company_postings(company: str) -> list | None:
             out.append({"ats": "workable", "title": p.get("title"),
                         "url": p.get("application_url") or p.get("url"),
                         "location": loc_str, "posted_at": p.get("published_on") or p.get("created_at") or "",
+                        "employment_type": p.get("employment_type") or p.get("type") or "",
                         "description": ""})
         return out
 
@@ -562,6 +575,7 @@ async def resolve_ats_for(company: str, title: str, *, us_only: bool = False) ->
     return {"url": best["url"], "ats": best["ats"], "matched_title": best["title"],
             "location": best.get("location", ""), "location_class": cls,
             "posted_at": best.get("posted_at", ""),
+            "employment_type": best.get("employment_type", ""),  # ATS structured contract flag
             "description": (best.get("description") or "")[:4000]}
 
 

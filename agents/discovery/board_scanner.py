@@ -157,6 +157,7 @@ async def run(state, *, max_companies: int = 25, intake_limit: int = 10, tailor:
                 "posted_at": p.get("posted_at", ""),
                 "source": f"board:{p.get('ats', '')}",
                 "fallback_url": p.get("url"),
+                "employment_type": p.get("employment_type", ""),  # ATS's structured contract flag
             })
 
     logger.info("board_scan_discovered", scanned=len(slice_), with_jobs=companies_with_jobs,
