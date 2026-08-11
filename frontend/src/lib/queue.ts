@@ -181,3 +181,36 @@ export function groupApps(apps: Application[], key: GroupKey): QueueGroup[] {
 export function distinctAts(apps: Application[]): string[] {
   return [...new Set(apps.map((a) => atsOf(a.ats_url)))].sort();
 }
+
+// ── Contract dedup: collapse the SAME role posted across multiple vendors ──────────────────────
+// In the C2C world one client req is re-blasted by many bench firms — identical title+location,
+// different vendor company. That's the #1 noise source on the contract desk. Collapse them to ONE
+// (keep the highest-fit / freshest), tagging `dupCount` so the row can show "N vendors".
+function _normTitle(t: string): string {
+  return (t || "").toLowerCase()
+    .replace(/\([^)]*\)/g, " ")                                          // drop parentheticals
+    .replace(/\b(senior|sr|staff|principal|lead|junior|jr|ii|iii|iv|v)\b/g, " ")  // seniority/roman
+    .replace(/[^a-z0-9]+/g, " ").replace(/\s+/g, " ").trim();
+}
+const _US_STATE = /\b(al|ak|az|ar|ca|co|ct|de|fl|ga|hi|id|il|in|ia|ks|ky|la|me|md|ma|mi|mn|ms|mo|mt|ne|nv|nh|nj|nm|ny|nc|nd|oh|ok|or|pa|ri|sc|sd|tn|tx|ut|vt|va|wa|wv|wi|wy)\b/;
+function _normLoc(l: string): string {
+  const s = (l || "").toLowerCase();
+  if (/remote|anywhere|united states|usa|us\b/.test(s)) return "us";
+  const m = s.match(_US_STATE);
+  return m ? m[0] : (s.replace(/[^a-z]+/g, " ").trim().split(" ")[0] || "");
+}
+
+export function dedupeContract(apps: Application[]): Application[] {
+  const groups = new Map<string, Application[]>();
+  for (const a of apps) {
+    const k = `${_normTitle(a.role_title || "")}|${_normLoc(a.location || "")}`;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k)!.push(a);
+  }
+  const out: Application[] = [];
+  for (const g of groups.values()) {
+    g.sort((a, b) => scoreOf(b) - scoreOf(a) || ((daysOld(a.posted_at) ?? 1e9) - (daysOld(b.posted_at) ?? 1e9)) || tie(a, b));
+    out.push(g.length > 1 ? { ...g[0], dupCount: g.length } : g[0]);
+  }
+  return out;
+}

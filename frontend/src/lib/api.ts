@@ -74,6 +74,7 @@ export interface Application {
   location: string | null;
   multi_location: boolean;
   employment_type: string;   // "w2" | "contract" | "unknown" — direct-hire vs staffing/C2C
+  dupCount?: number;         // frontend-only: # of vendors posting the same role (contract dedup)
 }
 
 export interface PipelineRun {
@@ -146,9 +147,19 @@ export interface Insights {
   interviews?: { company: string; role: string; status: string; at: string | null; prep_doc_path?: string | null }[];
 }
 
+export interface IndiaRole {
+  id: string; company: string; title: string; location: string;
+  url: string; band: string; market: string; status: string; domain: string; global: boolean;
+}
+export interface IndiaRoles {
+  available: boolean; generated_at: string | null; count: number;
+  companies?: string[]; roles: IndiaRole[];
+}
+
 export const api = {
   stats:           ()                => req<Stats>("/stats"),
   insights:        ()                => req<Insights>("/insights"),
+  india:           (params?: string) => req<IndiaRoles>(`/india/roles${params ? `?${params}` : ""}`),
   pipelineStatus:  ()                => req<PipelineStatus>("/pipeline/status"),
   startPipeline:   (mode: string)    => req<{ ok: boolean; pid?: number }>("/pipeline/start", {
     method: "POST",

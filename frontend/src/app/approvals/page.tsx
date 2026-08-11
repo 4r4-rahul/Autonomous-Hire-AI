@@ -14,7 +14,7 @@ import { FormAnswersModal } from "@/components/FormAnswersModal";
 import { ScoreBadge } from "@/components/ScoreBadge";
 import {
   SORT_OPTIONS, GROUP_OPTIONS, ADDED_WINDOWS, atsOf, daysOld, scoreOf, addedAgo,
-  sortApps, filterApps, groupApps, distinctAts, isReferralFirst,
+  sortApps, filterApps, groupApps, distinctAts, isReferralFirst, dedupeContract,
   type SortKey, type GroupKey,
 } from "@/lib/queue";
 
@@ -177,11 +177,12 @@ export default function ApprovalsPage() {
   const unpreparedOf = (items: Application[]) => items.filter((a) => a.quality_score == null).length;
 
   // ── Derived view: filter → sort → group ────────────────────────────────────
-  // /contract lane sees ONLY contract; /approvals EXCLUDES contract (full-time desk) — kept separate.
+  // /contract lane sees ONLY contract (deduped — same role across vendors collapses to one);
+  // /approvals EXCLUDES contract (full-time desk). Kept separate.
   const all = useMemo(() => {
     const base = pending ?? [];
-    return contractScope ? base.filter((a) => a.employment_type === "contract")
-                         : base.filter((a) => a.employment_type !== "contract");
+    if (contractScope) return dedupeContract(base.filter((a) => a.employment_type === "contract"));
+    return base.filter((a) => a.employment_type !== "contract");
   }, [pending, contractScope]);
   const filtered = useMemo(() => {
     let f = filterApps(all, { search, freshOnly, preparedOnly, ats: atsFilter, addedWithinMin,
@@ -582,6 +583,12 @@ function PendingRow({ app, h, focused }: { app: Application; h: RowHandlers; foc
         <div className="min-w-0">
           <div className="flex items-center gap-2 min-w-0">
             <div className="text-sm font-semibold text-slate-100 truncate">{app.company_name}</div>
+            {(app.dupCount ?? 0) > 1 && (
+              <span title={`${app.dupCount} vendors are posting this same role — collapsed to one`}
+                className="shrink-0 text-[10px] px-1.5 py-0.5 rounded border border-slate-600 bg-slate-700/40 text-slate-400">
+                🔁 {app.dupCount} vendors
+              </span>
+            )}
             {isReferralFirst(app) && (
               <button
                 onClick={() => h.setReferralApp(app)}
