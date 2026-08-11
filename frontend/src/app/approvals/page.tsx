@@ -1,6 +1,7 @@
 "use client";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
 import { api, type Application } from "@/lib/api";
 import { fmtRelative, STATUS_LABEL } from "@/lib/utils";
 import {
@@ -41,6 +42,9 @@ function AtsBadge({ url }: { url: string | null }) {
 }
 
 export default function ApprovalsPage() {
+  // Route-scoped: /contract renders this SAME queue but showing ONLY C2C/contract roles; /approvals
+  // shows the full-time (non-contract) queue. Two separate review desks, one component.
+  const contractScope = usePathname() === "/contract";
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [referralApp, setReferralApp] = useState<Application | null>(null);
   const [answersApp, setAnswersApp] = useState<Application | null>(null);
@@ -55,7 +59,7 @@ export default function ApprovalsPage() {
   const [hideStale, setHideStale] = useState(false);
   const [addedWithinMin, setAddedWithinMin] = useState(0); // 0 = any; else minutes-since-added window
   const [atsFilter, setAtsFilter] = useState("");
-  const [employment, setEmployment] = useState(""); // "" = any, else "w2" | "contract" (staffing/C2C)
+  const [employment, setEmployment] = useState(contractScope ? "contract" : ""); // "" = any, else "w2" | "contract"
   const [expanded, setExpanded] = useState<Set<string>>(new Set()); // groups default COLLAPSED (folder view)
   const [focusedId, setFocusedId] = useState<string | null>(null);
 
@@ -173,12 +177,18 @@ export default function ApprovalsPage() {
   const unpreparedOf = (items: Application[]) => items.filter((a) => a.quality_score == null).length;
 
   // ── Derived view: filter → sort → group ────────────────────────────────────
-  const all = useMemo(() => pending ?? [], [pending]);
+  // /contract lane sees ONLY contract; /approvals EXCLUDES contract (full-time desk) — kept separate.
+  const all = useMemo(() => {
+    const base = pending ?? [];
+    return contractScope ? base.filter((a) => a.employment_type === "contract")
+                         : base.filter((a) => a.employment_type !== "contract");
+  }, [pending, contractScope]);
   const filtered = useMemo(() => {
-    let f = filterApps(all, { search, freshOnly, preparedOnly, ats: atsFilter, addedWithinMin, employment });
+    let f = filterApps(all, { search, freshOnly, preparedOnly, ats: atsFilter, addedWithinMin,
+                              employment: contractScope ? "" : employment });
     if (hideStale) f = f.filter((a) => { const d = daysOld(a.posted_at); return d === null || d <= 21; });
     return sortApps(f, sortBy);
-  }, [all, search, freshOnly, preparedOnly, hideStale, addedWithinMin, atsFilter, employment, sortBy]);
+  }, [all, search, freshOnly, preparedOnly, hideStale, addedWithinMin, atsFilter, employment, contractScope, sortBy]);
   const groups = useMemo(() => groupApps(filtered, groupBy), [filtered, groupBy]);
   const atsList = useMemo(() => distinctAts(all), [all]);
   const empCounts = useMemo(() => ({
@@ -243,7 +253,7 @@ export default function ApprovalsPage() {
   return (
     <div>
       <div className="mb-5">
-        <h1 className="text-2xl font-bold text-slate-100">Review Queue</h1>
+        <h1 className="text-2xl font-bold text-slate-100">{contractScope ? "Contract Queue — C2C / C2H" : "Review Queue"}</h1>
         <p className="text-sm text-slate-500 mt-0.5">
           <strong className="text-blue-400">Open &amp; Apply ↗</strong> opens the application in a new tab — fill it with the
           extension, submit, then mark it <strong className="text-green-400">Applied</strong> or <strong className="text-red-400">Skip</strong>.
@@ -323,7 +333,8 @@ export default function ApprovalsPage() {
           >
             Prepared
           </button>
-          {/* Employment type — direct-hire W2 vs staffing/contract/C2C. Mutually exclusive toggles. */}
+          {/* Employment chips only on the main desk — the /contract lane is already locked to C2C. */}
+          {!contractScope && (<>
           <button
             onClick={() => setEmployment((v) => (v === "w2" ? "" : "w2"))}
             title="Direct-employer W2 roles (company ATS / careers) — not staffing/contract"
@@ -342,6 +353,7 @@ export default function ApprovalsPage() {
           >
             Contract/C2C{empCounts.contract ? ` (${empCounts.contract})` : ""}
           </button>
+          </>)}
           <button
             onClick={() => setHideStale((v) => !v)}
             title="Hide postings older than 3 weeks — callback odds there are near zero"
