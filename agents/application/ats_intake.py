@@ -215,10 +215,15 @@ async def intake_jobs(discovered: list[dict], state: JobSearchState,
         # CONTRACT-ONLY MODE: reject anything that isn't C2C/C2H/contract. Classified from the source
         # (staffing/vendor prefix), the company (known staffing firm), and the full resolved JD
         # (c2c / corp-to-corp / contract-to-hire / 1099 language). Full-time W2 roles are dropped.
-        if _contract_only():
-            from core.employment import classify_employment_for_job
-            if classify_employment_for_job(d.get("source", ""), company, title, desc) != "contract":
-                return None, "skipped_not_contract"
+        # Classify employment ONCE (cheap), preferring the ATS's OWN structured flag (resolved role
+        # first, then the discovered lead) — cleanest contract signal, falls back to source/company/JD.
+        # Persisted on the app so the /contract vs /approvals desks split consistently (the DB otherwise
+        # loses the structured flag). In contract mode this also gates: only C2C/C2H/contract survives.
+        from core.employment import classify_employment_for_job
+        _et = (res.get("employment_type") if res else "") or d.get("employment_type", "")
+        _employ = classify_employment_for_job(d.get("source", ""), company, title, desc, _et)
+        if _contract_only() and _employ != "contract":
+            return None, "skipped_not_contract"
         # When we fell back (no board resolution), the fallback URL/role hasn't been US-verified —
         # drop it if the discovered location/title looks foreign. (Resolved hits are already US.)
         if not res and not _is_relevant_location(title, d.get("location"), (d.get("description") or "")[:200]):
@@ -246,7 +251,7 @@ async def intake_jobs(discovered: list[dict], state: JobSearchState,
                 fit = await _score_job(job, llm_score)
             except Exception:
                 return None, "errors"
-        cand = {"d": d, "job": job, "is_new": is_new, "fit": fit,
+        cand = {"d": d, "job": job, "is_new": is_new, "fit": fit, "employment": _employ,
                 "ats": (res["ats"] if res else "fallback"), "resolved": bool(res)}
         return cand, ("ok" if fit.get("passed_threshold") else "skipped_fit")
 
@@ -298,7 +303,7 @@ async def intake_jobs(discovered: list[dict], state: JobSearchState,
                     "company_name": company, "role_title": title,
                     "status": "pending_review", "tailored_resume_path": None,
                     "quality_score": None, "fit_score": cand["fit"].get("score"),
-                    "needs_tailoring": True,
+                    "needs_tailoring": True, "employment_type": cand.get("employment", ""),
                     "created_at": datetime.now(timezone.utc).isoformat(),
                 }
             # Commit the JobListing (fresh → append; existing lead → update in place).

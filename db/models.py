@@ -144,6 +144,10 @@ class Application(Base):
     # Referral-first routing: a high-fit role flagged for a warm intro before cold-applying (A3).
     referral_first: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     referral_done: Mapped[bool]  = mapped_column(Boolean, nullable=False, default=False)
+    # Persisted employment classification ("contract" | "w2" | "") — computed at intake using the ATS's
+    # structured flag (Lever commitment / Ashby / SR), so the /contract vs /approvals desks split
+    # consistently without the API re-guessing from a DB that dropped the structured signal.
+    employment_type: Mapped[str] = mapped_column(String(24), nullable=False, default="", server_default="")
     created_at: Mapped[datetime]   = mapped_column(DateTime(timezone=True), default=_now)
     submitted_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_at: Mapped[datetime]   = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)

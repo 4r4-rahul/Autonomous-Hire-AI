@@ -38,6 +38,22 @@ def _is_staffing_source(source: str) -> bool:
     return any(s.startswith(p) or f":{p}" in s or f"_{p}" in s for p in _STAFFING_SOURCE_PREFIXES)
 
 
+# The ATS's OWN structured employment-type field (Lever categories.commitment, Ashby employmentType,
+# SmartRecruiters typeOfEmployment, Workable employment_type). This is the CLEANEST contract signal —
+# the employer declaring the role's type — so it beats JD-language guessing (no "block"/"applied
+# systems" false positives). Returns "contract" | "w2" | "" (unknown/absent → fall back to heuristics).
+def _structured_class(employment_type: str) -> str:
+    t = (employment_type or "").strip().lower()
+    if not t:
+        return ""
+    if any(k in t for k in ("contract", "contractor", "c2c", "1099", "temporary", "temp",
+                            "fixed term", "fixed-term", "seasonal", "freelance")):
+        return "contract"
+    if any(k in t for k in ("full", "permanent", "fte", "regular", "direct")):
+        return "w2"
+    return ""
+
+
 # Known staffing/consulting firm NAMES (the company_name signal). The DB stores a coarse JobSource
 # ENUM that DROPS the staffing source prefix (a Phenom/Workday/Kforce role becomes `careers_page`),
 # so the UI/API can't classify from source alone — but company_name survives. Keep this in sync with
@@ -55,18 +71,27 @@ STAFFING_COMPANIES = {
 }
 
 
-def classify_employment_for_job(source: str = "", company: str = "",
-                                title: str = "", description: str = "") -> str:
+def classify_employment_for_job(source: str = "", company: str = "", title: str = "",
+                                description: str = "", employment_type: str = "") -> str:
     """Company-aware classify for the UI/API path where the DB has lost the staffing source prefix.
     Treats a KNOWN staffing firm (by company_name) as a staffing source, then defers to the
-    source-first classifier (so an explicit W2/direct-hire JD can still override to w2)."""
+    source-first classifier. `employment_type` = the ATS's structured flag (cleanest signal)."""
     if (company or "").strip().lower() in STAFFING_COMPANIES:
         source = "staffing:" + (source or "")
-    return classify_employment(source, title, description)
+    return classify_employment(source, title, description, employment_type)
 
 
-def classify_employment(source: str = "", title: str = "", description: str = "") -> str:
-    """Return "w2" | "contract" | "unknown". Source-first, JD-language override on explicit conflict."""
+def classify_employment(source: str = "", title: str = "", description: str = "",
+                        employment_type: str = "") -> str:
+    """Return "w2" | "contract" | "unknown".
+    PRIORITY: (1) the ATS's OWN structured employment-type field (cleanest — employer-declared);
+    (2) explicit JD language (c2c / contract-to-hire / 1099); (3) staffing source/company; (4) a real
+    company ATS = W2. The structured flag wins so direct-client CONTRACT roles are caught precisely
+    and product-co full-time roles aren't false-flagged by stray JD words."""
+    structured = _structured_class(employment_type)
+    if structured:
+        return structured
+
     blob = f"{title or ''}\n{(description or '')[:4000]}"
     staffing = _is_staffing_source(source)
 
