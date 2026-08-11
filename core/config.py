@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     #   "on"            — always think.   "off" — never think.
     deepseek_thinking: str = Field(default="auto", alias="DEEPSEEK_THINKING")
 
+    # Pipeline mode — the reversible full-time PAUSE. "fulltime" = normal W2 discovery+apply;
+    # "contract" = C2C/C2H ONLY: pauses full-time discovery (product-co boards, LinkedIn full-time),
+    # runs every vendor/staffing/consulting/implementation-partner scanner, and the intake gate rejects
+    # any role that isn't contract. Flip back to "fulltime" to resume — nothing is deleted.
+    pipeline_mode: str = Field(default="fulltime", alias="PIPELINE_MODE")
+
     # Hands-off auto-apply (the IRREVERSIBLE auto-submit lane). Routed through Settings — which loads
     # .env — because auto_submit_enabled() previously read os.getenv directly, and nothing populates
     # os.environ from .env, so the .env opt-in was a SILENT NO-OP (looked enabled, never fired).
