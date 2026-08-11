@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import {
-  LayoutDashboard, Network, ClipboardList, Bell, Activity, Brain, Play, Square
+  LayoutDashboard, Network, ClipboardList, Bell, Activity, Brain, Play, Square, Globe, Handshake
 } from "lucide-react";
 
 const NAV = [
@@ -13,6 +13,8 @@ const NAV = [
   { href: "/linkedin",     label: "LinkedIn",     icon: Network },
   { href: "/applications", label: "Applications", icon: ClipboardList },
   { href: "/approvals",    label: "Review Queue", icon: Bell },
+  { href: "/contract",     label: "Contract (C2C)", icon: Handshake },
+  { href: "/india",        label: "India Roles",  icon: Globe },
   { href: "/insights",     label: "Insights",     icon: Brain },
   { href: "/activity",     label: "Activity",     icon: Activity },
 ];
