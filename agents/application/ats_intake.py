@@ -69,6 +69,15 @@ _US = ("remote", "united states", "usa", "u.s.", "u.s ", "anywhere", " us ", "us
        "california", "new jersey", "remote (us", "us remote", "north america")
 
 
+def _contract_only() -> bool:
+    """True when the pipeline is in CONTRACT mode — intake then keeps only C2C/C2H/contract roles."""
+    try:
+        from core.config import get_settings
+        return (get_settings().pipeline_mode or "fulltime").lower() == "contract"
+    except Exception:
+        return False
+
+
 def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").strip().lower())
 
@@ -137,7 +146,8 @@ async def intake_jobs(discovered: list[dict], state: JobSearchState,
 
     report = {"in": len(discovered), "resolved": 0, "queued": 0, "skipped_dup": 0,
               "skipped_no_ats": 0, "skipped_fit": 0, "skipped_cap": 0,
-              "skipped_location": 0, "skipped_prefilter": 0, "skipped_stale": 0, "errors": 0}
+              "skipped_location": 0, "skipped_prefilter": 0, "skipped_stale": 0,
+              "skipped_not_contract": 0, "errors": 0}
     new_jobs, new_apps, new_fits = [], [], []
 
     def _mkjob(d, ats_url, desc):
@@ -202,6 +212,13 @@ async def intake_jobs(discovered: list[dict], state: JobSearchState,
         desc = (res.get("description") if res else "") or d.get("description", "")
         if not ats_url or any(j in ats_url.lower() for j in _JUNK_ATS):
             return None, "skipped_no_ats"
+        # CONTRACT-ONLY MODE: reject anything that isn't C2C/C2H/contract. Classified from the source
+        # (staffing/vendor prefix), the company (known staffing firm), and the full resolved JD
+        # (c2c / corp-to-corp / contract-to-hire / 1099 language). Full-time W2 roles are dropped.
+        if _contract_only():
+            from core.employment import classify_employment_for_job
+            if classify_employment_for_job(d.get("source", ""), company, title, desc) != "contract":
+                return None, "skipped_not_contract"
         # When we fell back (no board resolution), the fallback URL/role hasn't been US-verified —
         # drop it if the discovered location/title looks foreign. (Resolved hits are already US.)
         if not res and not _is_relevant_location(title, d.get("location"), (d.get("description") or "")[:200]):

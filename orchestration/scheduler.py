@@ -369,6 +369,21 @@ async def job_workday_scan() -> None:
         logger.error("scheduled_workday_scan_failed", error=str(e)[:140])
 
 
+async def job_jobdiva_scan() -> None:
+    """Headless-browser discovery of JobDiva staffing firms (Diverse Lynx, Net2Source, Russell Tobin,
+    Mitchell Martin) — the C2C/bench vendors that live on JobDiva's JS-gated portals (no HTTP API).
+    Central to CONTRACT mode. Fragile (breaks on JobDiva UI change, browser per scan). Haiku scoring."""
+    try:
+        from core.state_store import load_state
+        from agents.discovery.jobdiva_scanner import run
+        state = load_state()
+        _, summary = await run(state, limit=400, tailor=False, persist=True)
+        await _sync_db()
+        logger.info("scheduled_jobdiva_scan_done", **summary)
+    except Exception as e:
+        logger.error("scheduled_jobdiva_scan_failed", error=str(e)[:140])
+
+
 async def job_pretailor() -> None:
     """Batch PRE-TAILOR the top un-tailored W2/contract roles on the CHEAP provider (DeepSeek) so
     both lanes have résumés ready ahead of time: the hands-off W2 auto-apply lane can actually fire,
@@ -501,6 +516,7 @@ _JOB_SPECS = {
     "kforce_scanner":  (job_kforce_scan,     21600, "Kforce Scanner (Azure Search API, 6h)",   600),
     "insightglobal_scanner": (job_insight_global_scan, 21600, "Insight Global Scanner (Jibe API, 6h)", 600),
     "workday_scanner": (job_workday_scan,    43200, "Workday IT-Services Scanner (NTT/Genpact/Accenture cxs, 12h)", 900),
+    "jobdiva_scanner": (job_jobdiva_scan,    21600, "JobDiva C2C/Bench Scanner (headless, 6h)", 900),
     "apply_pipeline":  (job_apply_pipeline,  3600,  "Apply Pipeline (score+park cheap, 1h)",   600),
     "referral_prep":   (job_referral_prep,   7200,  "Referral Prep (high-fit warm-intro kits, 2h)", 300),
     "pretailor":       (job_pretailor,       7200,  "Pre-Tailor W2/contract on DeepSeek (cheap, 2h)", 600),
@@ -511,16 +527,40 @@ _JOB_SPECS = {
 }
 
 
+# CONTRACT MODE job set — full-time discovery (product-co boards + general LinkedIn scan) is PAUSED;
+# every vendor/staffing/consulting/implementation-partner scanner runs, and the intake gate keeps only
+# C2C/C2H roles. board_scanner stays ON: the intake filter drops its product-co W2 hits but KEEPS the
+# staffing firms that live on board APIs (Vaco/Mastech/SGS/Softworld/…). LinkedIn full-time scan +
+# referral_prep (a full-time lever) are dropped. jobdiva_scanner (C2C bench firms) is central here.
+_CONTRACT_JOBS = {"linkedin_health", "board_scanner", "phenom_scanner", "kforce_scanner",
+                  "insightglobal_scanner", "workday_scanner", "jobdiva_scanner", "apply_pipeline",
+                  "pretailor", "email_monitor", "digest", "dead_link_sweep"}
+
+
+def _active_jobs() -> set:
+    """The live job set for the current PIPELINE_MODE — contract set pauses full-time discovery."""
+    try:
+        from core.config import get_settings
+        if (get_settings().pipeline_mode or "fulltime").lower() == "contract":
+            return _CONTRACT_JOBS
+    except Exception:
+        pass
+    return _ACTIVE_JOBS
+
+
 def build_scheduler() -> AsyncIOScheduler:
     """Build and return a configured APScheduler (not yet started).
 
-    Only jobs in `_ACTIVE_JOBS` are registered; the rest are slept (defined but
-    not scheduled) so the LinkedIn apply pipeline stays the clear focus.
+    Only jobs in the active set (mode-dependent — see `_active_jobs`) are registered; the rest are
+    slept. In CONTRACT mode the full-time discovery jobs are paused (reversible via PIPELINE_MODE).
     """
     scheduler = AsyncIOScheduler(timezone="UTC")
+    active = _active_jobs()
+    _mode = "contract" if active is _CONTRACT_JOBS else "fulltime"
+    logger.info("scheduler_mode", mode=_mode, active=sorted(active))
 
     for job_id, (func, interval, name, grace) in _JOB_SPECS.items():
-        if job_id not in _ACTIVE_JOBS:
+        if job_id not in active:
             logger.info("scheduler_job_slept", job=job_id)
             continue
         scheduler.add_job(
