@@ -26,21 +26,18 @@ export function Sidebar() {
   const { data: status } = useQuery({ queryKey: ["pipeline-status"], queryFn: api.pipelineStatus, refetchInterval: 3000 });
   const { data: stats }  = useQuery({ queryKey: ["stats"],           queryFn: api.stats });
 
-  // Same pending list the Review Queue / Contract desks render, so the nav badges match them
-  // exactly — including the vendor-dedup on the contract lane (N vendors → one role).
-  const { data: pending } = useQuery({
-    queryKey: ["apps-pending-approvals"],
-    queryFn: () => api.listApps("status=pending_approval&sort_by=recency&limit=300"),
+  // Contract badge: fetch ONLY contract rows server-side (matches the /contract desk exactly,
+  // including vendor-dedup) — the paused W2 backlog can't cap it. Review badge = total pending − contract.
+  const { data: contractPending } = useQuery({
+    queryKey: [...["apps-pending-approvals"], "contract"],
+    queryFn: () => api.listApps("status=pending_approval&employment_type=contract&limit=400"),
     refetchInterval: 15_000,
   });
   const navCounts = useMemo(() => {
-    const base = pending ?? [];
-    const contract = base.filter((a) => a.employment_type === "contract");
-    return {
-      review: base.filter((a) => a.employment_type !== "contract").length,  // /approvals desk
-      contract: dedupeContract(contract).length,                             // /contract desk (deduped)
-    };
-  }, [pending]);
+    const contract = dedupeContract(contractPending ?? []).length;
+    const totalPending = stats?.pending_review ?? 0;
+    return { contract, review: Math.max(0, totalPending - (contractPending?.length ?? 0)) };
+  }, [contractPending, stats]);
 
   const running = status?.running ?? false;
 

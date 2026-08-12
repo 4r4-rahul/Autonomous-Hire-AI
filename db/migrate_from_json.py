@@ -23,6 +23,7 @@ from sqlalchemy import select, func
 _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
 
+from core.employment import classify_employment_for_job
 from db.models import Application, ApplicationStatus, AtsType, FitScore, JobListing, JobSource
 from db.session import create_tables_sync, get_sync_session
 
@@ -276,7 +277,16 @@ def migrate(quiet: bool = False, force_prune: bool = False) -> dict:
                         rejection_reason     = app_raw.get("rejection_reason"),
                         referral_first       = bool(app_raw.get("referral_first", False)),
                         referral_done        = bool(app_raw.get("referral_done", False)),
-                        employment_type      = app_raw.get("employment_type", "") or "",
+                        # Compute W2/contract at sync time when the JSON doesn't carry it (it almost
+                        # never does) — otherwise every sync wrote "" and WIPED the column, forcing
+                        # the API to re-classify 300 rows live per request (the 4s /applications hang)
+                        # and losing the contract-desk split. Source-first classifier, deterministic.
+                        employment_type      = (app_raw.get("employment_type") or "")
+                                                or classify_employment_for_job(
+                                                    str(raw.get("source") or ""),
+                                                    raw.get("company_name") or "",
+                                                    raw.get("title") or "",
+                                                    raw.get("description") or ""),
                         submitted_at         = _parse_dt(app_raw.get("submitted_at")),
                         # TRUE creation time (when the app entered the queue) — was wrongly set to
                         # submitted_at/now, which made created_at the SYNC time for pending apps and

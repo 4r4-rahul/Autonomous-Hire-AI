@@ -66,9 +66,11 @@ export default function ApprovalsPage() {
   const qc = useQueryClient();
 
   const { data: pending, isLoading: pendingLoading } = useQuery({
-    queryKey: PENDING_KEY,
-    // Fetch the whole queue so sorting/grouping/filtering is instant + complete client-side.
-    queryFn: () => api.listApps("status=pending_approval&sort_by=recency&limit=300"),
+    // Scope the cache + fetch by desk: /contract fetches ONLY contract rows server-side (so the
+    // paused W2 backlog can't fill the limit and hide contract roles), /approvals fetches the rest.
+    queryKey: [...PENDING_KEY, contractScope ? "contract" : "w2"],
+    queryFn: () => api.listApps(
+      `status=pending_approval&sort_by=recency&limit=400${contractScope ? "&employment_type=contract" : ""}`),
     refetchInterval: 15_000,
   });
 
