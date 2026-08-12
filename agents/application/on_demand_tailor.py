@@ -150,23 +150,34 @@ async def pretailor_batch(limit: int = 20, provider: str = "deepseek") -> dict:
     import json as _json
     from agents.discovery.targeting import rank_for_application
     from core.employment import classify_employment
+    from core.config import get_settings
 
     state = _json.loads(_STATE.read_text())
     profile = yaml.safe_load(_PROFILE.read_text()) if _PROFILE.exists() else {}
     jobs = {j.get("id"): j for j in state.get("job_listings", [])}
     fits = {f.get("job_id"): f for f in state.get("fit_scores", [])}
 
-    # Un-tailored apps only (no résumé yet). Rank by priority; W2 ahead of contract within a tier.
+    def _employ(a) -> str:
+        job = jobs[a["job_id"]]
+        return classify_employment(job.get("source", ""),
+                                   job.get("role_title") or job.get("title", ""),
+                                   job.get("description", ""))
+
+    # Un-tailored apps only (no résumé yet).
     untailored = [a for a in state.get("applications", [])
                   if not a.get("tailored_resume_path") and a.get("job_id") in jobs]
+
+    # Contract-only mode: never spend DeepSeek budget on the paused W2 backlog — tailor CONTRACT only.
+    contract_mode = (get_settings().pipeline_mode or "fulltime").lower() == "contract"
+    if contract_mode:
+        untailored = [a for a in untailored if _employ(a) == "contract"]
+
     ranked = rank_for_application([jobs[a["job_id"]] for a in untailored], fits, profile, state)
     order = {r["job"]["id"]: i for i, r in enumerate(ranked)}
 
     def _sort_key(a):
-        job = jobs[a["job_id"]]
-        w2_first = 0 if classify_employment(job.get("source", ""),
-                                            job.get("role_title") or job.get("title", ""),
-                                            job.get("description", "")) == "w2" else 1
+        # Contract mode: pure fit-priority (all contract already). Else: W2 first (feeds auto-apply).
+        w2_first = 0 if (not contract_mode and _employ(a) == "w2") else 1
         return (w2_first, order.get(a["job_id"], 10**9))
 
     picks = sorted(untailored, key=_sort_key)[:limit]

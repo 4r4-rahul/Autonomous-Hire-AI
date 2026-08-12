@@ -78,14 +78,19 @@ export interface Application {
 }
 
 export interface PipelineRun {
-  id: string;
-  mode: string;
-  status: string;
+  id: number;
+  trigger: string;              // e.g. "contract:board_scanner" — the lane + job that ran
+  status: string;              // "running" | "completed" | "failed"
+  jobs_attempted: number;
+  jobs_submitted: number;
+  jobs_skipped: number;
+  jobs_failed: number;
+  scan_new_jobs: number;       // new roles discovered/parked this run
+  rate_limited: boolean;
+  error: string | null;
   started_at: string;
   finished_at: string | null;
-  jobs_scanned: number | null;
-  jobs_applied: number | null;
-  error_message: string | null;
+  duration_seconds: number | null;
 }
 
 export interface AppEvent {

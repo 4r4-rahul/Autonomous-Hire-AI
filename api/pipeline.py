@@ -48,12 +48,27 @@ _SCHED_EVENT_STEP = [
 ]
 
 
+def _tail_lines(path: Path, n: int = 60, max_bytes: int = 65536) -> list[str]:
+    """Read only the last ~max_bytes of a file and return its final n lines — O(1) in file size.
+    The scheduler log grows to hundreds of MB; read_text() on the whole thing blocked the event
+    loop for ~20s per call (and /status is polled every few seconds). Seek-from-end instead."""
+    try:
+        with path.open("rb") as f:
+            f.seek(0, 2)
+            size = f.tell()
+            f.seek(max(0, size - max_bytes))
+            data = f.read()
+        return data.decode("utf-8", errors="ignore").splitlines()[-n:]
+    except Exception:
+        return []
+
+
 def _scheduler_activity():
     """(last_activity_dt, friendly_step) from the scheduler's JSON log tail — its REAL last run."""
     if not _SCHED_LOG.exists():
         return None, None
     try:
-        lines = _SCHED_LOG.read_text(errors="ignore").splitlines()[-60:]
+        lines = _tail_lines(_SCHED_LOG, 60)
     except Exception:
         return None, None
     last_dt, last_event = None, None
@@ -115,7 +130,7 @@ def _current_step_from_log() -> Optional[str]:
     if not _LOG_FILE.exists():
         return None
     try:
-        tail = "\n".join(_LOG_FILE.read_text().splitlines()[-40:]).lower()
+        tail = "\n".join(_tail_lines(_LOG_FILE, 40)).lower()
     except Exception:
         return None
     for step_name, patterns in reversed(_STEP_PATTERNS):
