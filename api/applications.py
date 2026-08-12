@@ -62,6 +62,7 @@ def _enrich(app: Application) -> ApplicationOut:
 async def list_applications(
     status: Optional[str] = None,
     company: Optional[str] = None,
+    employment_type: Optional[str] = None,
     min_score: int = 0,
     sort_by: str = "updated_at",
     limit: int = Query(100, le=500),
@@ -73,6 +74,11 @@ async def list_applications(
             q = q.where(Application.status == status)
         if company:
             q = q.where(JobListing.company_name.ilike(f"%{company}%"))
+        if employment_type:
+            # Server-side W2/contract split so the /contract desk fetches ONLY contract rows — the
+            # paused W2 backlog no longer fills the fetch limit and hides older contract roles (and
+            # it's faster: fewer rows to enrich). Relies on the persisted column (synced correctly).
+            q = q.where(Application.employment_type == employment_type)
         if min_score:
             q = q.where(Application.quality_score >= min_score)
         if sort_by == "score":

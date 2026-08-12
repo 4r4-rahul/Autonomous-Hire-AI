@@ -81,6 +81,15 @@ STAFFING_COMPANIES = {
     # browser-gated vendors reached via LinkedIn syndication (data/browser_gated_vendors.json)
     "diverse lynx", "net2source", "intelliswift", "mitchell martin", "russell tobin",
     "talentburst", "compunnel", "mindlance", "cynet systems", "ampcus",
+    # C2C staffing/consulting firms discovered via source-discovery harvest (real US IT staffing
+    # shops posting corp-to-corp/1099 SWE/data roles on public ATS boards). Keep in sync with ingests.
+    "atria group", "atria group llc", "damcosoft", "damcosoft inc", "satnam data systems",
+    "trident consulting", "north star staffing solutions", "north star staffing", "codurance",
+    "computer futures", "ricefw technologies", "jobsbridge", "computech corporation", "computech",
+    "iris software", "m9 solutions", "photon", "infovision", "tanisha systems", "aptask",
+    "v-soft consulting", "vsoft", "deegit", "nityo infotech", "pyramid consulting", "eteam",
+    "empower professionals", "spar information systems", "amaze systems", "spar", "e-solutions",
+    "spectraforce", "yochana", "kellton", "acs solutions", "american cybersystems",
 }
 
 
