@@ -78,11 +78,12 @@ export default function ActivityPage() {
               <thead>
                 <tr className="text-xs text-slate-500 uppercase tracking-wider border-b border-slate-700 bg-slate-900/40">
                   <th className="px-4 py-3 text-left">Status</th>
-                  <th className="px-4 py-3 text-left">Mode</th>
+                  <th className="px-4 py-3 text-left">Lane</th>
+                  <th className="px-4 py-3 text-left">Job</th>
                   <th className="px-4 py-3 text-left">Started</th>
                   <th className="px-4 py-3 text-center">Duration</th>
-                  <th className="px-4 py-3 text-center">Scanned</th>
-                  <th className="px-4 py-3 text-center">Applied</th>
+                  <th className="px-4 py-3 text-center">New</th>
+                  <th className="px-4 py-3 text-center">Tailored/Applied</th>
                   <th className="px-4 py-3 text-left">Error</th>
                 </tr>
               </thead>
@@ -101,22 +102,31 @@ export default function ActivityPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-xs bg-slate-700 text-slate-300 rounded px-2 py-0.5 font-mono">{run.mode}</span>
+                      {(() => {
+                        const lane = run.trigger.includes(":") ? run.trigger.split(":")[0] : run.trigger;
+                        const tone = lane === "contract" ? "bg-amber-600/20 text-amber-300"
+                                   : lane === "fulltime" ? "bg-sky-600/20 text-sky-300"
+                                   : "bg-slate-700 text-slate-300";
+                        return <span className={`text-xs rounded px-2 py-0.5 font-mono ${tone}`}>{lane}</span>;
+                      })()}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-slate-400 font-mono">
+                      {run.trigger.includes(":") ? run.trigger.split(":").slice(1).join(":") : "—"}
                     </td>
                     <td className="px-4 py-3 text-xs text-slate-400">{fmtDate(run.started_at)}</td>
                     <td className="px-4 py-3 text-center text-xs text-slate-400 font-mono">
                       {duration(run.started_at, run.finished_at)}
                     </td>
                     <td className="px-4 py-3 text-center text-slate-300 font-semibold">
-                      {run.jobs_scanned ?? "—"}
+                      {run.scan_new_jobs || "—"}
                     </td>
                     <td className="px-4 py-3 text-center font-semibold">
-                      <span className={run.jobs_applied ? "text-green-400" : "text-slate-500"}>
-                        {run.jobs_applied ?? "—"}
+                      <span className={run.jobs_submitted ? "text-green-400" : "text-slate-500"}>
+                        {run.jobs_submitted || "—"}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-xs text-red-400 max-w-[200px] truncate">
-                      {run.error_message ?? ""}
+                      {run.error ?? ""}
                     </td>
                   </tr>
                 ))}

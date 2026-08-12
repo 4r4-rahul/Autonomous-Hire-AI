@@ -262,6 +262,7 @@ async def job_apply_pipeline() -> None:
         _save_state(updated)
         await _sync_db()
         logger.info("scheduled_apply_pipeline_done", **report)
+        return report
     except Exception as e:
         logger.error("scheduled_apply_pipeline_failed", error=str(e)[:140])
 
@@ -286,6 +287,7 @@ async def job_board_scan() -> None:
         _, summary = await run(state, max_companies=200, intake_limit=400, tailor=False, persist=True)
         await _sync_db()
         logger.info("scheduled_board_scan_done", **summary)
+        return summary
     except Exception as e:
         logger.error("scheduled_board_scan_failed", error=str(e)[:140])
 
@@ -319,6 +321,7 @@ async def job_phenom_scan() -> None:
         _, summary = await run(state, limit=400, tailor=False, persist=True, max_details=80)
         await _sync_db()
         logger.info("scheduled_phenom_scan_done", **summary)
+        return summary
     except Exception as e:
         logger.error("scheduled_phenom_scan_failed", error=str(e)[:140])
 
@@ -334,6 +337,7 @@ async def job_kforce_scan() -> None:
         _, summary = await run(state, limit=400, tailor=False, persist=True, top=30)
         await _sync_db()
         logger.info("scheduled_kforce_scan_done", **summary)
+        return summary
     except Exception as e:
         logger.error("scheduled_kforce_scan_failed", error=str(e)[:140])
 
@@ -349,6 +353,7 @@ async def job_insight_global_scan() -> None:
         _, summary = await run(state, limit=400, tailor=False, persist=True, max_pages=15)
         await _sync_db()
         logger.info("scheduled_insightglobal_scan_done", **summary)
+        return summary
     except Exception as e:
         logger.error("scheduled_insightglobal_scan_failed", error=str(e)[:140])
 
@@ -365,6 +370,7 @@ async def job_workday_scan() -> None:
         _, summary = await run(state, limit=400, tailor=False, persist=True)
         await _sync_db()
         logger.info("scheduled_workday_scan_done", **summary)
+        return summary
     except Exception as e:
         logger.error("scheduled_workday_scan_failed", error=str(e)[:140])
 
@@ -380,6 +386,7 @@ async def job_jobdiva_scan() -> None:
         _, summary = await run(state, limit=400, tailor=False, persist=True)
         await _sync_db()
         logger.info("scheduled_jobdiva_scan_done", **summary)
+        return summary
     except Exception as e:
         logger.error("scheduled_jobdiva_scan_failed", error=str(e)[:140])
 
@@ -395,6 +402,7 @@ async def job_pretailor() -> None:
         r = await pretailor_batch(limit=n, provider="deepseek")
         await _sync_db()
         logger.info("scheduled_pretailor_done", **r)
+        return r
     except Exception as e:
         logger.error("scheduled_pretailor_failed", error=str(e))
 
@@ -519,7 +527,7 @@ _JOB_SPECS = {
     "jobdiva_scanner": (job_jobdiva_scan,    21600, "JobDiva C2C/Bench Scanner (headless, 6h)", 900),
     "apply_pipeline":  (job_apply_pipeline,  1800,  "Apply Pipeline (score+park cheap, 30m)",   600),
     "referral_prep":   (job_referral_prep,   7200,  "Referral Prep (high-fit warm-intro kits, 2h)", 300),
-    "pretailor":       (job_pretailor,       7200,  "Pre-Tailor W2/contract on DeepSeek (cheap, 2h)", 600),
+    "pretailor":       (job_pretailor,       1800,  "Pre-Tailor W2/contract on DeepSeek (cheap, 30m — keeps pace w/ discovery)", 300),
     "auto_submit":     (job_auto_submit,     43200, "Auto-Submit Safe Apps (opt-in)",         600),
     "email_monitor":   (job_email_monitor,   3600,  "Gmail Email Monitor (1h)",               120),
     "digest":          (job_digest,          86400, "Daily Health + Activity Digest",          600),
@@ -548,11 +556,79 @@ def _active_jobs() -> set:
     return _ACTIVE_JOBS
 
 
+# Count keys a job's return-dict may carry, mapped onto the PipelineRun columns the Activity page
+# renders. Best-effort: a job that returns None still records status + timing (0 counts).
+_SCAN_KEYS   = ("new", "intake", "intaken", "discovered", "scanned", "ingested", "added", "parked")
+_APPLY_KEYS  = ("submitted", "applied", "tailored", "sent")
+_ATTEMPT_KEYS = ("attempted", "picked", "examining", "processed", "total", "leads")
+
+
+def _pick_count(d: dict, keys) -> int:
+    for k in keys:
+        v = d.get(k)
+        if isinstance(v, bool):
+            continue
+        if isinstance(v, (int, float)):
+            return int(v)
+    return 0
+
+
+def _record_run(job_id: str, func):
+    """Wrap a scheduled job so every execution is logged to the `pipeline_runs` table — the same
+    activity feed the UI's Activity page reads. Gives the CONTRACT lane (and every scheduled job)
+    the visibility the manual full-time run never actually had. Never lets logging break the job."""
+    from functools import wraps
+
+    @wraps(func)
+    async def _wrapped():
+        from db.session import AsyncSessionLocal
+        from db.models import PipelineRun
+        from core.config import get_settings
+        mode = (get_settings().pipeline_mode or "fulltime").lower()
+        run_id = None
+        try:
+            async with AsyncSessionLocal() as s:
+                run = PipelineRun(trigger=f"{mode}:{job_id}", status="running")
+                s.add(run)
+                await s.commit()
+                run_id = run.id
+        except Exception as e:  # recording must never block the actual work
+            logger.warning("run_record_start_failed", job=job_id, error=str(e)[:120])
+
+        counts, err = {}, None
+        try:
+            result = await func()
+            if isinstance(result, dict):
+                counts = result
+        except Exception as e:
+            err = str(e)[:500]
+            logger.error("scheduled_job_failed", job=job_id, error=err)
+
+        if run_id is not None:
+            try:
+                async with AsyncSessionLocal() as s:
+                    run = await s.get(PipelineRun, run_id)
+                    if run is not None:
+                        run.status = "failed" if err else "completed"
+                        run.finished_at = datetime.now(timezone.utc)
+                        run.error = err
+                        run.scan_new_jobs = _pick_count(counts, _SCAN_KEYS)
+                        run.jobs_submitted = _pick_count(counts, _APPLY_KEYS)
+                        run.jobs_attempted = _pick_count(counts, _ATTEMPT_KEYS)
+                        run.jobs_skipped = _pick_count(counts, ("skipped",))
+                        run.jobs_failed = _pick_count(counts, ("errors", "failed"))
+                        await s.commit()
+            except Exception as e:
+                logger.warning("run_record_finish_failed", job=job_id, error=str(e)[:120])
+    return _wrapped
+
+
 def build_scheduler() -> AsyncIOScheduler:
     """Build and return a configured APScheduler (not yet started).
 
     Only jobs in the active set (mode-dependent — see `_active_jobs`) are registered; the rest are
     slept. In CONTRACT mode the full-time discovery jobs are paused (reversible via PIPELINE_MODE).
+    Every registered job is wrapped by `_record_run` so its execution shows on the Activity feed.
     """
     scheduler = AsyncIOScheduler(timezone="UTC")
     active = _active_jobs()
@@ -564,7 +640,7 @@ def build_scheduler() -> AsyncIOScheduler:
             logger.info("scheduler_job_slept", job=job_id)
             continue
         scheduler.add_job(
-            func,
+            _record_run(job_id, func),
             trigger=IntervalTrigger(seconds=_jitter_seconds(interval)),
             id=job_id,
             name=name,

@@ -2,7 +2,9 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { api } from "@/lib/api";
+import { dedupeContract } from "@/lib/queue";
 import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Network, ClipboardList, Bell, Activity, Brain, Play, Square, Globe, Handshake
@@ -23,6 +25,22 @@ export function Sidebar() {
   const path = usePathname();
   const { data: status } = useQuery({ queryKey: ["pipeline-status"], queryFn: api.pipelineStatus, refetchInterval: 3000 });
   const { data: stats }  = useQuery({ queryKey: ["stats"],           queryFn: api.stats });
+
+  // Same pending list the Review Queue / Contract desks render, so the nav badges match them
+  // exactly — including the vendor-dedup on the contract lane (N vendors → one role).
+  const { data: pending } = useQuery({
+    queryKey: ["apps-pending-approvals"],
+    queryFn: () => api.listApps("status=pending_approval&sort_by=recency&limit=300"),
+    refetchInterval: 15_000,
+  });
+  const navCounts = useMemo(() => {
+    const base = pending ?? [];
+    const contract = base.filter((a) => a.employment_type === "contract");
+    return {
+      review: base.filter((a) => a.employment_type !== "contract").length,  // /approvals desk
+      contract: dedupeContract(contract).length,                             // /contract desk (deduped)
+    };
+  }, [pending]);
 
   const running = status?.running ?? false;
 
@@ -60,9 +78,14 @@ export function Sidebar() {
           >
             <Icon className="w-4 h-4 shrink-0" />
             <span>{label}</span>
-            {label === "Review Queue" && (stats?.pending_review ?? 0) > 0 && (
+            {label === "Review Queue" && navCounts.review > 0 && (
               <span className="ml-auto text-xs bg-yellow-500/20 text-yellow-400 border border-yellow-500/40 rounded-full px-2 py-0.5">
-                {stats?.pending_review}
+                {navCounts.review}
+              </span>
+            )}
+            {label === "Contract (C2C)" && navCounts.contract > 0 && (
+              <span className="ml-auto text-xs bg-amber-500/20 text-amber-400 border border-amber-500/40 rounded-full px-2 py-0.5">
+                {navCounts.contract}
               </span>
             )}
           </Link>

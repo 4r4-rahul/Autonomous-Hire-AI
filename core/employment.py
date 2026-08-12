@@ -20,11 +20,24 @@ _STAFFING_SOURCE_PREFIXES = (
     "staffing", "consulting", "contract",
 )
 
-# JD language that explicitly marks a CONTRACT engagement (overrides a W2-looking source).
-_CONTRACT_JD = re.compile(
+# TITLE explicitly naming a contract engagement — the employer's OWN label for the role, a strong
+# signal on any source. Guard against "smart contract" (blockchain FTE roles are full-time).
+_CONTRACT_TITLE = re.compile(
+    r"\b(c2c|corp[- ]to[- ]corp|1099|(?<!smart )contract|contractor|"
+    r"contract[- ]to[- ]hire|temp[- ]to[- ]perm|temporary)\b", re.I)
+
+# UNAMBIGUOUS C2C/staffing language — a real full-time product-company posting never contains these,
+# so they flip even a direct-employer source to contract.
+_CONTRACT_HARD = re.compile(
     r"\b(c2c|corp[- ]to[- ]corp|1099|w2 contract|contract[- ]to[- ]hire|contract to hire|"
-    r"contract position|contract role|contract opportunity|\d+[- ]month contract|"
-    r"months? contract|contractor|temp[- ]to[- ]perm|temporary|staff aug|staffing)\b", re.I)
+    r"\d+[- ]months?[- ]contract|temp[- ]to[- ]perm)\b", re.I)
+
+# SOFT contract words that appear INCIDENTALLY in full-time JDs ("work with contractors", "no
+# temporary fixes"). These must NOT override a real direct-employer source — only used as a
+# last-ditch signal when there's no source at all. (This was the full-time-leak bug.)
+_CONTRACT_SOFT = re.compile(
+    r"\b(contractor|contract position|contract role|contract opportunity|"
+    r"months? contract|temporary|staff aug|staffing)\b", re.I)
 
 # JD language that explicitly marks direct FULL-TIME/W2 employment (overrides a staffing-looking source).
 _W2_JD = re.compile(
@@ -92,19 +105,29 @@ def classify_employment(source: str = "", title: str = "", description: str = ""
     if structured:
         return structured
 
-    blob = f"{title or ''}\n{(description or '')[:4000]}"
+    title_l = (title or "").lower()
+    body = (description or "")[:4000]
     staffing = _is_staffing_source(source)
 
-    # Explicit JD language wins when it clearly contradicts the source signal.
-    if _CONTRACT_JD.search(blob):
+    # (2) TITLE names a contract engagement (verve "Data Engineer (Remote / Contract)") — strong.
+    if _CONTRACT_TITLE.search(title_l):
         return "contract"
-    if staffing and _W2_JD.search(blob):
-        return "w2"          # staffing shop advertising a direct-hire placement
-
+    # (3) UNAMBIGUOUS C2C language in the body — real full-time postings don't carry these.
+    if _CONTRACT_HARD.search(body):
+        return "contract"
+    # (4) Staffing source/company → contract, unless it advertises a direct-hire placement.
     if staffing:
+        if _W2_JD.search(f"{title_l}\n{body}"):
+            return "w2"
         return "contract"
+    # (5) A real direct-employer ATS / careers page / board = W2. SOFT body words ("contractor",
+    #     "temporary") do NOT override the source — that leaked product-co full-time roles (e.g. a
+    #     "Senior SWE" JD mentioning contractors) onto the contract desk.
     if source:
-        return "w2"          # a real company ATS / careers page / board = direct-employer W2
+        return "w2"
+    # (6) No source signal at all — last-ditch soft language.
+    if _CONTRACT_SOFT.search(body):
+        return "contract"
     return "unknown"
 
 
