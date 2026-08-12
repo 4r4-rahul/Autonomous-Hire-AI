@@ -391,6 +391,28 @@ async def job_jobdiva_scan() -> None:
         logger.error("scheduled_jobdiva_scan_failed", error=str(e)[:140])
 
 
+async def job_log_rotate() -> None:
+    """Keep the scheduler's stdout log bounded. launchd appends to data/scheduler.out.log forever —
+    it grew to 184MB and made /pipeline/status (which reads its tail) take ~20s, blanking the UI.
+    When it passes the cap, keep the last ~4000 lines and truncate in place. Safe because launchd
+    opens the log O_APPEND, so its next write resumes at the new (smaller) EOF."""
+    CAP = 20 * 1024 * 1024   # 20 MB
+    KEEP = 512 * 1024        # keep the last 512KB (~4000 log lines) so recent activity survives
+    try:
+        p = Path("data/scheduler.out.log")
+        if not p.exists() or p.stat().st_size < CAP:
+            return
+        with p.open("rb") as f:
+            f.seek(-KEEP, 2)
+            tail = f.read()
+        tail = b"\n".join(tail.split(b"\n")[1:])   # drop the partial first line
+        with p.open("wb") as f:
+            f.write(tail)
+        logger.info("scheduler_log_rotated", kept_bytes=len(tail))
+    except Exception as e:
+        logger.warning("scheduler_log_rotate_failed", error=str(e)[:120])
+
+
 async def job_pretailor() -> None:
     """Batch PRE-TAILOR the top un-tailored W2/contract roles on the CHEAP provider (DeepSeek) so
     both lanes have résumés ready ahead of time: the hands-off W2 auto-apply lane can actually fire,
@@ -510,7 +532,7 @@ async def job_referral_prep() -> None:
 _ACTIVE_JOBS = {"linkedin_health", "linkedin_scanner", "board_scanner", "phenom_scanner",
                 "kforce_scanner", "insightglobal_scanner", "workday_scanner", "apply_pipeline",
                 "referral_prep", "pretailor", "auto_submit", "email_monitor", "digest",
-                "dead_link_sweep"}
+                "dead_link_sweep", "log_rotate"}
 
 # id → (func, base_interval_seconds, display_name, misfire_grace_time)
 _JOB_SPECS = {
@@ -532,6 +554,7 @@ _JOB_SPECS = {
     "email_monitor":   (job_email_monitor,   3600,  "Gmail Email Monitor (1h)",               120),
     "digest":          (job_digest,          86400, "Daily Health + Activity Digest",          600),
     "dead_link_sweep": (job_dead_link_sweep, 21600, "Dead-Link Queue Sweep (prune closed postings, 6h)", 600),
+    "log_rotate":      (job_log_rotate,      3600,  "Scheduler Log Rotate (cap stdout log at 20MB, 1h)", 60),
 }
 
 
@@ -542,7 +565,7 @@ _JOB_SPECS = {
 # referral_prep (a full-time lever) are dropped. jobdiva_scanner (C2C bench firms) is central here.
 _CONTRACT_JOBS = {"linkedin_health", "board_scanner", "phenom_scanner", "kforce_scanner",
                   "insightglobal_scanner", "workday_scanner", "jobdiva_scanner", "apply_pipeline",
-                  "pretailor", "email_monitor", "digest", "dead_link_sweep"}
+                  "pretailor", "email_monitor", "digest", "dead_link_sweep", "log_rotate"}
 
 
 def _active_jobs() -> set:
