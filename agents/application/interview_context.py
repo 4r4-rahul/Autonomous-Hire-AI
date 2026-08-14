@@ -96,6 +96,42 @@ HOW TO RUN THE ROUND:
   ideal answer — surface gaps by asking, not telling. Use the candidate's real background below only to
   calibrate difficulty, not to script the problem."""
 
+# Data-engineering / cloud interviewer: a hands-on technical round for AWS Cloud / Data Engineer roles —
+# drills Spark/PySpark tuning, Delta Lake, Databricks, Unity Catalog, AWS infra, ingestion, and governance.
+DATA_ENGINEERING_INTERVIEWER_SYSTEM = """You are a senior data-platform / cloud engineer conducting a
+realistic 60-minute hands-on TECHNICAL interview for an AWS Cloud / Data Engineering role. Stay fully in
+character — never coach, never solve it for the candidate, never break character. Assess real depth in
+AWS cloud engineering, data engineering, and Databricks/Lakehouse — not memorized definitions.
+
+FOCUS WEIGHTING: If the prep brief below names a PRIMARY FOCUS, weight HARD toward it — about 80% of your
+questions on the primary focus. If the brief also NAMES a secondary/major-secondary theme (e.g. "Databricks
+is the major secondary theme"), you SHOULD open questions on it proactively at roughly the share the brief
+states (e.g. ~half the non-primary questions) — a named secondary is fair game, not off-limits. Only avoid
+opening fresh lines on areas the brief does NOT name (or explicitly de-emphasizes) unless the candidate
+raises them. Default weighting (no focus named) leans AWS cloud engineering first.
+
+HOW TO RUN THE ROUND:
+- Turn 1: greet in one line, then open with ONE concrete technical question and stop. Let THEM drive.
+- Then ONE probe per turn, following the candidate's answer. Lead with AWS cloud engineering; treat data
+  engineering as secondary unless the brief says otherwise. Areas, in priority order:
+  • AWS cloud engineering (PRIMARY): Terraform module design & state, IAM least-privilege & role/policy
+    design, VPC & networking (subnets, security groups, egress/proxy, endpoints), ECS/Fargate, KMS
+    encryption, secrets/zero-credential auth (STS/SigV4), cost control, reliability & blue/green cutovers,
+    observability.
+  • Ingestion & modeling: batch vs streaming, bronze/silver/gold, idempotent/exactly-once writes, CDC,
+    data-quality checks, backfills.
+  • Spark/PySpark: partitioning & skew, broadcast vs shuffle joins, spill, caching, small-file problems,
+    reading the Spark UI to find the bottleneck.
+  • Databricks / Delta Lake / Unity Catalog: Delta transaction log, schema enforcement, time-travel,
+    MERGE/upsert, OPTIMIZE/Z-ORDER, jobs/workflows, cluster sizing, lineage & grants, PII handling.
+- Probe like a real interviewer: "why that partition count?", "how do you fix small files here?", "what
+  does OPTIMIZE actually do to the Delta log?", "how do you make this backfill idempotent?", "why EMR over
+  Databricks for that job?", "how do you keep this least-privilege?" Make them justify every tradeoff; if
+  they hand-wave, drill in; if they're solid, escalate. If they type SQL or PySpark, critique it briefly
+  (correctness, performance, edge cases) then push further.
+- ONE question/probe per turn, then stop. Senior and conversational. Surface gaps by asking, not telling.
+  Use the candidate's real background below to calibrate difficulty and target their claimed stack."""
+
 # Linux troubleshooting interviewer: plays the interviewer AND a consistent simulated box. The candidate
 # types commands; the interviewer returns realistic terminal output that progressively reveals one fault.
 LINUX_INTERVIEWER_SYSTEM = """You are a senior Site-Reliability / infrastructure engineer running a
@@ -186,6 +222,33 @@ def _full_bank() -> str:
         return ""
 
 
+def _stack_tag() -> str:
+    """A prominent, always-present TAG of the candidate's REAL stack, pulled from the experience bank's
+    `tech` lists — so EVERY coach/interview answer uses THEIR actual tools, never a textbook substitute
+    (e.g. ECS/Fargate, not Kubernetes, unless EKS is actually listed). This is the fix for the coach
+    drifting to tools the candidate never used."""
+    try:
+        from agents.application.resume_tailor import _BANK_ENTRIES
+    except Exception:
+        _BANK_ENTRIES = []
+    seen: dict[str, str] = {}
+    for e in _BANK_ENTRIES or []:
+        for t in (e.get("tech") or []):
+            t = (t or "").strip()
+            if t and t.lower() not in seen:
+                seen[t.lower()] = t
+    techs = list(seen.values())
+    if not techs:
+        return ""
+    return ("=== CANDIDATE'S REAL STACK — ANSWER USING THESE EXACT TOOLS ===\n"
+            "These are the ONLY technologies the candidate has actually used. Every answer (troubleshooting, "
+            "design, how-to) must use the tools listed here and their vocabulary — NEVER substitute an "
+            "equivalent tool the candidate didn't use (e.g. do not answer in Kubernetes/pods/kubectl if the "
+            "compute below is ECS/Fargate; do not invent GCP if it's AWS). If the exact tool for a question "
+            "isn't listed, reason from the closest one that IS, and say so honestly.\n"
+            + ", ".join(techs))
+
+
 def _find_brief(company: str, role: str) -> str:
     """The per-company prep brief markdown, if one was generated (same file /insights/prep serves)."""
     if not _PREP_DIR.exists():
@@ -213,6 +276,9 @@ def assemble_interview_context(company: str, role: str, jd: str = "") -> dict:
     parts = [
         f"=== ROLE ===\nInterviewing for: {where}",
     ]
+    stack = _stack_tag()
+    if stack:
+        parts.append(stack)
     if jd.strip():
         parts.append(f"=== JOB DESCRIPTION ===\n{jd.strip()[:4000]}")
     if profile:
