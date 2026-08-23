@@ -329,7 +329,15 @@
     "Experian",
     "Cacheflow",
     "Nexthink",
-    "sbtglobalinc"
+    "sbtglobalinc",
+    "customerio",
+    "energyhub",
+    "bolt42",
+    "close",
+    "blitzy",
+    "homevision",
+    "unbounce",
+    "zencore"
   ],
   "ingested": [
     "outrider",
@@ -701,6 +709,14 @@
     "RedPointLabs",
     "Cacheflow",
     "Nexthink",
-    "sbtglobalinc"
+    "sbtglobalinc",
+    "customerio",
+    "energyhub",
+    "bolt42",
+    "close",
+    "blitzy",
+    "homevision",
+    "unbounce",
+    "zencore"
   ]
 }
