@@ -316,7 +316,20 @@
     "SpruceInfotechInc",
     "stablekernel",
     "Verisk",
-    "weedmaps77"
+    "weedmaps77",
+    "gatherai",
+    "affirm",
+    "humaninterest",
+    "offerup",
+    "CUBE",
+    "onhires",
+    "ohr",
+    "savvymoney",
+    "RedPointLabs",
+    "Experian",
+    "Cacheflow",
+    "Nexthink",
+    "sbtglobalinc"
   ],
   "ingested": [
     "outrider",
@@ -677,6 +690,17 @@
     "smartrecruiters",
     "SpruceInfotechInc",
     "stablekernel",
-    "Verisk"
+    "Verisk",
+    "gatherai",
+    "affirm",
+    "offerup",
+    "CUBE",
+    "onhires",
+    "ohr",
+    "savvymoney",
+    "RedPointLabs",
+    "Cacheflow",
+    "Nexthink",
+    "sbtglobalinc"
   ]
 }
