@@ -90,6 +90,16 @@ STAFFING_COMPANIES = {
     "v-soft consulting", "vsoft", "deegit", "nityo infotech", "pyramid consulting", "eteam",
     "empower professionals", "spar information systems", "amaze systems", "spar", "e-solutions",
     "spectraforce", "yochana", "kellton", "acs solutions", "american cybersystems",
+    # State/local government IT staff-augmentation C2C vendors (place H1B/C2C consultants on state
+    # DOT/health/tax/DMV projects — NO clearance/citizenship, unlike federal contractors). These are
+    # the sponsorship-viable slice of "government jobs"; the fit_analyst clearance filter drops the
+    # federal-cleared ones. Add more as source-discovery validates them.
+    "22nd century technologies", "22nd century technologies inc", "tscti", "trigyn",
+    "trigyn technologies", "computer aid", "computer aid inc", "cai", "nam info", "nam info inc",
+    "softpath system", "softpath", "sganalytics", "kani solutions", "progilytics", "prutech",
+    "prutech solutions", "zillion technologies", "intellyk", "tekfortune", "generis tek",
+    "generistek", "ask consulting", "ask staffing", "datasoft technologies", "knowledge builders",
+    "amerit consulting", "systematix", "prodware solutions", "ivy tech solutions",
 }
 
 

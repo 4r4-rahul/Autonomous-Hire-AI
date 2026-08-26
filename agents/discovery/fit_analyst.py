@@ -111,6 +111,20 @@ _NO_SPONSORSHIP_PHRASES = [
     "must be a us citizen",
     "citizenship is required",
     "u.s. citizenship required",
+    # More federal-contractor phrasings (state/local govt C2C is fine; federal cleared roles are
+    # dead-ends for a visa candidate — 22nd Century/Trigyn state work has none of these).
+    "public trust",
+    "us citizen or green card",
+    "u.s. citizen or green card",
+    "usc or green card",
+    "usc/gc only",
+    "gc/usc only",
+    "must be a us person",
+    "must be a u.s. person",
+    "eligible for a security clearance",
+    "able to obtain a security clearance",
+    "clearance is required",
+    "dod clearance",
 ]
 
 
