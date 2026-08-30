@@ -430,7 +430,14 @@
     "Crunch2",
     "compaindustries",
     "lyrahealth",
-    "ContechsConsultingLimited"
+    "ContechsConsultingLimited",
+    "nimblegravity",
+    "admarketplaceinc",
+    "netomi",
+    "zapier",
+    "fluidstack",
+    "lambda",
+    "certifyos"
   ],
   "ingested": [
     "outrider",
@@ -887,6 +894,13 @@
     "Versana",
     "ApplaudoStudios",
     "DataIntellect",
-    "LivingSecurity"
+    "LivingSecurity",
+    "nimblegravity",
+    "admarketplaceinc",
+    "netomi",
+    "zapier",
+    "fluidstack",
+    "lambda",
+    "certifyos"
   ]
 }
