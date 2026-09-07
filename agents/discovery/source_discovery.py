@@ -70,6 +70,23 @@ async def _probe(slug: str) -> tuple[str, int, int]:
     return slug, len(p), n
 
 
+async def _egress_ok() -> bool:
+    """Guard against poisoning the candidate pool. On a network failure _fetch_company_postings
+    returns None indistinguishably from "board exists but has nothing matching", and ingest() below
+    marks every probed slug "ingested" (permanently skipped) regardless of outcome — so if this
+    environment's egress to the ATS APIs is blocked (org policy 403, proxy tunnel failure, etc.),
+    every candidate would be misdiagnosed as a dead board and never get a real chance again, even
+    after egress is restored. Confirm reachability against a real endpoint first; if it fails, ingest()
+    leaves the candidates unprobed instead of burning them."""
+    import httpx
+    try:
+        async with httpx.AsyncClient(timeout=6) as c:
+            r = await c.get("https://boards-api.greenhouse.io/v1/boards/anthropic/jobs")
+        return r.status_code < 500
+    except Exception:
+        return False
+
+
 async def ingest(slugs: list[str] | None = None, *, require_contract: bool = True) -> dict:
     """Probe candidate slugs; add the ones with a live US contract role in-lane (or any live board if
     require_contract=False) to board_sponsors. Returns a summary. Idempotent."""
@@ -79,6 +96,13 @@ async def ingest(slugs: list[str] | None = None, *, require_contract: bool = Tru
     cand = [s for s in cand if s.strip().lower() not in already]
     if not cand:
         return {"probed": 0, "added": 0}
+
+    if not await _egress_ok():
+        return {"probed": 0, "added": 0, "blocked": True,
+                "note": "ATS egress unreachable from this environment (control probe to "
+                        "boards-api.greenhouse.io failed) — candidates left unprobed in the registry "
+                        "so they can be retried once access is restored, instead of being marked "
+                        "'ingested' on a false negative."}
 
     sem = asyncio.Semaphore(10)
 
