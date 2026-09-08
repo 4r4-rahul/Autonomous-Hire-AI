@@ -242,7 +242,7 @@ async def ingest(slugs: list[str], *, require_contract: bool = True) -> dict:
 
         async def _probe(s):
             async with sem:
-                return s, await _probe_slug(client, s)
+                return await _probe_slug(client, s)
 
         async with httpx.AsyncClient(headers=_HEADERS, follow_redirects=True) as client:
             results = await asyncio.gather(*[_probe(s) for s in to_probe])
