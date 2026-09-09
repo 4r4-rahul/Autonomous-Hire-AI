@@ -413,6 +413,47 @@ async def job_log_rotate() -> None:
         logger.warning("scheduler_log_rotate_failed", error=str(e)[:120])
 
 
+def _pull_remote_candidates() -> int:
+    """Union the candidate slugs the CLOUD source-discovery routine has queued into origin's
+    data/discovered_sources.json. The cloud routine can WebSearch (queues candidates) but its sandbox
+    is egress-blocked from the ATS board APIs, so it can never PROBE them — this local machine can.
+    Read-only git (fetch + show): no working-tree change, no merge/conflict risk. Returns #added."""
+    import subprocess
+    from agents.discovery.source_discovery import add_discovered
+    root = str(Path(__file__).parent.parent)
+    try:
+        branch = subprocess.run(["git", "-C", root, "rev-parse", "--abbrev-ref", "HEAD"],
+                                capture_output=True, text=True, timeout=30).stdout.strip() or "HEAD"
+        subprocess.run(["git", "-C", root, "fetch", "--quiet", "origin", branch],
+                       capture_output=True, text=True, timeout=90)
+        blob = subprocess.run(["git", "-C", root, "show", f"origin/{branch}:data/discovered_sources.json"],
+                              capture_output=True, text=True, timeout=30)
+        if blob.returncode != 0 or not blob.stdout.strip():
+            return 0
+        remote = json.loads(blob.stdout)
+        return add_discovered(remote.get("slugs", []))
+    except Exception as e:
+        logger.warning("pull_remote_candidates_failed", error=str(e)[:120])
+        return 0
+
+
+async def job_source_ingest() -> None:
+    """UNBLOCK the cloud discovery routine: pull the candidate slugs it queued to origin, then PROBE
+    them here (local egress reaches greenhouse/lever/ashby/smartrecruiters APIs the cloud sandbox 403s)
+    and promote the ones with a live US contract role in-lane into the scan universe. Idempotent."""
+    try:
+        from agents.discovery.source_discovery import discover_and_ingest
+        pulled = _pull_remote_candidates()
+        r = await discover_and_ingest()
+        r["pulled_candidates"] = pulled
+        if r.get("added"):
+            await _sync_db()
+        logger.info("scheduled_source_ingest_done", **r)
+        return r
+    except Exception as e:
+        logger.error("scheduled_source_ingest_failed", error=str(e)[:140])
+
+
 async def job_pretailor() -> None:
     """Batch PRE-TAILOR the top un-tailored W2/contract roles on the CHEAP provider (DeepSeek) so
     both lanes have résumés ready ahead of time: the hands-off W2 auto-apply lane can actually fire,
@@ -532,7 +573,7 @@ async def job_referral_prep() -> None:
 _ACTIVE_JOBS = {"linkedin_health", "linkedin_scanner", "board_scanner", "phenom_scanner",
                 "kforce_scanner", "insightglobal_scanner", "workday_scanner", "apply_pipeline",
                 "referral_prep", "pretailor", "auto_submit", "email_monitor", "digest",
-                "dead_link_sweep", "log_rotate"}
+                "dead_link_sweep", "log_rotate", "source_ingest"}
 
 # id → (func, base_interval_seconds, display_name, misfire_grace_time)
 _JOB_SPECS = {
@@ -555,6 +596,7 @@ _JOB_SPECS = {
     "digest":          (job_digest,          86400, "Daily Health + Activity Digest",          600),
     "dead_link_sweep": (job_dead_link_sweep, 21600, "Dead-Link Queue Sweep (prune closed postings, 6h)", 600),
     "log_rotate":      (job_log_rotate,      3600,  "Scheduler Log Rotate (cap stdout log at 20MB, 1h)", 60),
+    "source_ingest":   (job_source_ingest,   14400, "Source Ingest (probe cloud-queued candidates, 4h)", 300),
 }
 
 
@@ -565,7 +607,8 @@ _JOB_SPECS = {
 # referral_prep (a full-time lever) are dropped. jobdiva_scanner (C2C bench firms) is central here.
 _CONTRACT_JOBS = {"linkedin_health", "board_scanner", "phenom_scanner", "kforce_scanner",
                   "insightglobal_scanner", "workday_scanner", "jobdiva_scanner", "apply_pipeline",
-                  "pretailor", "email_monitor", "digest", "dead_link_sweep", "log_rotate"}
+                  "pretailor", "email_monitor", "digest", "dead_link_sweep", "log_rotate",
+                  "source_ingest"}
 
 
 def _active_jobs() -> set:
