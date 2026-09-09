@@ -100,6 +100,10 @@ STAFFING_COMPANIES = {
     "prutech solutions", "zillion technologies", "intellyk", "tekfortune", "generis tek",
     "generistek", "ask consulting", "ask staffing", "datasoft technologies", "knowledge builders",
     "amerit consulting", "systematix", "prodware solutions", "ivy tech solutions",
+    # H1B-sponsoring C2C IT staffing firms confirmed on SmartRecruiters (source-discovery harvest).
+    "consultadd", "american technology consulting", "atc", "dellfor technologies", "dellfor",
+    "collabera", "artech information system", "us corp2corp", "uscorp2corp", "north star staffing",
+    "buzzclan", "prosum", "nityo infotech", "technology navigators", "dataintellect", "tms",
 }
 
 
