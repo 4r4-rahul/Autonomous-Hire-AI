@@ -15,6 +15,7 @@ data/*
 !data/browser_gated_vendors.json
 !data/discovered_sources.json
 !data/gov_vendors.json
+# NOTE: gov_vendor_contacts.json is NOT tracked - it holds harvested recruiter names/emails
 !data/.gitkeep
 
 # ───────────────────────── heavy / generated ─────────────────────────
