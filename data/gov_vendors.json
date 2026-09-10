@@ -1,0 +1,458 @@
+{
+ "_comment": "State/local-government IT staff-aug vendors with a LIVE public ATS board. Slugs are exact (never first-word guesses) \u2014 see scripts/expand_gov_vendors.py. kind=vendor is a staff-aug C2C desk (scanned by default); kind=employer is a government employer's own board (opt-in, W2 civil service).",
+ "vendors": [
+  {
+   "name": "360 IT Professionals",
+   "slug": "360ITProfessionals1",
+   "ats": "smartrecruiters",
+   "postings": 100,
+   "us": 100,
+   "it": 69,
+   "contract_verified": true,
+   "sample": [
+    "Application System Engineer",
+    "Helpdesk Analyst level 3",
+    "Sitecore Architect",
+    "PeopleSoft Financials Technical Consultant"
+   ],
+   "kind": "vendor"
+  },
+  {
+   "name": "ASK IT Consulting",
+   "slug": "AskITConsulting",
+   "ats": "smartrecruiters",
+   "postings": 100,
+   "us": 100,
+   "it": 70,
+   "contract_verified": true,
+   "sample": [
+    "In Person Interview for Help Desk Analyst in Little Rock, AR",
+    "Denodo Developer / Administrator",
+    "Data Warehouse Architect",
+    "Java Developer (W2)"
+   ],
+   "kind": "vendor"
+  },
+  {
+   "name": "BCforward",
+   "slug": "BCforward3",
+   "ats": "smartrecruiters",
+   "postings": 100,
+   "us": 100,
+   "it": 24,
+   "contract_verified": true,
+   "sample": [
+    "QA Lab Technician",
+    "Application Developer",
+    "Procurement Operations Analyst",
+    "Mechanical Engineer I"
+   ],
+   "kind": "vendor"
+  },
+  {
+   "name": "City of New York",
+   "slug": "CityOfNewYork",
+   "ats": "smartrecruiters",
+   "postings": 100,
+   "us": 100,
+   "it": 30,
+   "contract_verified": false,
+   "sample": [
+    "Cyber Risk Analyst",
+    "Senior Threat Analyst",
+    "SENIOR SOFTWARE SYSTEM ENGINEER",
+    "Clearance Administrator, Bureau of Childcare"
+   ],
+   "kind": "employer"
+  },
+  {
+   "name": "INT Technologies",
+   "slug": "INTTechnologies",
+   "ats": "smartrecruiters",
+   "postings": 40,
+   "us": 40,
+   "it": 31,
+   "contract_verified": true,
+   "sample": [
+    ".NET Developer - Contract to Hire!",
+    "Senior Java Developer",
+    "WEB SYSTEMS ENGINEER 5",
+    "Avecto Administrator / IT Administrator"
+   ],
+   "kind": "vendor"
+  },
+  {
+   "name": "IPS Technology Services",
+   "slug": "IPSTechnologyServices",
+   "ats": "smartrecruiters",
+   "postings": 10,
+   "us": 10,
+   "it": 8,
+   "contract_verified": true,
+   "sample": [
+    "Software Engineer . Net",
+    "Systems Analyst II",
+    "Business Analyst, Sr.",
+    "Business Analyst, Sr."
+   ],
+   "kind": "vendor"
+  },
+  {
+   "name": "Indotronix International",
+   "slug": "IndotronixInternationalCorp1",
+   "ats": "smartrecruiters",
+   "postings": 10,
+   "us": 10,
+   "it": 3,
+   "contract_verified": true,
+   "sample": [
+    "Electrical Validation Engineer - Server Domain",
+    "Exterior Trim Engineer",
+    "Sr. Pega Developer"
+   ],
+   "kind": "vendor"
+  },
+  {
+   "name": "MITR Technologies",
+   "slug": "MITRTechnologies",
+   "ats": "smartrecruiters",
+   "postings": 3,
+   "us": 3,
+   "it": 3,
+   "contract_verified": true,
+   "sample": [
+    "API Designer/Developer",
+    "Java Developer (W2 Contractor Only)",
+    "Salesforce Consultant"
+   ],
+   "kind": "vendor"
+  },
+  {
+   "name": "Partnered Staffing - Kelly Services",
+   "slug": "PartneredStaffing-KellyServices",
+   "ats": "smartrecruiters",
+   "postings": 100,
+   "us": 100,
+   "it": 5,
+   "contract_verified": true,
+   "sample": [
+    "Customer Service/Data entry",
+    "Data Entry Operator",
+    "Network Administrative Analyst",
+    "Sales Support Analyst"
+   ],
+   "kind": "vendor"
+  },
+  {
+   "name": "Pyramid IT Consulting",
+   "slug": "PyramidIT1",
+   "ats": "smartrecruiters",
+   "postings": 100,
+   "us": 100,
+   "it": 71,
+   "contract_verified": true,
+   "sample": [
+    "P2P Developer",
+    "Oracle EBS HR Application Architect",
+    "QUMAS Sr Developer and Configurator",
+    "Content Developer-Duck Creek"
+   ],
+   "kind": "vendor"
+  },
+  {
+   "name": "RESPEC",
+   "slug": "RESPECInc",
+   "ats": "smartrecruiters",
+   "postings": 92,
+   "us": 86,
+   "it": 46,
+   "contract_verified": true,
+   "sample": [
+    "Project Engineer",
+    "Engineer-In-Training - Land Development",
+    "Water/Wastewater Project Engineer",
+    "Cloud Solutions Architect 2 (Contractor) - 529701772"
+   ],
+   "kind": "vendor"
+  },
+  {
+   "name": "Scout ET",
+   "slug": "ScoutET",
+   "ats": "smartrecruiters",
+   "postings": 100,
+   "us": 100,
+   "it": 77,
+   "contract_verified": true,
+   "sample": [
+    "Business Process Consultant",
+    "Infrastructure DevOps Engineers",
+    "PeopleSoft Functional Analyst",
+    "Security Engineer"
+   ],
+   "kind": "vendor"
+  },
+  {
+   "name": "SouthTek Resources",
+   "slug": "SouthTekResources",
+   "ats": "smartrecruiters",
+   "postings": 50,
+   "us": 50,
+   "it": 23,
+   "contract_verified": true,
+   "sample": [
+    "Java Developer II",
+    "SR Programmer Analyst",
+    "Programmer",
+    "Senior Developer"
+   ],
+   "kind": "vendor"
+  },
+  {
+   "name": "Stem Xpert",
+   "slug": "StemXpert1",
+   "ats": "smartrecruiters",
+   "postings": 100,
+   "us": 100,
+   "it": 8,
+   "contract_verified": true,
+   "sample": [
+    "Manufacturing Engineer/Manufacturing Eng Change Coordinator I",
+    "Entry Level OPT Position - Manufacturing Engineer/Production Engineer/Automotive Engineer",
+    "Entry Level OPT Position - Manufacturing Engineer/Production Engineer/Automotive Engineer",
+    "DOT/Intelligent Transportation Systems Analyst"
+   ],
+   "kind": "vendor"
+  },
+  {
+   "name": "Strategic Staffing Solutions",
+   "slug": "StrategicStaffingSolutionsS3",
+   "ats": "smartrecruiters",
+   "postings": 8,
+   "us": 8,
+   "it": 4,
+   "contract_verified": true,
+   "sample": [
+    "Salesforce Developer",
+    "Consumer Reporting Analyst - Phoenix, AZ",
+    "FileNet Administrator - San Antonio",
+    "Database Analyst 4 - San Francisco, CA"
+   ],
+   "kind": "vendor"
+  },
+  {
+   "name": "TRG",
+   "slug": "TRGInc",
+   "ats": "smartrecruiters",
+   "postings": 34,
+   "us": 34,
+   "it": 28,
+   "contract_verified": true,
+   "sample": [
+    "QA Consultant",
+    "C# .Net Developer",
+    "Oracle OSM Developer",
+    "Urgently Required - Software Developer (Spark / Python)- San Jose, CA - Contract"
+   ],
+   "kind": "vendor"
+  },
+  {
+   "name": "US Corp2Corp",
+   "slug": "USCorp2Corp",
+   "ats": "smartrecruiters",
+   "postings": 31,
+   "us": 31,
+   "it": 20,
+   "contract_verified": true,
+   "sample": [
+    "C# .Net Developer",
+    "Sr. Java Developer",
+    "Java Developer",
+    "Contracts Administrator"
+   ],
+   "kind": "vendor"
+  },
+  {
+   "name": "VTS3",
+   "slug": "VTS3Corp",
+   "ats": "smartrecruiters",
+   "postings": 18,
+   "us": 18,
+   "it": 14,
+   "contract_verified": true,
+   "sample": [
+    "SCADA Support Engineer",
+    "Business Objects Developer",
+    "Database Developer",
+    "Programmer Analyst - Dynamics 365"
+   ],
+   "kind": "vendor"
+  },
+  {
+   "name": "vTech Solution",
+   "slug": "VTechSolution1",
+   "ats": "smartrecruiters",
+   "postings": 100,
+   "us": 100,
+   "it": 55,
+   "contract_verified": true,
+   "sample": [
+    "Business Analyst - IIBA Certification",
+    "CCIE - Network Engineer",
+    "Software Engineer",
+    ".Net Developer"
+   ],
+   "kind": "vendor"
+  },
+  {
+   "name": "Infinite Computing Systems",
+   "slug": "infinitecomputingsystems",
+   "ats": "smartrecruiters",
+   "postings": 10,
+   "us": 10,
+   "it": 5,
+   "contract_verified": true,
+   "sample": [
+    "Data Analyst (Research Analyst)",
+    "Sr. Software Engineer in Sterling, VA",
+    "SAP Functional Business Analyst (PP Module)",
+    "Assessment Tool Developer/Programmer"
+   ],
+   "kind": "vendor"
+  },
+  {
+   "name": "Iris Software",
+   "slug": "irissoftware",
+   "ats": "smartrecruiters",
+   "postings": 7,
+   "us": 3,
+   "it": 1,
+   "contract_verified": true,
+   "sample": [
+    "Big Data developer / Architect"
+   ],
+   "kind": "vendor"
+  },
+  {
+   "name": "Kyra Solutions",
+   "slug": "kyrasolutions",
+   "ats": "smartrecruiters",
+   "postings": 1,
+   "us": 1,
+   "it": 1,
+   "contract_verified": false,
+   "sample": [
+    "Full Stack Developer"
+   ],
+   "kind": "vendor"
+  },
+  {
+   "name": "Mastech Digital",
+   "slug": "mastechdigital",
+   "ats": "smartrecruiters",
+   "postings": 8,
+   "us": 8,
+   "it": 6,
+   "contract_verified": true,
+   "sample": [
+    "DevOps Engineer - Green Card/US Citizen Only",
+    "Mobile/web Developer",
+    "ETL Developer - US Citizen OR Green Card Only",
+    "C/C++ Developer with Go Lang Experience"
+   ],
+   "kind": "vendor"
+  },
+  {
+   "name": "ProSidian Consulting",
+   "slug": "prosidianconsulting",
+   "ats": "smartrecruiters",
+   "postings": 100,
+   "us": 97,
+   "it": 45,
+   "contract_verified": true,
+   "sample": [
+    "Senior Training & Qualification Analyst (Administrative & TQP Support)",
+    "Civil/Structural Engineer (Civil-Structural Analyst) - Engineering (DS108)",
+    "Electrical Engineer [Construction Discipline Engineer (CDE) \u2013 Electrical (Field Engineer)] - Engineering (CO102)",
+    "Power Systems Engineer Project Manager [Electrical Engineer]"
+   ],
+   "kind": "vendor"
+  },
+  {
+   "name": "SPAR Information Systems",
+   "slug": "sparinformationsystems",
+   "ats": "smartrecruiters",
+   "postings": 12,
+   "us": 12,
+   "it": 10,
+   "contract_verified": true,
+   "sample": [
+    "share point architect",
+    "Salesforce Technical Architect",
+    "cloud architect",
+    "Java Developer"
+   ],
+   "kind": "vendor"
+  },
+  {
+   "name": "Stellent IT",
+   "slug": "stellentit",
+   "ats": "smartrecruiters",
+   "postings": 1,
+   "us": 1,
+   "it": 1,
+   "contract_verified": true,
+   "sample": [
+    "IBM WebSphere Portal Developer"
+   ],
+   "kind": "vendor"
+  },
+  {
+   "name": "System Canada Technologies",
+   "slug": "systemCanadaTechnologies",
+   "ats": "smartrecruiters",
+   "postings": 100,
+   "us": 22,
+   "it": 19,
+   "contract_verified": true,
+   "sample": [
+    "Mainframe Architect",
+    "C++ Server development Engineer",
+    "Android Apps developer",
+    "Senior biztalk developer "
+   ],
+   "kind": "vendor"
+  },
+  {
+   "name": "Tanisha Systems",
+   "slug": "tanishasystems",
+   "ats": "smartrecruiters",
+   "postings": 35,
+   "us": 35,
+   "it": 26,
+   "contract_verified": true,
+   "sample": [
+    "Cast Iron Developer",
+    "OnBase System Administrator",
+    "Java developer",
+    "PeopleSoft Functional Consultant"
+   ],
+   "kind": "vendor"
+  },
+  {
+   "name": "TechnoGen",
+   "slug": "technogen",
+   "ats": "smartrecruiters",
+   "postings": 49,
+   "us": 49,
+   "it": 43,
+   "contract_verified": true,
+   "sample": [
+    "SharePoint Developer (USC/GC/TN/CTH)",
+    "Sr Network Security Engineer (USC/GC/FTE)",
+    "Business Analyst (USC/GC/FTE)",
+    "IT Architect (W2 Contract)"
+   ],
+   "kind": "vendor"
+  }
+ ]
+}

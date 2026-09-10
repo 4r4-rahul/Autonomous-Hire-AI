@@ -342,6 +342,23 @@ async def job_kforce_scan() -> None:
         logger.error("scheduled_kforce_scan_failed", error=str(e)[:140])
 
 
+async def job_gov_scan() -> None:
+    """State/local-GOVERNMENT contract (C2C) discovery — public-sector staff-augmentation vendor
+    boards (data/gov_vendors.json). Plain HTTP JSON, no browser, no LinkedIn. Drops FEDERAL clients
+    and USC/GC-only reqs before spending anything, tags the government end client, and cheap-parks
+    the rest (Haiku scoring, tailor=False). Runs on a slow cadence: these vendor boards turn over a
+    handful of live reqs a day — the value is catching those, not re-reading 5k zombie postings."""
+    try:
+        from core.state_store import load_state
+        from agents.discovery.gov_scanner import run
+        _, summary = await run(load_state(), limit=200, tailor=False, persist=True)
+        await _sync_db()
+        logger.info("scheduled_gov_scan_done", **summary)
+        return summary
+    except Exception as e:
+        logger.error("scheduled_gov_scan_failed", error=str(e)[:140])
+
+
 async def job_insight_global_scan() -> None:
     """Off-LinkedIn DISCOVERY for Insight Global's DIRECT-HIRE roles via its public Jibe careers API
     — plain HTTP, no browser. (Their contract-placement portal is a browser-only iCIMS SPA and is
@@ -573,7 +590,7 @@ async def job_referral_prep() -> None:
 _ACTIVE_JOBS = {"linkedin_health", "linkedin_scanner", "board_scanner", "phenom_scanner",
                 "kforce_scanner", "insightglobal_scanner", "workday_scanner", "apply_pipeline",
                 "referral_prep", "pretailor", "auto_submit", "email_monitor", "digest",
-                "dead_link_sweep", "log_rotate", "source_ingest"}
+                "dead_link_sweep", "log_rotate", "source_ingest", "gov_scanner"}
 
 # id → (func, base_interval_seconds, display_name, misfire_grace_time)
 _JOB_SPECS = {
@@ -586,6 +603,7 @@ _JOB_SPECS = {
     "phenom_scanner":  (job_phenom_scan,     10800, "Phenom Staffing Scanner (TEKsystems+Aston Carter+Actalent, 3h)", 600),
     "kforce_scanner":  (job_kforce_scan,     10800, "Kforce Scanner (Azure Search API, 3h)",   600),
     "insightglobal_scanner": (job_insight_global_scan, 10800, "Insight Global Scanner (Jibe API, 3h)", 600),
+    "gov_scanner":     (job_gov_scan,        14400, "State/Local Gov C2C Scanner (staff-aug vendor boards, 4h)", 600),
     "workday_scanner": (job_workday_scan,    43200, "Workday IT-Services Scanner (NTT/Genpact/Accenture cxs, 12h)", 900),
     "jobdiva_scanner": (job_jobdiva_scan,    21600, "JobDiva C2C/Bench Scanner (headless, 6h)", 900),
     "apply_pipeline":  (job_apply_pipeline,  1800,  "Apply Pipeline (score+park cheap, 30m)",   600),
@@ -608,7 +626,7 @@ _JOB_SPECS = {
 _CONTRACT_JOBS = {"linkedin_health", "board_scanner", "phenom_scanner", "kforce_scanner",
                   "insightglobal_scanner", "workday_scanner", "jobdiva_scanner", "apply_pipeline",
                   "pretailor", "email_monitor", "digest", "dead_link_sweep", "log_rotate",
-                  "source_ingest"}
+                  "source_ingest", "gov_scanner"}
 
 
 def _active_jobs() -> set:

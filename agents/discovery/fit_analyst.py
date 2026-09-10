@@ -138,10 +138,19 @@ def _requires_sponsorship_blocked(job: JobListing, profile: dict) -> tuple[bool,
     if not work_auth.get("requires_sponsorship", False):
         return False, ""
 
-    desc = (job.get("description") or "").lower()
+    # Read the TITLE as well as the description: staffing/C2C boards put the bar in the title
+    # ("Sr .Net Developer (USC/GC Only)", "DevOps Engineer - Green Card/US Citizen Only"), and a
+    # SmartRecruiters listing carries no description at all — title-only was a blind spot.
+    desc = f"{job.get('title') or ''}\n{job.get('description') or ''}".lower()
     for phrase in _NO_SPONSORSHIP_PHRASES:
         if phrase in desc:
             return True, f"no sponsorship offered: '{phrase}'"
+
+    # Compact citizenship tags the prose list above can't express ("(USC/GC/TN/CTH)", "USC only").
+    from core.gov_client import usc_gc_only
+    bar = usc_gc_only(job.get("title") or "", job.get("description") or "")
+    if bar:
+        return True, f"no sponsorship offered: '{bar}'"
 
     return False, ""
 

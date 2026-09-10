@@ -17,6 +17,7 @@ _STAFFING_SOURCE_PREFIXES = (
     "kforce", "teksystems", "insightglobal", "insight_global", "roberthalf", "robert_half",
     "randstad", "apexsystems", "apex_systems", "motion_recruitment", "motionrecruitment",
     "dice", "cybercoders", "collabera", "judge", "aditi", "artech", "beacon", "signature",
+    "govc2c",   # agents/discovery/gov_scanner — state/local-government staff-aug vendor boards
     "staffing", "consulting", "contract",
 )
 
@@ -104,6 +105,17 @@ STAFFING_COMPANIES = {
     "consultadd", "american technology consulting", "atc", "dellfor technologies", "dellfor",
     "collabera", "artech information system", "us corp2corp", "uscorp2corp", "north star staffing",
     "buzzclan", "prosum", "nityo infotech", "technology navigators", "dataintellect", "tms",
+    # State/local-government C2C vendor desks verified to run a live public board
+    # (data/gov_vendors.json, built by scripts/expand_gov_vendors.py). Government
+    # EMPLOYERS in that file are deliberately absent — their roles are W2, not C2C.
+    "360 it professionals", "ask it consulting", "bcforward",
+    "indotronix international", "infinite computing systems", "int technologies",
+    "ips technology services", "kyra solutions", "mitr technologies",
+    "partnered staffing - kelly services", "prosidian consulting", "pyramid it consulting",
+    "respec", "scout et", "southtek resources",
+    "stem xpert", "strategic staffing solutions", "system canada technologies",
+    "technogen", "trg", "vtech solution",
+    "vts3",
 }
 
 

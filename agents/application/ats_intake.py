@@ -172,6 +172,11 @@ async def intake_jobs(discovered: list[dict], state: JobSearchState,
             "source": d.get("source", base.get("source", "ats_intake")),
             "discovered_at": base.get("discovered_at", datetime.now(timezone.utc).isoformat()),
         })
+        # Public-sector tag from the gov/C2C lane (agents/discovery/gov_scanner) — kept on the
+        # JobListing so the queue can group/rank state-government contract work.
+        if d.get("gov_client"):
+            base["gov_client"] = d["gov_client"]
+            base["gov_state"] = d.get("gov_state", "")
         base.setdefault("required_skills", []); base.setdefault("nice_to_have_skills", [])
         base.setdefault("salary_min", None); base.setdefault("salary_max", None)
         # is_new = True when this is a FRESH job (no existing lead) → its JobListing must be appended.

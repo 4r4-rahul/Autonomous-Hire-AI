@@ -191,6 +191,9 @@ def _strip_html(html: str) -> str:
 # load — short enough to catch new postings within a scan cycle, long enough to dedup a single run.
 _COMPANY_POSTINGS: dict[str, tuple[float, list | None]] = {}
 _POSTINGS_TTL = 1200.0
+# Hard ceiling on SmartRecruiters pagination — a few staffing desks list thousands of reqs and we
+# only need enough depth to cover the fresh, in-lane ones.
+_SR_MAX_POSTINGS = 600
 
 
 async def _fetch_company_postings(company: str) -> list | None:
@@ -327,6 +330,21 @@ async def _fetch_company_postings(company: str) -> list | None:
                         postings = [p for p in parse(resp.json(), slug) if p.get("title") and p.get("url")]
                     except Exception:
                         postings = []
+                    # SmartRecruiters caps a page at 100. Big staffing desks (the whole contract
+                    # lane) run 100+ open reqs, so a single page silently hid most of their board —
+                    # and every hidden role also failed to RESOLVE. Page through with `offset`.
+                    if postings and parse is _sr and len(postings) >= 100:
+                        for offset in range(100, _SR_MAX_POSTINGS, 100):
+                            try:
+                                more = await c.get(SMARTRECRUITERS.format(slug=slug) + f"&offset={offset}")
+                                page = [p for p in _sr(more.json(), slug) if p.get("title") and p.get("url")]
+                            except Exception:
+                                break
+                            if not page:
+                                break
+                            postings.extend(page)
+                            if len(page) < 100:
+                                break
                     if postings:
                         result = postings
                         break
