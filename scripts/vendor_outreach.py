@@ -45,6 +45,7 @@ def main() -> int:
                     help="include vendors with no public-sector requirement in their history")
     ap.add_argument("--per-domain", type=int, default=2,
                     help="max recruiters per staffing firm in one batch (default 2)")
+    ap.add_argument("--source", default="", help='only this provenance, e.g. "web:careers_page"')
     ap.add_argument("--confirm", action="store_true", help="required to actually send")
     args = ap.parse_args()
 
@@ -67,7 +68,8 @@ def main() -> int:
     from agents.outreach.vendor_blast import run
     report = run(resume=args.resume, work_auth=args.work_auth, availability=args.availability,
                  limit=args.limit, gov_only=not args.all_vendors,
-                 per_domain=args.per_domain, dry_run=(args.stage == "preview"))
+                 per_domain=args.per_domain, source=args.source,
+                 dry_run=(args.stage == "preview"))
 
     if report.get("error"):
         print(report["error"])

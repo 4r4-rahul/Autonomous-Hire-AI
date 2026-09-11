@@ -133,7 +133,7 @@ def _first_name(contact: dict) -> str:
 
 
 def compose(contact: dict, profile: dict, *, work_auth: str, availability: str,
-            resume_name: str) -> tuple[str, str]:
+            resume_name: str, first_contact: bool = False) -> tuple[str, str]:
     """Return (subject, body).
 
     Every claim here has to be literally true. These are long-lived relationships and a vendor that
@@ -152,9 +152,20 @@ def compose(contact: dict, profile: dict, *, work_auth: str, availability: str,
     subject = ("Senior Data / Backend Engineer (8 yrs — Java, Python, AWS) — "
                "available for state & local government contracts")
 
+    # The default opener is only true for inbox-harvested recruiters. For a contact taken from the
+    # firm's own published careers/contact page, "you've sent me requirements before" is simply a
+    # lie — and a vendor who notices it has learned the outreach is automated. Say what's true:
+    # their address is published to receive résumés, and this is one.
+    opener = ("I found your contact on your careers page. I'm a data/backend engineer looking for "
+              "my next contract, and I'd like to be considered for your open requirements and added "
+              "to your bench list."
+              if first_contact else
+              "You've sent me requirements before, so I wanted to put my current profile in front "
+              "of you directly and ask to be added to your bench list.")
+
     body = f"""Hi {_first_name(contact)},
 
-You've sent me requirements before, so I wanted to put my current profile in front of you directly and ask to be added to your bench list.
+{opener}
 
 {state_line}Quick summary:
 - 8 years building backend and data-platform systems: Java/Spring Boot, Python, SQL, Spark, Kafka
@@ -213,7 +224,7 @@ def _spread_by_firm(contacts: list[dict], per_domain: int) -> list[dict]:
 
 def run(*, resume: str, work_auth: str, availability: str, limit: int = 50,
         gov_only: bool = True, dry_run: bool = True, pause: float = 8.0,
-        per_domain: int = 2) -> dict:
+        per_domain: int = 2, source: str = "") -> dict:
     """Send the bench email to the next `limit` un-contacted vendor recruiters.
 
     gov_only:   only recruiters who sent a requirement naming a state/local government client.
@@ -230,6 +241,10 @@ def run(*, resume: str, work_auth: str, availability: str, limit: int = 50,
     contacts = [c for c in load_contacts()
                 if c["email"] not in already and (c.get("gov_reqs", 0) > 0 or not gov_only)
                 and _safe_recipient(c)]
+    # `source` narrows to one provenance (e.g. "web:careers_page") so a small, differently-worded
+    # batch can be sent on its own rather than buried at the bottom of the ranked pool.
+    if source:
+        contacts = [c for c in contacts if c.get("source") == source]
 
     remaining_today = max(0, DAILY_CAP - _sent_today())
     pool = len(contacts)
@@ -248,7 +263,8 @@ def run(*, resume: str, work_auth: str, availability: str, limit: int = 50,
 
     if dry_run:
         subject, body = compose(batch[0], profile, work_auth=work_auth,
-                                availability=availability, resume_name=resume_path.name)
+                                availability=availability, resume_name=resume_path.name,
+                                first_contact=bool(batch[0].get("first_contact")))
         report["sample"] = {"to": batch[0]["email"], "subject": subject, "body": body}
         report["recipients"] = [{"email": c["email"], "name": c.get("name", ""),
                                  "states": c.get("states", []), "gov_reqs": c.get("gov_reqs", 0)}
@@ -260,7 +276,8 @@ def run(*, resume: str, work_auth: str, availability: str, limit: int = 50,
     with _SENT.open("a") as log:
         for c in batch:
             subject, body = compose(c, profile, work_auth=work_auth,
-                                    availability=availability, resume_name=resume_path.name)
+                                    availability=availability, resume_name=resume_path.name,
+                                    first_contact=bool(c.get("first_contact")))
             try:
                 svc.users().messages().send(
                     userId="me", body=_message(c["email"], subject, body, sender, resume_path)
