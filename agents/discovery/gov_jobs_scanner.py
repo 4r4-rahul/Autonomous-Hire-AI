@@ -195,7 +195,8 @@ async def scan(*, limit: int = 150, concurrency: int = 6) -> dict:
     return {"roles": roles, "stats": stats}
 
 
-async def run(state, *, limit: int = 150, tailor: bool = False, persist: bool = False):
+async def run(state, *, limit: int = 150, tailor: bool = False, persist: bool = False,
+              fit_gate: bool = True):
     """Scan and hand the surviving roles to ats_intake, tagged as public-sector."""
     from agents.application.ats_intake import intake_jobs
 
@@ -235,7 +236,7 @@ async def run(state, *, limit: int = 150, tailor: bool = False, persist: bool = 
     # Civil-service roles are W2 by definition, so this lane opts out of the global contract gate —
     # otherwise the whole batch is discarded as "not contract" whenever the pipeline is in C2C mode.
     updated, report = await intake_jobs(discovered, state, limit=limit, tailor=tailor,
-                                        contract_only=False)
+                                        contract_only=False, fit_gate=fit_gate)
     report.update(found["stats"])
 
     if persist:

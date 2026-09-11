@@ -92,13 +92,15 @@ def _is_relevant_location(*texts) -> bool:
 
 async def intake_jobs(discovered: list[dict], state: JobSearchState,
                       *, limit: int | None = None, tailor: bool = True,
-                      contract_only: bool | None = None) -> tuple[JobSearchState, dict]:
+                      contract_only: bool | None = None,
+                      fit_gate: bool = True) -> tuple[JobSearchState, dict]:
     """Resolve → (tailor) → park each discovered job (off LinkedIn).
 
     discovered: list of dicts with keys: company, title, and optionally description,
                 location, source, fallback_url (a known direct ATS URL if resolution fails).
     tailor=True:  Opus-tailor a résumé for each kept role now (costs ~$0.085 each).
     contract_only: override the global CONTRACT-mode gate for this batch (None = follow config).
+    fit_gate=False: keep every role that passed the hard filters, regardless of fit threshold.
     tailor=False: park the role scored + resolved but WITHOUT a résumé (status pending_review,
                   tailored_resume_path=None) — near-free. The résumé is generated on demand when
                   the user actually engages the role (tailor-on-demand → spend only on real ones).
@@ -178,7 +180,12 @@ async def intake_jobs(discovered: list[dict], state: JobSearchState,
         # JobListing so the queue can group/rank state-government contract work.
         if d.get("gov_client"):
             base["gov_client"] = d["gov_client"]
-            base["gov_state"] = d.get("gov_state", "")
+        # gov_state is set INDEPENDENTLY of gov_client. The state is parsed from the posting title
+        # ("... in Juneau, Alaska") and is known for almost every public-sector role, while a named
+        # government CLIENT is only detectable when the bulletin says so — gating the state on the
+        # client left 141 of 148 queued roles with no state at all.
+        if d.get("gov_state"):
+            base["gov_state"] = d["gov_state"]
         base.setdefault("required_skills", []); base.setdefault("nice_to_have_skills", [])
         base.setdefault("salary_min", None); base.setdefault("salary_max", None)
         # is_new = True when this is a FRESH job (no existing lead) → its JobListing must be appended.
@@ -264,7 +271,10 @@ async def intake_jobs(discovered: list[dict], state: JobSearchState,
                 return None, "errors"
         cand = {"d": d, "job": job, "is_new": is_new, "fit": fit, "employment": _employ,
                 "ats": (res["ats"] if res else "fallback"), "resolved": bool(res)}
-        return cand, ("ok" if fit.get("passed_threshold") else "skipped_fit")
+        # fit_gate=False parks everything that survived the hard filters, scored but not
+        # threshold-rejected — for when the user wants the full sweep in the queue and will
+        # triage by fit score themselves rather than have the scorer decide.
+        return cand, ("ok" if (fit.get("passed_threshold") or not fit_gate) else "skipped_fit")
 
     results = await asyncio.gather(*[_filter(d) for d in discovered])
     candidates = []
