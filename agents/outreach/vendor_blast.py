@@ -88,6 +88,17 @@ _NOT_A_NAME = {
 }
 
 
+_BOUNCED_CACHE: set[str] | None = None
+
+
+def _bounced() -> set[str]:
+    global _BOUNCED_CACHE
+    if _BOUNCED_CACHE is None:
+        from agents.outreach.deliverability import load_bounced
+        _BOUNCED_CACHE = load_bounced()
+    return _BOUNCED_CACHE
+
+
 def _safe_recipient(contact: dict) -> bool:
     """Second gate, at send time, on top of the one in vendor_harvest.
 
@@ -96,7 +107,12 @@ def _safe_recipient(contact: dict) -> bool:
     address that damages sender reputation for the whole campaign. Both were sitting in the ranked
     list at positions 26-50. Cheap check, so it runs again right before the send loop.
     """
-    if _NEVER_MAIL.search(contact.get("email", "")):
+    email = (contact.get("email") or "").lower()
+    if _NEVER_MAIL.search(email):
+        return False
+    # Hard suppression: an address that already bounced. Re-mailing known-dead addresses is what
+    # turns a bad batch into a damaged sender reputation.
+    if email in _bounced():
         return False
     # Every remembered subject being personal paperwork means there's no staffing thread here at all.
     subjects = contact.get("subjects") or []

@@ -1,0 +1,208 @@
+"""Recruiters who are hiring RIGHT NOW — the live desk list, with phone numbers.
+
+The archive-ranked approach failed on contact: the first bench batch mailed the recruiters who
+appeared most often across years of mail, and 34% of it bounced (22 of 64). Staffing turnover is
+brutal — the person who sent forty requirements in 2024 has usually moved firms, and their address
+is dead.
+
+Recency fixes both problems at once. A recruiter who emailed a requirement in the last two weeks is
+(a) provably deliverable, since the mail just arrived, and (b) provably working live reqs, which is
+the entire point. That is a strictly better list than any volume ranking of the archive.
+
+It also produces what an email list can't: **phone numbers**. Recruiters sign with a direct line,
+and in the C2C market a call gets a submittal moving in minutes where email waits days. Numbers are
+parsed from the signature of mail they sent, so calling is a return call, not a cold one.
+"""
+from __future__ import annotations
+
+import base64
+import json
+import re
+from datetime import datetime, timezone
+from pathlib import Path
+
+from core.logger import get_logger
+from core.gov_client import detect_gov_client, is_federal_client
+from agents.outreach.vendor_harvest import (_throttled, _ROBOT, _FREEMAIL, _NEVER_MAIL,
+                                            _PERSONAL_MATTER, _EMAIL, _NAME)
+
+logger = get_logger("active_recruiters")
+
+_ROOT = Path(__file__).parent.parent.parent
+_OUT = _ROOT / "data" / "active_recruiters.json"
+
+# A phone number must LOOK formatted or be labelled. A bare 10-digit run matches message-ids, job
+# reference numbers and tracking codes — the first version returned '1789145302' from a Message-ID
+# header as a recruiter's direct line.
+_PHONE_LABELLED = re.compile(
+    r"(?:phone|tel|telephone|cell|mobile|direct|desk|office|contact|call)\s*[:.#]?\s*"
+    r"(\+?1[\s.-]?)?(\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4})", re.I)
+_PHONE_FORMATTED = re.compile(r"(?:\+?1[\s.-]?)?(\(\d{3}\)\s?\d{3}[\s.-]?\d{4}|\d{3}[.-]\d{3}[.-]\d{4})")
+_EXT = re.compile(r"(?:x|ext\.?)\s*(\d{1,6})", re.I)
+
+# Requirement-shaped subjects — what an actively-staffing recruiter sends.
+_REQ_SUBJECT = re.compile(
+    r"(requirement|urgent|immediate|opening|opportunity|hiring|position|role|need|"
+    r"looking for|job|c2c|w2|contract|remote|onsite|hybrid)", re.I)
+
+
+def _body_text(payload: dict) -> str:
+    parts = []
+
+    def walk(p):
+        if p.get("mimeType", "").startswith("text/") and (p.get("body") or {}).get("data"):
+            try:
+                parts.append(base64.urlsafe_b64decode(p["body"]["data"]).decode("utf-8", "replace"))
+            except Exception:
+                pass
+        for child in p.get("parts") or []:
+            walk(child)
+
+    walk(payload)
+    return re.sub(r"<[^>]+>", " ", "\n".join(parts))
+
+
+def _phones(text: str) -> list[str]:
+    """Phone numbers from a signature, most-trustworthy first (labelled beats merely formatted)."""
+    found: list[str] = []
+    for m in _PHONE_LABELLED.finditer(text):
+        found.append(re.sub(r"\s+", " ", m.group(2)).strip())
+    for m in _PHONE_FORMATTED.finditer(text):
+        found.append(re.sub(r"\s+", " ", m.group(1)).strip())
+    seen, out = set(), []
+    for p in found:
+        digits = re.sub(r"\D", "", p)
+        if len(digits) != 10 or digits in seen:
+            continue
+        # 555-/000- prefixes and repeated digits are placeholders, not desks.
+        if digits[:3] in ("555", "000", "123") or len(set(digits)) <= 2:
+            continue
+        seen.add(digits)
+        out.append(f"({digits[:3]}) {digits[3:6]}-{digits[6:]}")
+    return out[:2]
+
+
+def harvest(*, days: int = 14, max_messages: int = 600, pause: float = 0.12) -> dict:
+    """Scan the last `days` of mail for recruiters working live requirements.
+
+    Returns contacts sorted by most-recent-first, each with phone numbers where the signature had
+    one, the requirement they last sent, and a government flag.
+    """
+    from agents.monitoring.email_monitor import _build_gmail_service
+    from agents.outreach.deliverability import load_bounced
+    import time
+
+    svc = _build_gmail_service()
+    bounced = load_bounced()
+    contacts: dict[str, dict] = {}
+    scanned = 0
+    page = None
+
+    while scanned < max_messages:
+        resp = _throttled(lambda: svc.users().messages().list(
+            userId="me", q=f"newer_than:{days}d", maxResults=100, pageToken=page).execute())
+        if resp is None:
+            break
+        msgs = resp.get("messages", [])
+        if not msgs:
+            break
+        for m in msgs:
+            if scanned >= max_messages:
+                break
+            scanned += 1
+            detail = _throttled(lambda mid=m["id"]: svc.users().messages().get(
+                userId="me", id=mid, format="full").execute())
+            if detail is None:
+                continue
+            headers = {h["name"]: h["value"]
+                       for h in detail.get("payload", {}).get("headers", [])}
+            frm = headers.get("From", "")
+            subject = headers.get("Subject", "")
+            match = _EMAIL.search(frm)
+            if not match or _ROBOT.search(frm) or _NEVER_MAIL.search(frm):
+                continue
+            email = match.group(0).lower()
+            if email.split("@")[-1] in _FREEMAIL or email in bounced:
+                continue
+            if _PERSONAL_MATTER.search(subject) or is_federal_client(subject):
+                continue
+            # Only requirement mail — this pass reads ALL recent mail, so without this the list
+            # fills with order confirmations and account notices from real company domains.
+            if not _REQ_SUBJECT.search(subject):
+                continue
+
+            body = _body_text(detail.get("payload", {}))
+            gov = detect_gov_client(subject, body[:4000], "", "")
+            ts = int(detail.get("internalDate", 0)) // 1000
+            name_match = _NAME.match(frm)
+            entry = contacts.setdefault(email, {
+                "email": email, "domain": email.split("@")[-1],
+                "name": (name_match.group(1).strip() if name_match else "").title(),
+                "phones": [], "reqs": 0, "gov_reqs": 0, "states": [],
+                "last_seen": "", "last_subject": "", "subjects": [],
+            })
+            entry["reqs"] += 1
+            for p in _phones(body):
+                if p not in entry["phones"]:
+                    entry["phones"].append(p)
+            if gov:
+                entry["gov_reqs"] += 1
+                if gov.get("state") and gov["state"] not in entry["states"]:
+                    entry["states"].append(gov["state"])
+            if ts and (not entry["last_seen"] or ts > entry.get("_ts", 0)):
+                entry["_ts"] = ts
+                entry["last_seen"] = datetime.fromtimestamp(ts, timezone.utc).date().isoformat()
+                entry["last_subject"] = subject[:140]
+            if len(entry["subjects"]) < 5:
+                entry["subjects"].append(subject[:140])
+            time.sleep(pause)
+        page = resp.get("nextPageToken")
+        if not page:
+            break
+
+    ranked = sorted(contacts.values(), key=lambda c: (-c.get("_ts", 0), -c["reqs"]))
+    for c in ranked:
+        c.pop("_ts", None)
+    payload = {
+        "_comment": f"Recruiters who sent a requirement in the last {days} days — provably "
+                    f"deliverable and provably hiring. Phones parsed from their own signatures. "
+                    f"Built by agents/outreach/active_recruiters.harvest().",
+        "harvested_at": datetime.now(timezone.utc).isoformat(),
+        "window_days": days, "scanned_messages": scanned, "contacts": ranked,
+    }
+    _OUT.write_text(json.dumps(payload, indent=1) + "\n")
+    logger.info("active_recruiters_harvested", scanned=scanned, contacts=len(ranked),
+                with_phone=sum(1 for c in ranked if c["phones"]),
+                gov=sum(1 for c in ranked if c["gov_reqs"]))
+    return payload
+
+
+def load_active() -> list[dict]:
+    try:
+        return json.loads(_OUT.read_text()).get("contacts", [])
+    except Exception:
+        return []
+
+
+def call_sheet(*, gov_first: bool = True, limit: int = 40) -> str:
+    """A ranked phone list to actually work through, newest requirement first."""
+    rows = [c for c in load_active() if c["phones"]]
+    # Government desks first when asked for, then most-recent requirement — a recruiter who mailed
+    # yesterday is far likelier to pick up and have something open than one from two weeks ago.
+    rows.sort(key=lambda c: (-(c.get("gov_reqs") or 0) if gov_first else 0,
+                             c.get("last_seen", "")), reverse=False)
+    rows.sort(key=lambda c: c.get("last_seen", ""), reverse=True)
+    if gov_first:
+        rows.sort(key=lambda c: (c.get("gov_reqs") or 0), reverse=True)
+    out = ["# Call sheet — recruiters with live requirements", ""]
+    out.append(f"_{len(rows)} reachable by phone. Ask: \"you emailed me about X — what else is "
+               f"open, and can you add me to your bench list?\"_")
+    out.append("")
+    out.append("| # | Call | Recruiter | Firm | Last req | What they sent |")
+    out.append("|---|------|-----------|------|----------|----------------|")
+    for i, c in enumerate(rows[:limit], 1):
+        tag = f" `{','.join(c['states'])}`" if c.get("states") else ""
+        gov = " **GOV**" if c.get("gov_reqs") else ""
+        out.append(f"| {i} | {c['phones'][0]} | {c['name'] or '—'} | {c['domain']}{tag}{gov} | "
+                   f"{c.get('last_seen', '—')} | {(c.get('last_subject') or '')[:60]} |")
+    return "\n".join(out)
