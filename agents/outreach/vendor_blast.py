@@ -196,7 +196,7 @@ def _spread_by_firm(contacts: list[dict], per_domain: int) -> list[dict]:
 
 
 def run(*, resume: str, work_auth: str, availability: str, limit: int = 50,
-        gov_only: bool = True, dry_run: bool = True, pause: float = 1.5,
+        gov_only: bool = True, dry_run: bool = True, pause: float = 8.0,
         per_domain: int = 2) -> dict:
     """Send the bench email to the next `limit` un-contacted vendor recruiters.
 
@@ -258,8 +258,10 @@ def run(*, resume: str, work_auth: str, availability: str, limit: int = 50,
                                   "states": c.get("states", []), "campaign": "gov_bench",
                                   "sent_at": datetime.now(timezone.utc).isoformat()}) + "\n")
             log.flush()
-            # Paced, never bursted: hundreds of near-identical sends in a tight loop is what trips
-            # both spam heuristics and the send quota.
+            # Paced, never bursted. 50 near-identical emails with the same attachment, sent from a
+            # consumer Gmail account inside two minutes, is what a spam filter is built to catch —
+            # and a reputation hit would silently bury the whole campaign in Promotions/Spam. ~8s
+            # spreads a 50-send batch over ~8 minutes, which reads as a person working a list.
             time.sleep(pause + random.random())
     logger.log_decision(action="vendor_blast_complete", outcome="success", details=report)
     return report
