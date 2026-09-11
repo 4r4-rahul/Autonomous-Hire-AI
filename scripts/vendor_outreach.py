@@ -39,13 +39,18 @@ def main() -> int:
     ap.add_argument("--availability", default=DEFAULT_AVAILABILITY)
     ap.add_argument("--all-vendors", action="store_true",
                     help="include vendors with no public-sector requirement in their history")
+    ap.add_argument("--per-domain", type=int, default=2,
+                    help="max recruiters per staffing firm in one batch (default 2)")
     ap.add_argument("--confirm", action="store_true", help="required to actually send")
     args = ap.parse_args()
 
     if args.stage == "harvest":
-        from agents.outreach.vendor_harvest import harvest
+        from agents.outreach.vendor_harvest import harvest, merge_past_vendors
         report = harvest()
-        contacts = report["contacts"]
+        merged = merge_past_vendors()
+        print(f"merged {merged['merged']} recruiters from past_vendors.json")
+        from agents.outreach.vendor_harvest import load_contacts
+        contacts = load_contacts()
         print(f"scanned {report['scanned_messages']} messages -> {len(contacts)} vendor recruiters")
         print(f"  with a public-sector requirement: {sum(1 for c in contacts if c['gov_reqs'])}")
         print(f"  not yet contacted:                {sum(1 for c in contacts if not c['already_contacted'])}")
@@ -58,7 +63,7 @@ def main() -> int:
     from agents.outreach.vendor_blast import run
     report = run(resume=args.resume, work_auth=args.work_auth, availability=args.availability,
                  limit=args.limit, gov_only=not args.all_vendors,
-                 dry_run=(args.stage == "preview"))
+                 per_domain=args.per_domain, dry_run=(args.stage == "preview"))
 
     if report.get("error"):
         print(report["error"])

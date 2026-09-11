@@ -32,7 +32,7 @@ from pathlib import Path
 import yaml
 
 from core.logger import get_logger
-from agents.outreach.vendor_harvest import load_contacts
+from agents.outreach.vendor_harvest import load_contacts, _NEVER_MAIL, _PERSONAL_MATTER
 
 logger = get_logger("vendor_blast")
 
@@ -86,6 +86,21 @@ _NOT_A_NAME = {
     "llc", "corp", "group", "technologies", "technology", "systems", "services", "resource",
     "resources", "global", "national", "american", "india", "resume", "resumes", "bench",
 }
+
+
+def _safe_recipient(contact: dict) -> bool:
+    """Second gate, at send time, on top of the one in vendor_harvest.
+
+    The contacts file can be stale or hand-edited, and the cost of one bad address here is not a
+    wasted send — it's mailing a bench pitch to Rahul's own immigration attorney, or to a newsletter
+    address that damages sender reputation for the whole campaign. Both were sitting in the ranked
+    list at positions 26-50. Cheap check, so it runs again right before the send loop.
+    """
+    if _NEVER_MAIL.search(contact.get("email", "")):
+        return False
+    # Every remembered subject being personal paperwork means there's no staffing thread here at all.
+    subjects = contact.get("subjects") or []
+    return not (subjects and all(_PERSONAL_MATTER.search(s) for s in subjects))
 
 
 def _first_name(contact: dict) -> str:
@@ -160,12 +175,34 @@ def _message(to: str, subject: str, body: str, sender: str, resume: Path) -> dic
     return {"raw": base64.urlsafe_b64encode(msg.as_bytes()).decode()}
 
 
+def _spread_by_firm(contacts: list[dict], per_domain: int) -> list[dict]:
+    """Re-order so no firm gets more than `per_domain` emails before every other firm has had one.
+
+    The goal is REACH — being on many benches — and five recruiters at saxonglobal.com forwarding
+    each other the same pitch buys one bench, looks like a blast, and spends five sends doing it.
+    Interleaving by domain turns the same budget into far more distinct firms, and the surplus
+    recruiters simply stay in the queue for a later batch.
+    """
+    by_domain: dict[str, list[dict]] = {}
+    for c in contacts:
+        by_domain.setdefault(c.get("domain") or c["email"].split("@")[-1], []).append(c)
+    out, round_no = [], 0
+    while round_no < per_domain:
+        for domain_contacts in by_domain.values():
+            if len(domain_contacts) > round_no:
+                out.append(domain_contacts[round_no])
+        round_no += 1
+    return out
+
+
 def run(*, resume: str, work_auth: str, availability: str, limit: int = 50,
-        gov_only: bool = True, dry_run: bool = True, pause: float = 1.5) -> dict:
+        gov_only: bool = True, dry_run: bool = True, pause: float = 1.5,
+        per_domain: int = 2) -> dict:
     """Send the bench email to the next `limit` un-contacted vendor recruiters.
 
-    gov_only: only recruiters who sent a requirement naming a state/local government client.
-    dry_run:  compose and report, send nothing. Always run this first and read the sample.
+    gov_only:   only recruiters who sent a requirement naming a state/local government client.
+    per_domain: at most this many recruiters per staffing firm in one batch (reach beats depth).
+    dry_run:    compose and report, send nothing. Always run this first and read the sample.
     """
     resume_path = Path(resume)
     if not resume_path.exists():
@@ -175,11 +212,19 @@ def run(*, resume: str, work_auth: str, availability: str, limit: int = 50,
     sender = profile.get("personal", {}).get("email", "")
     already = _sent_ever()
     contacts = [c for c in load_contacts()
-                if c["email"] not in already and (c.get("gov_reqs", 0) > 0 or not gov_only)]
+                if c["email"] not in already and (c.get("gov_reqs", 0) > 0 or not gov_only)
+                and _safe_recipient(c)]
 
     remaining_today = max(0, DAILY_CAP - _sent_today())
+    pool = len(contacts)
+    firms = len({c.get("domain") for c in contacts})
+    # The per-firm cap limits ONE batch, not the pool — recruiters it holds back stay queued for the
+    # next run, so report both numbers rather than letting the cap look like the whole universe.
+    contacts = _spread_by_firm(contacts, per_domain)
     batch = contacts[:min(limit, remaining_today)]
-    report = {"eligible": len(contacts), "batch": len(batch), "sent": 0, "failed": 0,
+    report = {"pool": pool, "firms_in_pool": firms, "eligible_this_batch": len(contacts),
+              "batch": len(batch), "sent": 0, "failed": 0,
+              "firms_reached": len({c.get("domain") for c in batch}),
               "dry_run": dry_run, "remaining_today": remaining_today,
               "reserve_held": _RESERVE, "resume": resume_path.name}
     if not batch:

@@ -70,6 +70,31 @@ _NAME = re.compile(r'^\s*"?([^"<@]+?)"?\s*<')
 _FREEMAIL = {"gmail.com", "yahoo.com", "hotmail.com", "outlook.com", "aol.com", "icloud.com",
              "live.com", "msn.com", "protonmail.com", "mail.com"}
 
+# Senders that match a government query but must NEVER receive bench marketing. Found by reading the
+# ranked list: positions 26-50 held Rahul's own immigration attorneys, his H-1B transfer thread, and
+# three marketing newsletters. Mailing a "add me to your bench list" pitch to your own lawyer is
+# embarrassing; mailing it to a newsletter address burns sender reputation for the whole campaign.
+_NEVER_MAIL = re.compile(
+    r"(@(e|email|mail|news|newsletter|marketing|info|updates|notify)\.|"      # bulk-mail subdomains
+    r"newsletter|unsubscribe|"
+    r"@[\w.-]*law(firm|yers?|group|office)?\.|@[\w.-]*legal\.|"               # law firms
+    r"\bimmigration@|\battorney|@[\w.-]*visa[\w.-]*\.)", re.I)
+
+# Subjects that mean the thread is about RAHUL'S OWN immigration/benefits paperwork, not a staffing
+# requirement. The sender may well be a real vendor — but this correspondence is not a bench pitch.
+_PERSONAL_MATTER = re.compile(
+    r"(h-?1\s?b\s+(transfer|petition|checklist|filing|extension)|green\s*card|\bgc\s+processing|"
+    r"immigration\s+(consultation|case|process)|\bi-?140\b|\bi-?485\b|\blca\b|\brfe\b|perm\b|"
+    r"newsletter|quarterly\s+(newsletter|update)|addendum|invoice|timesheet|onboarding\s+documents|"
+    r"background\s+check|w-?4\b|\bi-?9\b)", re.I)
+
+
+def _mailable(email: str, subject: str, snippet: str) -> bool:
+    """True when this sender/thread is a staffing requirement worth a bench pitch."""
+    if _NEVER_MAIL.search(email):
+        return False
+    return not _PERSONAL_MATTER.search(f"{subject}\n{snippet[:200]}")
+
 
 def _throttled(fn, *, tries: int = 9):
     """Gmail's per-user 'Total Query Cost' burst limit trips easily on a wide harvest. Retry with
@@ -141,6 +166,8 @@ def harvest(*, max_per_query: int = 400, pause: float = 0.15) -> dict:
                     continue
                 if is_federal_client(f"{subject}\n{snippet}"):
                     continue
+                if not _mailable(email, subject, snippet):
+                    continue
                 gov = detect_gov_client(subject, snippet, "", "")
                 name_match = _NAME.match(frm)
                 entry = contacts.setdefault(email, {
@@ -183,6 +210,71 @@ def harvest(*, max_per_query: int = 400, pause: float = 0.15) -> dict:
                 gov=sum(1 for c in ranked if c["gov_reqs"]),
                 fresh=sum(1 for c in ranked if not c["already_contacted"]))
     return payload
+
+
+_PAST = _ROOT / "data" / "past_vendors.json"
+
+
+def merge_past_vendors() -> dict:
+    """Fold data/past_vendors.json into the contact pool.
+
+    That file is the running tally of every recruiter who has ever mailed Rahul a requirement —
+    1,720 real vendor contacts across 113 staffing firms, against the ~200 a targeted Gmail search
+    returns. It's the widest *invited-contact* list available, and it dwarfs anything scraping the
+    web would produce (C2C boards strip contact addresses precisely so applications stay on-platform
+    — 220 vendor JDs yielded zero).
+
+    It keeps only ~3 sampled subjects per sender, so the government signal is thin here; these merge
+    in with gov_reqs=0 unless a sampled subject names a government client, and reach the outreach
+    only via `--all-vendors`. The Gmail-harvested gov contacts stay ranked above them.
+    """
+    try:
+        past = json.loads(_PAST.read_text())
+    except Exception:
+        return {"merged": 0}
+
+    try:
+        payload = json.loads(_OUT.read_text())
+    except Exception:
+        payload = {"_comment": "", "scanned_messages": 0, "contacts": []}
+    by_email = {c["email"]: c for c in payload.get("contacts", [])}
+    sent = _sent_already()
+    merged = 0
+
+    for v in past:
+        email = (v.get("email") or "").strip().lower()
+        if "@" not in email or _ROBOT.search(email) or _NEVER_MAIL.search(email):
+            continue
+        if email.split("@")[-1] in _FREEMAIL:
+            continue
+        subjects = [s for s in (v.get("subjects") or []) if s]
+        if subjects and all(_PERSONAL_MATTER.search(s) for s in subjects):
+            continue
+        if email in by_email:                      # Gmail harvest already has richer evidence
+            continue
+        states, gov_reqs = [], 0
+        for s in subjects:
+            if is_federal_client(s):
+                continue
+            gov = detect_gov_client(s, "", "", "")
+            if gov:
+                gov_reqs += 1
+                if gov.get("state") and gov["state"] not in states:
+                    states.append(gov["state"])
+        by_email[email] = {
+            "email": email, "domain": email.split("@")[-1],
+            "name": (v.get("name") or "").strip().title(),
+            "reqs": int(v.get("count") or 1), "gov_reqs": gov_reqs, "weak_reqs": 0,
+            "states": states, "subjects": subjects[:5], "source": "past_vendors",
+            "already_contacted": email in sent,
+        }
+        merged += 1
+
+    payload["contacts"] = sorted(by_email.values(),
+                                 key=lambda c: (-c.get("gov_reqs", 0), -c.get("reqs", 0)))
+    _OUT.write_text(json.dumps(payload, indent=1) + "\n")
+    logger.info("past_vendors_merged", merged=merged, total=len(payload["contacts"]))
+    return {"merged": merged, "total": len(payload["contacts"])}
 
 
 def load_contacts() -> list[dict]:
