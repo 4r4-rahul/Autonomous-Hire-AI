@@ -39,18 +39,43 @@ _DETAIL = "https://www.governmentjobs.com/jobs/{jid}-0"
 _UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                      "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36"}
 
-# Slug patterns worth reading the bulletin for. Public-sector titles are their own dialect —
-# "Programmer Analyst III", "Information Technology Specialist", "Departmental Analyst 9-P11".
+# Slug patterns worth reading the bulletin for. Two hard-won rules shape this:
+#
+#  1. NEVER match a bare "engineer". In the public sector that word overwhelmingly means civil,
+#     traffic, water, air-quality or building engineering — a broad match returned 774 candidates of
+#     which ~590 were public works ("city-engineer", "engineer-in-training", "engineer-tech").
+#     Every pattern here carries an IT qualifier.
+#  2. Word-bound the short tokens. A bare `elt` matched "animal-shELTer-attendant"; `etl`/`elt` now
+#     require non-letter neighbours.
+#
+# Scope is data engineering, BI/warehouse, and general software development — Rahul takes software
+# developer roles too. Business/systems ANALYST work is excluded: it is a different job, and the
+# contract lane's title filter rejects it for the same reason.
 _IN_LANE = re.compile(
-    r"(data[-_]?(engineer|architect|analyst|warehouse|scientist)|software[-_](engineer|developer)|"
-    r"application[-_]developer|etl|cloud[-_](engineer|architect)|devops|programmer[-_]analyst|"
-    r"systems[-_]analyst|business[-_]intelligence|analytics[-_]engineer|database[-_]administrator|"
-    r"information[-_]systems[-_]analyst)", re.I)
-# Same slug set catches a lot of teaching and helpdesk work — public boards carry everything.
+    r"("
+    r"data[-_](engineer|architect|scientist|analyst|warehouse|platform|pipeline)|"
+    r"big[-_]data|(?<![a-z])(etl|elt)(?![a-z])|business[-_]intelligence|"
+    r"analytics[-_](engineer|developer)|"
+    r"software[-_](engineer|developer|architect)|application[s]?[-_](developer|engineer|architect)|"
+    r"programmer[-_]?(analyst|ii|iii|iv|v)?(?![a-z])|computer[-_]programmer|"
+    r"web[-_]developer|full[-_]?stack|back[-_]?end|front[-_]?end|"
+    r"cloud[-_](engineer|architect|developer)|devops|site[-_]reliability|platform[-_]engineer|"
+    r"systems[-_]programmer|database[-_](developer|engineer)|sql[-_]developer|"
+    r"integration[-_](developer|engineer)|api[-_]developer|(java|python|\.net|dotnet)[-_]developer|"
+    r"information[-_](technology|systems)[-_](specialist|analyst|developer|engineer)"
+    r")", re.I)
+# Public boards carry every job a government does, so the exclusions are broad: teaching, helpdesk,
+# non-IC roles, stacks outside the candidate's profile, and analyst work that isn't engineering.
 _NOT_LANE = re.compile(
     r"(adjunct|faculty|lecturer|professor|instructor|teacher|librarian|intern\b|"
-    r"technician|helpdesk|help-desk|support-specialist|manager|director|supervisor|"
-    r"part-time|student|apprentice|trainee|police|fire|nurse)", re.I)
+    r"technician|helpdesk|help-desk|manager|director|supervisor|chief|part-time|student|"
+    r"apprentice|trainee|police|fire|nurse|clerk|aide|custodian|driver|dean|animal|shelter|"
+    r"veterinar|sharepoint|sitecore|peoplesoft|salesforce|siebel|mainframe|cobol|abap|"
+    r"business-analyst|business-systems-analyst|budget|policy-analyst|gis-|maintenance|"
+    # "Programmer" in a government title can mean someone who programs EVENTS, not software:
+    # "Facility Programmer (Ice Arena)", "Performing Arts Educational Programmer".
+    r"facility-programmer|facilities-programmer|arts-|recreation|arena|cultural|event-|"
+    r"performing|theatre|theater|museum|park-)", re.I)
 
 _EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 _NOT_A_CONTACT = re.compile(r"(neogov|governmentjobs|adobe|\.png|\.jpg|example\.|sentry)", re.I)
