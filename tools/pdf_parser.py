@@ -24,8 +24,13 @@ _RULE    = (180, 180, 180)
 _H1_SIZE = 18
 _H2_SIZE = 11
 _H3_SIZE = 10
-_BODY    = 9
-_LINE_H  = 4.5   # mm per line
+# Body typography. 10pt on 5.0mm leading, raised from a cramped 9/4.5: it reads better on screen
+# (recruiters skim these) and it renders the full-depth tailored résumé at its intended SIX pages
+# rather than 5 — the content was already 95% of the base, it was just landing under a page
+# boundary. Measured: 9/4.5 -> 5pp, 9.5/4.8 -> 6pp, 10/5.0 -> 6pp, 10.5/5.4 -> 7pp, so 10/5.0 sits
+# mid-band and stays at 6 as content varies per role.
+_BODY    = 10
+_LINE_H  = 5.0   # mm per line
 
 
 def _parse_md_sections(md_text: str) -> list[tuple[str, str]]:
