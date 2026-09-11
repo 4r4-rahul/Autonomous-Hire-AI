@@ -54,12 +54,18 @@ _NOT_LANE = re.compile(
 
 _EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
 _NOT_A_CONTACT = re.compile(r"(neogov|governmentjobs|adobe|\.png|\.jpg|example\.|sentry)", re.I)
-# Explicit knock-outs for a candidate who needs sponsorship. Silence is NOT permission here.
+# HARD knock-out: the employer will not sponsor. No amount of willingness fixes this.
 _CITIZEN_BAR = re.compile(
     r"(must be a (u\.?s\.?|united states) citizen|citizenship (is )?required|"
-    r"legally authorized to work.{0,40}without sponsorship|(not|unable to) (provide|offer|sponsor)"
-    r".{0,20}sponsorship|resident of the (state|county|city)|residency (is )?required|"
-    r"must reside (in|within))", re.I)
+    r"legally authorized to work.{0,40}without sponsorship|"
+    r"(not|unable to) (provide|offer|sponsor).{0,20}sponsorship)", re.I)
+# SOFT: a residency requirement is a relocation question, not an eligibility one, and public-sector
+# postings usually require residency at APPOINTMENT rather than at application. Rahul is open to
+# relocating, so these are flagged and kept — the first version lumped them in with citizenship bars
+# and silently discarded roles he can actually take.
+_RESIDENCY = re.compile(
+    r"(resident of the (state|county|city)|residency (is )?required|must reside (in|within)|"
+    r"must (be|become) a resident)", re.I)
 _TITLE = re.compile(r"<title>(.*?)</title>", re.S | re.I)
 # NEOGOV titles carry the worksite: "Application Developer 3/4 in Juneau, Alaska | Government Jobs".
 # That trailing location is the reliable state signal — detect_gov_client reads the CLIENT from prose
@@ -118,6 +124,7 @@ async def _bulletin(client: httpx.AsyncClient, url: str) -> dict | None:
         "url": _DETAIL.format(jid=m.group(1)),
         "contacts": contacts[:2],
         "citizenship_bar": bool(_CITIZEN_BAR.search(body)),
+        "residency_required": bool(_RESIDENCY.search(body)),
         "gov_client": gov,
         "state": state or (gov or {}).get("state", ""),
         "location": (_TITLE_LOCATION.search(raw_title).group(1).strip()
@@ -152,7 +159,9 @@ async def scan(*, limit: int = 150, concurrency: int = 6) -> dict:
     roles = [r for r in results if not r["citizenship_bar"]]
     stats = {"live_postings": len(urls), "in_lane": len([u for u in urls if in_lane(u)]),
              "fetched": len(results), "citizenship_barred": len(barred),
-             "kept": len(roles), "with_contact": sum(1 for r in roles if r["contacts"])}
+             "residency_required": sum(1 for r in roles if r["residency_required"]),
+             "kept": len(roles), "with_contact": sum(1 for r in roles if r["contacts"]),
+             "states": len({r["state"] for r in roles if r["state"]})}
     logger.info("gov_jobs_scanned", **stats)
     return {"roles": roles, "stats": stats}
 
