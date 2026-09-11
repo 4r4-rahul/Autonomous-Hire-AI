@@ -61,9 +61,11 @@ _BARE_STATE = re.compile(rf"\b({_STATE_NAMES})\b", re.I)
 # Deliberately narrow: each phrase names a government BUYER, not merely a regulated industry.
 _STATE_MARKERS = re.compile(
     r"\b(state\s+of\s+\w+|commonwealth\s+of\s+\w+|state\s+(agency|agencies|government|client|"
-    r"contract|dot|department)|department\s+of\s+(transportation|human\s+services|health\s+and\s+"
-    r"human\s+services|revenue|motor\s+vehicles|public\s+safety|corrections|workforce|children|"
-    r"labor|education|environmental\s+quality|natural\s+resources|administrative\s+services)|"
+    r"contract|dot|department)|department\s+of\s+(transportation|human\s+services|health|"
+    r"health\s+and\s+human\s+services|revenue|taxation|motor\s+vehicles|public\s+safety|"
+    r"corrections|workforce|children|labor|education|environmental\s+quality|natural\s+resources|"
+    r"administrative\s+services|technology|information\s+services|social\s+services|"
+    r"public\s+health|insurance|agriculture|veterans\s+affairs)|"
     r"medicaid|mmis|child\s+support\s+enforcement|unemployment\s+insurance|"
     r"health\s+benefit\s+exchange|dmv\b|hhsc\b|dshs\b|dhhs\b|"
     r"office\s+of\s+information\s+technology|office\s+of\s+technology\s+services|"
