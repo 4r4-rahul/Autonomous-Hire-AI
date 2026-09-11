@@ -429,17 +429,42 @@ PRE-RANKED MATCHES FOR THIS JD:
 USE THE EXPERIENCE BANK above: for each role, lead with the story whose SHOWS-tags best match this JD's
 hardest problem, reframed into a crisp bullet. If no story fits a role, keep the base-résumé bullet.""")
 
-    # The base résumé is now the LONG-FORM profile (~6 pages, 76 bullets) so that tailoring has
-    # deep real material to select from. That makes it a SOURCE, not a template: without an explicit
-    # ceiling the writer mirrors the base's length and emits a six-page ATS submission, where two
-    # pages is the norm and recruiters skim. Select the best evidence, don't reproduce all of it.
+    # FULL-DEPTH output, by explicit instruction. The conventional advice is a two-page ATS résumé,
+    # and this pipeline used to enforce that — but the candidate's market is C2C/vendor submission,
+    # where a recruiter keyword-matches the résumé and forwards it to the client. There, depth wins
+    # submittals: a detail that isn't on the page can't be matched. So the tailoring REORDERS and
+    # RE-FRAMES the full profile for the JD rather than cutting it down.
+    #
+    # Tailoring still has to mean something at this length: lead with what the JD asks for, drop
+    # what is genuinely irrelevant, and never pad. Long is the target, but only with real content —
+    # the truthfulness rules are unchanged and a fabricated line is worse than a short résumé.
     _length_directive = """
 
-LENGTH — SELECT, DON'T REPRODUCE. The base résumé is a deep profile written to hold every real
-detail; it is the raw material, not the target shape. This résumé is a targeted ATS submission:
-aim for TWO PAGES. Per role, 4-6 bullets for the most recent and relevant, 2-4 for older ones, and
-keep only the skills this JD actually asks for. Choosing the strongest evidence IS the work —
-a longer résumé is a weaker one."""
+LENGTH — FULL DEPTH, ROUGHLY SIX PAGES. This is NOT a trimmed two-page ATS résumé. Keep the base
+résumé's full technical depth: every real role, its full bullet set, and the complete skills
+inventory. Target the base résumé's own length (~76 bullets across the experience section).
+
+RETENTION IS THE DEFAULT, AND IT IS MEASURED. The base résumé carries these bullet counts, and your
+output must match them per role, not merely in total:
+
+    JPMorgan Chase           32 bullets      Ameriprise Financial      7 bullets
+    Insight Global            6 bullets      AutonomousHire            8 bullets
+    Alignment Health         12 bullets      Live Meeting Assistant    5 bullets
+                                             Multi-Cloud Automation    6 bullets
+
+Reproduce each role at its full count. "Less important" is NOT a reason to drop a bullet, and
+neither is length. Merging two bullets into one counts as dropping one; summarising a role instead
+of listing its bullets counts as dropping several. Before you finish, COUNT the bullets you wrote
+for each role against the table above — if any role is short, restore the missing ones from the
+base résumé, reworded for this JD.
+
+Tailoring at this length means REORDERING AND REFRAMING, not cutting:
+- Lead each role with the bullets closest to THIS JD, reframed in the JD's language.
+- Then list that role's REMAINING base bullets, lightly reworded — do not summarise or omit them.
+- Keep the FULL skills inventory verbatim, with the JD's stack ordered first.
+- Keep every role, every project, and the education and additional sections.
+NEVER pad, invent, or restate a bullet to reach length. Every line must be a real, defensible fact
+from the base résumé or the experience bank. A fabricated line is far worse than a short résumé."""
 
     # VARIABLE block — changes per job, never cached.
     variable_block = f"""*** {_directive} ***{_length_directive}
@@ -467,7 +492,8 @@ GAPS TO ADDRESS: {json.dumps(fit_score.get('missing_keywords', fit_score.get('mi
 
 ROLE DOMAIN: {_domain}
 SECTION ORDER: {'AI Projects BEFORE Professional Experience' if _projects_first else 'Professional Experience BEFORE projects'} — set "projects_first": {str(_projects_first).lower()} in the output JSON.
-Follow the ROLE EMPHASIS at the top: keep the résumé lean and matched to THIS JD — include only what it asks for.
+Follow the ROLE EMPHASIS at the top: ORDER the résumé around THIS JD, leading with what it asks for.
+Emphasis controls ORDER and FRAMING, never length — see the LENGTH directive, which governs.
 {_bank_directive}""".strip()
 
     messages = [{
@@ -479,13 +505,13 @@ Follow the ROLE EMPHASIS at the top: keep the résumé lean and matched to THIS 
     }]
 
     try:
-        # 8192, not 4096. The base résumé is now the long-form profile, and a fuller source produces
-        # a fuller draft — at 4096 the response truncated mid-string and the whole tailoring failed
-        # on a JSON parse error ("Unterminated string"), silently costing an Opus call per attempt.
-        # The ceiling is a safety net, not the length control; _length_directive does that job.
+        # 16384: full-depth output is the TARGET now, so the ceiling has to clear it comfortably.
+        # A ~2-page draft measured 4,464 output tokens for 11k chars; a six-page résumé against a
+        # 23k-char base needs roughly 9k. Truncation here is not a short résumé — it is a mid-string
+        # cut that fails JSON parsing and throws away the whole Opus call (seen at 4096).
         result = await llm.chat_json(
             _SYSTEM_PROMPT, messages,
-            max_tokens=8192, temperature=0.2,
+            max_tokens=16384, temperature=0.2,
         )
         return result if isinstance(result, dict) else None
     except Exception as e:
