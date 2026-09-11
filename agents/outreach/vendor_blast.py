@@ -149,8 +149,12 @@ def compose(contact: dict, profile: dict, *, work_auth: str, availability: str,
         state_line = (f"I've seen {pretty} public-sector requirements come from you — that's exactly "
                       f"the kind of engagement I'm targeting.\n\n")
 
-    subject = ("Senior Data / Backend Engineer (8 yrs — Java, Python, AWS) — "
-               "available for state & local government contracts")
+    # A staffing recruiter scans a subject list for four things: role, headline skills, visa, and
+    # when you're free. Front-load exactly those, pipe-separated the way this market writes its own
+    # hotlists — it reads as one of their own, not as marketing. The previous subject buried the
+    # role behind a parenthetical and claimed "state & local government contracts", which was also
+    # wrong for the commercial desks this now goes to.
+    subject = "Senior Data Engineer | Spark, Snowflake, AWS | 8 yrs | H-1B | Available in 2 weeks"
 
     # The default opener is only true for inbox-harvested recruiters. For a contact taken from the
     # firm's own published careers/contact page, "you've sent me requirements before" is simply a

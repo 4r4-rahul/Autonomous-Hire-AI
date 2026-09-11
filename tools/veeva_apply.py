@@ -15,6 +15,7 @@ import sys
 import time
 import yaml
 from pathlib import Path
+from agents.application.form_filler import _named_upload
 from playwright.async_api import async_playwright
 from tools.pdf_parser import markdown_to_pdf
 
@@ -89,7 +90,7 @@ async def fill_all(page, resume_pdf: Path | None):
         try:
             up = page.locator("input[type='file']").first
             if await up.count() > 0:
-                await up.set_input_files(str(resume_pdf))
+                await up.set_input_files(_named_upload(resume_pdf))
                 print("  Resume uploaded.")
                 await asyncio.sleep(1.5)
         except Exception as e:

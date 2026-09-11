@@ -24,11 +24,14 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+# The filename is the first thing a recruiter sees — it shows in the mail client before the résumé
+# is opened. "data_engineer_pittsburgh_resume.pdf" reads like a résumé written for someone else's
+# job; Name_Role is the convention and survives being forwarded to the client.
 # The long-form detailed résumé (6 pages, built 2026-09-09). The C2C/vendor market expects a full
 # technical profile — recruiters keyword-match against it and forward it to the client — so depth
 # helps here. It is the WRONG shape for a direct ATS application, where two pages is the norm;
 # those keep using the tailored per-role résumés the pipeline generates.
-DEFAULT_RESUME = "data_engineer_pittsburgh_resume.pdf"
+DEFAULT_RESUME = "Rahul_Varikuppala_Senior_Data_Engineer.pdf"
 DEFAULT_WORK_AUTH = ("H-1B. Open to W2 or C2C engagements - happy to discuss whichever "
                      "structure works best for you.")
 DEFAULT_AVAILABILITY = "2 weeks' notice"

@@ -32,7 +32,32 @@ from core.logger import get_logger
 from core.llm import get_llm
 from core.checkpoints import request_approval, await_decision
 from tools.browser import BrowserClient
+import shutil
+import tempfile
 from tools.pdf_parser import markdown_to_pdf
+
+# ── Upload filename ───────────────────────────────────────────────────────────────────────────
+_UPLOAD_TMP = Path(tempfile.gettempdir()) / "ah_uploads"
+
+
+def _named_upload(path: Path | str, kind: str = "Resume") -> str:
+    """Return a copy of `path` under a HUMAN filename, for file inputs.
+
+    Tailored résumés are stored as `{job_id}.pdf`, so uploading the stored path put a raw UUID —
+    "000464e6-6408-4b59-942a-f4f375d656ba.pdf" — into every ATS submission and every recruiter's
+    inbox. The filename is visible to whoever reviews the application and survives being forwarded
+    to the client, so it should read like a résumé, not like a database key. Falls back to the
+    original path if the copy fails — a worse filename beats a failed upload.
+    """
+    src = Path(path)
+    try:
+        _UPLOAD_TMP.mkdir(parents=True, exist_ok=True)
+        nice = _UPLOAD_TMP / f"Rahul_Varikuppala_{kind}{src.suffix or '.pdf'}"
+        shutil.copyfile(src, nice)
+        return str(nice)
+    except Exception:
+        return str(src)
+
 
 logger = get_logger("form_filler")
 
@@ -656,7 +681,7 @@ async def _fill_greenhouse(page: Page, profile: dict, resume_pdf: Path, job: Job
             el = page.locator(upload_sel).first
             if await el.count() > 0:
                 for attempt in range(2):
-                    await el.set_input_files(str(resume_pdf))
+                    await el.set_input_files(_named_upload(resume_pdf))
                     await asyncio.sleep(2.0)
                     if await _resume_attached(el):
                         resume_uploaded = True
@@ -1959,7 +1984,7 @@ async def _fill_lever(page: Page, profile: dict, resume_pdf: Path, job: JobListi
         try:
             el = page.locator(upload_selector).first
             if await el.count() > 0:
-                await el.set_input_files(str(resume_pdf))
+                await el.set_input_files(_named_upload(resume_pdf))
                 await asyncio.sleep(1.0)
                 logger.info("resume_uploaded", ats="lever", path=str(resume_pdf))
                 break
@@ -3763,7 +3788,7 @@ async def _fill_workday(page: Page, profile: dict, resume_pdf: Path, job: JobLis
                     try:
                         el = page.locator(usel).first
                         if await el.count() > 0:
-                            await el.set_input_files(str(resume_pdf)); await asyncio.sleep(3.0)
+                            await el.set_input_files(_named_upload(resume_pdf)); await asyncio.sleep(3.0)
                             logger.info("resume_uploaded", ats="workday", path=str(resume_pdf))
                             state["uploaded"] = True; break
                     except Exception:
@@ -3909,7 +3934,7 @@ async def _fill_ashby(page: Page, profile: dict, resume_pdf: Path, job: JobListi
         try:
             el = page.locator(sel).first
             if await el.count() > 0:
-                await el.set_input_files(str(resume_pdf))
+                await el.set_input_files(_named_upload(resume_pdf))
                 await asyncio.sleep(2.0)
                 logger.info("resume_uploaded", ats="ashby", path=str(resume_pdf))
                 break
@@ -3986,7 +4011,7 @@ async def _fill_smartrecruiters(page: Page, profile: dict, resume_pdf: Path, job
         try:
             el = page.locator(sel).first
             if await el.count() > 0:
-                await el.set_input_files(str(resume_pdf))
+                await el.set_input_files(_named_upload(resume_pdf))
                 await asyncio.sleep(2.0)
                 logger.info("resume_uploaded", ats="smartrecruiters", path=str(resume_pdf))
                 break
@@ -4075,7 +4100,7 @@ async def _fill_icims(page: Page, profile: dict, resume_pdf: Path, job: JobListi
         try:
             el = page.locator(sel).first
             if await el.count() > 0:
-                await el.set_input_files(str(resume_pdf))
+                await el.set_input_files(_named_upload(resume_pdf))
                 await asyncio.sleep(2.0)
                 logger.info("resume_uploaded", ats="icims", path=str(resume_pdf))
                 break
@@ -4131,7 +4156,7 @@ async def _fill_bamboohr(page: Page, profile: dict, resume_pdf: Path, job: JobLi
         try:
             el = page.locator(sel).first
             if await el.count() > 0:
-                await el.set_input_files(str(resume_pdf))
+                await el.set_input_files(_named_upload(resume_pdf))
                 await asyncio.sleep(2.0)
                 logger.info("resume_uploaded", ats="bamboohr", path=str(resume_pdf))
                 break
@@ -4200,7 +4225,7 @@ async def _fill_rippling(page: Page, profile: dict, resume_pdf: Path, job: JobLi
         try:
             el = page.locator(sel).first
             if await el.count() > 0:
-                await el.set_input_files(str(resume_pdf))
+                await el.set_input_files(_named_upload(resume_pdf))
                 await asyncio.sleep(2.0)
                 logger.info("resume_uploaded", ats="rippling", path=str(resume_pdf))
                 break
@@ -4363,7 +4388,7 @@ async def _fill_special_fields(page: Page, job: JobListing, profile: dict, llm) 
                         cl_pdf = markdown_to_pdf(md)
                     except Exception:
                         cl_pdf = md
-                    await cl_input.set_input_files(str(cl_pdf)); await asyncio.sleep(1.5)
+                    await cl_input.set_input_files(_named_upload(cl_pdf, 'Cover_Letter')); await asyncio.sleep(1.5)
                     logger.info("cover_letter_uploaded", path=str(cl_pdf))
         except Exception:
             pass
@@ -4770,7 +4795,7 @@ async def _fill_generic(page: Page, profile: dict, resume_pdf: Path, job: JobLis
         try:
             el = page.locator(sel).first
             if await el.count() > 0:
-                await el.set_input_files(str(resume_pdf))
+                await el.set_input_files(_named_upload(resume_pdf))
                 await asyncio.sleep(1.0)
                 logger.info("resume_uploaded", ats="generic", path=str(resume_pdf))
                 break
