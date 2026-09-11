@@ -35,6 +35,11 @@ STATE_ABBR = {
     "south dakota": "SD", "tennessee": "TN", "texas": "TX", "utah": "UT", "vermont": "VT",
     "virginia": "VA", "washington": "WA", "west virginia": "WV", "wisconsin": "WI",
     "wyoming": "WY", "district of columbia": "DC",
+    # US territories. Not states, but they run their own public-sector boards and post IT roles —
+    # the national sitemap carries Northern Mariana Islands and Virgin Islands postings, which were
+    # going untagged. Territory employers hire under US work-authorization rules like any state.
+    "puerto rico": "PR", "guam": "GU", "virgin islands": "VI", "american samoa": "AS",
+    "northern mariana islands": "MP",
 }
 _STATE_NAMES = "|".join(sorted(STATE_ABBR, key=len, reverse=True))
 
