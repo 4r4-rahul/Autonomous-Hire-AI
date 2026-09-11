@@ -24,7 +24,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-DEFAULT_RESUME = "rahul_data_engineer_resume.pdf"
+# The long-form detailed résumé (6 pages, built 2026-09-09). The C2C/vendor market expects a full
+# technical profile — recruiters keyword-match against it and forward it to the client — so depth
+# helps here. It is the WRONG shape for a direct ATS application, where two pages is the norm;
+# those keep using the tailored per-role résumés the pipeline generates.
+DEFAULT_RESUME = "data_engineer_pittsburgh_resume.pdf"
 DEFAULT_WORK_AUTH = ("H-1B. Open to W2 or C2C engagements - happy to discuss whichever "
                      "structure works best for you.")
 DEFAULT_AVAILABILITY = "2 weeks' notice"
