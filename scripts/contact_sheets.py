@@ -23,7 +23,15 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # ADA / EEO inboxes appear in public-sector bulletins as the accommodation contact. They are not
 # hiring contacts, and mailing one is both useless and slightly rude.
-_ADA = re.compile(r"(ada|accommodation|accessibility|eeo|civilrights|disability|relay)", re.I)
+_ADA = re.compile(r"(ada|accommodation|accessibility|eeo|civilrights|disability|relay|"
+                  r"titleix|title-ix|compliance|ombuds)", re.I)
+
+
+def _clean_title(t: str) -> str:
+    """Strip the NEOGOV branding and trailing worksite. Sheets get rendered from saved scans of
+    varying vintage, so clean here too rather than trusting the capture to have done it."""
+    t = re.sub(r"\s*[|·-]\s*Government\s*Jobs?(\.com)?\b.*$", "", t, flags=re.I)
+    return re.sub(r"\s+in\s+[^|]{3,80}$", "", t).strip()
 
 
 def _gov_sheet(roles: list[dict]) -> str:
@@ -38,7 +46,7 @@ def _gov_sheet(roles: list[dict]) -> str:
     out.append("|-------|------|-------|---------|---------|")
     for r in rows:
         note = " ⚠️residency" if r.get("residency_required") else ""
-        out.append(f"| {r.get('state') or '—'} | {r['title'][:52]}{note} | "
+        out.append(f"| {r.get('state') or '—'} | {_clean_title(r['title'])[:52]}{note} | "
                    f"{(r.get('location') or '')[:26]} | {r['contacts'][0]} | [link]({r['url']}) |")
     return "\n".join(out)
 
