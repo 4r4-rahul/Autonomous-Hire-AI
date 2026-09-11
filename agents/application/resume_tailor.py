@@ -429,8 +429,20 @@ PRE-RANKED MATCHES FOR THIS JD:
 USE THE EXPERIENCE BANK above: for each role, lead with the story whose SHOWS-tags best match this JD's
 hardest problem, reframed into a crisp bullet. If no story fits a role, keep the base-résumé bullet.""")
 
+    # The base résumé is now the LONG-FORM profile (~6 pages, 76 bullets) so that tailoring has
+    # deep real material to select from. That makes it a SOURCE, not a template: without an explicit
+    # ceiling the writer mirrors the base's length and emits a six-page ATS submission, where two
+    # pages is the norm and recruiters skim. Select the best evidence, don't reproduce all of it.
+    _length_directive = """
+
+LENGTH — SELECT, DON'T REPRODUCE. The base résumé is a deep profile written to hold every real
+detail; it is the raw material, not the target shape. This résumé is a targeted ATS submission:
+aim for TWO PAGES. Per role, 4-6 bullets for the most recent and relevant, 2-4 for older ones, and
+keep only the skills this JD actually asks for. Choosing the strongest evidence IS the work —
+a longer résumé is a weaker one."""
+
     # VARIABLE block — changes per job, never cached.
-    variable_block = f"""*** {_directive} ***
+    variable_block = f"""*** {_directive} ***{_length_directive}
 
 JOB TITLE: {job['title']}
 COMPANY: {job['company_name']}
@@ -467,9 +479,13 @@ Follow the ROLE EMPHASIS at the top: keep the résumé lean and matched to THIS 
     }]
 
     try:
+        # 8192, not 4096. The base résumé is now the long-form profile, and a fuller source produces
+        # a fuller draft — at 4096 the response truncated mid-string and the whole tailoring failed
+        # on a JSON parse error ("Unterminated string"), silently costing an Opus call per attempt.
+        # The ceiling is a safety net, not the length control; _length_directive does that job.
         result = await llm.chat_json(
             _SYSTEM_PROMPT, messages,
-            max_tokens=4096, temperature=0.2,
+            max_tokens=8192, temperature=0.2,
         )
         return result if isinstance(result, dict) else None
     except Exception as e:
