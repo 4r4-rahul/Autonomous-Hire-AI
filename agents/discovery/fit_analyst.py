@@ -270,10 +270,20 @@ def _quick_prefilter(
     if salary_max and salary_max < salary_min_req * 0.75:
         return False, f"salary too low: ${salary_max:,}"
 
-    # Must match at least one primary skill keyword in title OR description
+    # Must match at least one primary skill keyword in title OR description.
+    # The original list covered only data/AI vocabulary, so ordinary SOFTWARE DEVELOPMENT titles
+    # failed it outright — "Application Developer II" and "Programmer Analyst" contain none of
+    # python/data/cloud/ml, and 59 of 84 in-lane public-sector roles were dropped as having "no
+    # matching skill keywords". The candidate takes software developer roles, so the language of
+    # software development belongs here.
     skill_keywords = ["python", "data", "platform", "engineer", "ml", "cloud",
-                      "aws", "spark", "pyspark", "kubernetes", "terraform", "llm", "ai"]
-    combined = title + " " + desc[:500]
+                      "aws", "azure", "gcp", "spark", "pyspark", "kubernetes", "terraform",
+                      "llm", "ai", "developer", "development", "software", "programmer",
+                      "java", "sql", "database", "api", "application", "backend", "back-end",
+                      "full stack", "full-stack", "web", "etl", "analytics"]
+    # Public-sector bulletins open with EEO and agency boilerplate, so the tech content can sit well
+    # past the first 500 characters. Read further before concluding there is no signal.
+    combined = title + " " + desc[:2000]
     if not any(kw in combined for kw in skill_keywords):
         return False, "no matching skill keywords"
 

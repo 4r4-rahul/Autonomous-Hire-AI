@@ -91,12 +91,14 @@ def _is_relevant_location(*texts) -> bool:
 
 
 async def intake_jobs(discovered: list[dict], state: JobSearchState,
-                      *, limit: int | None = None, tailor: bool = True) -> tuple[JobSearchState, dict]:
+                      *, limit: int | None = None, tailor: bool = True,
+                      contract_only: bool | None = None) -> tuple[JobSearchState, dict]:
     """Resolve → (tailor) → park each discovered job (off LinkedIn).
 
     discovered: list of dicts with keys: company, title, and optionally description,
                 location, source, fallback_url (a known direct ATS URL if resolution fails).
     tailor=True:  Opus-tailor a résumé for each kept role now (costs ~$0.085 each).
+    contract_only: override the global CONTRACT-mode gate for this batch (None = follow config).
     tailor=False: park the role scored + resolved but WITHOUT a résumé (status pending_review,
                   tailored_resume_path=None) — near-free. The résumé is generated on demand when
                   the user actually engages the role (tailor-on-demand → spend only on real ones).
@@ -227,7 +229,11 @@ async def intake_jobs(discovered: list[dict], state: JobSearchState,
         from core.employment import classify_employment_for_job
         _et = (res.get("employment_type") if res else "") or d.get("employment_type", "")
         _employ = classify_employment_for_job(d.get("source", ""), company, title, desc, _et)
-        if _contract_only() and _employ != "contract":
+        # `contract_only=False` lets a lane opt OUT of the global contract gate. The public-sector
+        # lane needs it: civil-service roles are W2 by nature, so in contract mode every one of them
+        # is correctly-but-uselessly dropped as "not contract" (155 of 161 on the first run).
+        _gate = _contract_only() if contract_only is None else contract_only
+        if _gate and _employ != "contract":
             return None, "skipped_not_contract"
         # When we fell back (no board resolution), the fallback URL/role hasn't been US-verified —
         # drop it if the discovered location/title looks foreign. (Resolved hits are already US.)

@@ -140,8 +140,12 @@ async def _bulletin(client: httpx.AsyncClient, url: str) -> dict | None:
     raw_title = html.unescape(title_m.group(1).strip()) if title_m else ""
     state = _state_from_title(raw_title)
     # Strip the site suffix AND the trailing " in <location>" so the title is just the role.
-    title = re.sub(r"\s*\|\s*Government Jobs.*$", "", raw_title)
-    title = re.sub(r"\s+in\s+[^|]{3,60}$", "", title).strip()
+    # Strip the site branding BEFORE the location. The suffix is "| GovernmentJobs.com" with no
+    # space — matching "Government Jobs" left the branding on every title, and fit_analyst carries a
+    # learned zero-pass pattern for "government" (from federal clearance roles), so all 84 in-lane
+    # roles were auto-rejected for containing the name of the site they came from.
+    title = re.sub(r"\s*[|·-]\s*Government\s*Jobs(\.com)?\b.*$", "", raw_title, flags=re.I)
+    title = re.sub(r"\s+in\s+[^|]{3,80}$", "", title).strip()
     contacts = [e for e in dict.fromkeys(_EMAIL.findall(body)) if not _NOT_A_CONTACT.search(e)]
     gov = detect_gov_client(title, body[:6000], "", "")
     return {
@@ -200,8 +204,25 @@ async def run(state, *, limit: int = 150, tailor: bool = False, persist: bool = 
     if not roles:
         return state, {**found["stats"], "queued": 0}
 
+    def _employer(r: dict) -> str:
+        """A usable employer name for the queue.
+
+        The bulletin never states the agency in a structured field, so without this every one of
+        these lands as "Government Agency" — indistinguishable in the review queue and useless for
+        dedup. The hiring contact's domain is the most reliable identifier available
+        (DTMB-HR@michigan.gov -> Michigan.Gov), with the worksite as the fallback.
+        """
+        for contact in r.get("contacts") or []:
+            domain = contact.split("@")[-1].lower()
+            if domain.endswith((".gov", ".us", ".org")):
+                name = domain.rsplit(".", 2)[0].split(".")[-1]
+                if name and name not in ("hr", "mail", "www"):
+                    return name.replace("-", " ").title()
+        signal = (r["gov_client"] or {}).get("signal", "")
+        return signal.title() if signal else (r.get("location") or "Government Agency")
+
     discovered = [{
-        "company": (r["gov_client"] or {}).get("signal", "") or "Government Agency",
+        "company": _employer(r),
         "title": r["title"], "description": r["description"],
         "location": r.get("location") or r.get("state", ""),
         "source": "govjobs:neogov", "fallback_url": r["url"],
@@ -211,7 +232,10 @@ async def run(state, *, limit: int = 150, tailor: bool = False, persist: bool = 
 
     pre_apps = {a.get("id") for a in state.get("applications", [])}
     pre_jobs = {j.get("id") for j in state.get("job_listings", [])}
-    updated, report = await intake_jobs(discovered, state, limit=limit, tailor=tailor)
+    # Civil-service roles are W2 by definition, so this lane opts out of the global contract gate —
+    # otherwise the whole batch is discarded as "not contract" whenever the pipeline is in C2C mode.
+    updated, report = await intake_jobs(discovered, state, limit=limit, tailor=tailor,
+                                        contract_only=False)
     report.update(found["stats"])
 
     if persist:
