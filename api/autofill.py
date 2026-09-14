@@ -1322,6 +1322,17 @@ async def cover_generate(body: CoverGenIn) -> dict:
             raise HTTPException(404, "job listing not found")
         if not app:
             raise HTTPException(409, "no application row to attach the cover letter to")
+        # Honour the contract rule here too. The pipeline stopped pre-writing cover letters for
+        # C2C roles because the vendor forwards the résumé, not the letter — but this endpoint
+        # treats "the form has a cover field" as proof one is wanted, so it would quietly generate
+        # the very thing that was just switched off. Dice's wizard HAS that field and marks it
+        # Optional, so every Dice autofill would have regenerated one.
+        from core.employment import classify_employment_for_job
+        if classify_employment_for_job(job.get("source", ""), job.get("company_name", ""),
+                                       job.get("title", ""), (job.get("description") or "")[:3000],
+                                       job.get("employment_type", "")) == "contract":
+            return {"ok": True, "status": "skipped_contract",
+                    "reason": "C2C — the vendor forwards the résumé, not a cover letter"}
         from core.llm import get_llm
         from agents.application.resume_tailor import _cover_letter, _COVER_DIR, _clean_md
         llm = get_llm("on_demand_tailor")              # exempt from the budget cap (autofill path)
