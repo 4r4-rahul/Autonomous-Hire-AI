@@ -5,7 +5,7 @@ const statusEl = document.getElementById("status");
 // ("resumedl-1 (2026-06-21)") never changed no matter what code was loaded, so it actively
 // misled: a correctly-reloaded extension still displayed a three-month-old build string, and we
 // chased a reload problem that did not exist. Bump manifest.version when shipping a change.
-const BUILD = chrome.runtime.getManifest().version + " (dice-card)";
+const BUILD = chrome.runtime.getManifest().version + " (card-scoped)";
 statusEl.textContent = "build " + BUILD;
 
 // DEBUG: capture the current form's field structure (no personal values) so a bespoke ATS form

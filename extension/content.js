@@ -749,11 +749,29 @@
       const a = (el.accept || "").toLowerCase();
       return a === "" || a.includes("pdf") || a.includes("doc");
     };
-    coverInput = fileInputs.find(looksCover);
+    // CONTAINMENT FIRST. Attribute text is the usual way to tell these inputs apart, but an input a
+    // site mounts on demand can carry no name, id, aria-label or accept at all — Dice's résumé input
+    // is exactly that. With both inputs anonymous the cover letter was attached to the RESUME slot,
+    // which is worse than doing nothing. Which CARD an input sits in is unambiguous, so use that
+    // first and keep the attribute heuristics as the fallback for ordinary forms.
+    const cardFor = (rx, notRx) => [...document.querySelectorAll("div,section,fieldset")]
+      .filter((el) => {
+        const t = el.innerText || "";
+        return rx.test(t) && (!notRx || !notRx.test(t)) && t.length < 600 &&
+               el.querySelector("input[type='file']");
+      })
+      .sort((a, b) => (a.innerText || "").length - (b.innerText || "").length)[0];
+    const coverCard = cardFor(/cover.?letter/i, null);
+    const resumeCard = cardFor(/resume|curriculum|\bcv\b/i, /cover.?letter/i);
+    const inCard = (card) => card ? card.querySelector("input[type='file']") : null;
+
+    coverInput = inCard(coverCard) || fileInputs.find(looksCover);
     // Never let the résumé land in the cover-letter slot (the acceptsDoc fallback could).
     const resumeCandidates = fileInputs.filter((el) => el !== coverInput && !looksCover(el));
-    const resumeInput = resumeCandidates.find(looksResume) || resumeCandidates.find(acceptsDoc);
-    if (resumeInput && !(resumeInput.files && resumeInput.files.length)) {
+    const resumeInput = inCard(resumeCard) ||
+      resumeCandidates.find(looksResume) || resumeCandidates.find(acceptsDoc);
+    if (resumeInput && resumeInput !== coverInput &&
+        !(resumeInput.files && resumeInput.files.length)) {
       const _rb = document.getElementById("__ah_badge");
       if (_rb) _rb.textContent = "📎 AutonomousHire: attaching résumé…";
       // Use the fetch we started at the top of the fill (parallel with form-fill) — already done by now.
