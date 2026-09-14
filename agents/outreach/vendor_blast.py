@@ -154,7 +154,7 @@ def compose(contact: dict, profile: dict, *, work_auth: str, availability: str,
     # hotlists — it reads as one of their own, not as marketing. The previous subject buried the
     # role behind a parenthetical and claimed "state & local government contracts", which was also
     # wrong for the commercial desks this now goes to.
-    subject = "Senior Data Engineer | Spark, Snowflake, AWS | 8 yrs | H-1B | Available in 2 weeks"
+    subject = "Senior Data Engineer | Spark, Snowflake, AWS | 10 yrs | H-1B | Available in 2 weeks"
 
     # The default opener is only true for inbox-harvested recruiters. For a contact taken from the
     # firm's own published careers/contact page, "you've sent me requirements before" is simply a
@@ -172,7 +172,7 @@ def compose(contact: dict, profile: dict, *, work_auth: str, availability: str,
 {opener}
 
 {state_line}Quick summary:
-- 8 years building backend and data-platform systems: Java/Spring Boot, Python, SQL, Spark, Kafka
+- 10 years building backend and data-platform systems: Java/Spring Boot, Python, SQL, Spark, Kafka
 - Cloud across AWS, GCP and Azure (Snowflake, Databricks, Redshift, BigQuery), plus CI/CD, Terraform, Kubernetes
 - Currently Senior Data Engineer at JPMorgan Chase; previously Alignment Health (Medicare Advantage healthcare data) and Ameriprise Financial (Java)
 - Regulated-industry background - healthcare claims and member data, and financial systems - which maps closely onto state health, Medicaid and revenue programs
