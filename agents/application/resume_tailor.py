@@ -144,6 +144,19 @@ def _cover_letter_decision(job: dict, fit_score: dict, profile: dict) -> tuple[b
         return False, ""
     if mode == "always":
         return True, "configured to always include one"
+
+    # CONTRACT / C2C: skip. A staffing vendor forwards the résumé to its client — the cover letter
+    # is not part of what gets submitted, so it is a second LLM call (~15s and the bulk of the extra
+    # latency in a tailoring run) producing something nobody in the chain reads. Direct-employer W2
+    # applications still get one on the merits below, where a human actually opens it.
+    try:
+        from core.employment import classify_employment_for_job
+        if classify_employment_for_job(job.get("source", ""), job.get("company_name", ""),
+                                       job.get("title", ""), (job.get("description") or "")[:3000],
+                                       job.get("employment_type", "")) == "contract":
+            return False, "contract/C2C — vendor forwards the résumé, not a letter"
+    except Exception:
+        pass
     # 'auto' — include only when it genuinely improves the application:
     desc = (job.get("description") or "").lower()
     title = (job.get("title") or "").lower()
