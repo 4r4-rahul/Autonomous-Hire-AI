@@ -289,10 +289,22 @@ def scrub_summary_selftitle(md: str) -> tuple[str, int]:
     return md, 0
 
 
+# The writer emits bookkeeping keys ("cloud_emphasis: Multi-cloud", "tailoring_notes: Led with...")
+# alongside the résumé. The PDF renderer happens to drop them, so they never reached a recruiter —
+# but they sit in every saved .md, which is what gets re-rendered, diffed and read by a human
+# reviewing the queue. Strip them at finalize so the file is the résumé and nothing else.
+_META_KEYS = re.compile(
+    r"^\s*(tailoring_notes|cloud_emphasis|ats_keywords?|notes|rationale|reasoning)\s*:.*$",
+    re.I | re.M)
+
+
 def finalize_resume_md(md: str, company: str = "") -> tuple[str, dict]:
     """The ONE finalize step every résumé write must pass through (initial tailor AND the quality-fix
     rewrite) so a rewrite can't silently reintroduce fabrication, meta-commentary, company-pitch, or
     typographic junk. Returns (clean_md, {"fabrication": n, "meta_commentary": n, "company_pitch": n})."""
+    # Drop the writer's bookkeeping keys before anything else — they are not résumé content and
+    # would otherwise be counted and reformatted by the passes below.
+    md = _META_KEYS.sub("", md)
     md = clean_typography(md)
     md, fab = scrub_fabricated_numbers(md)
     md, meta = scrub_meta_commentary(md)

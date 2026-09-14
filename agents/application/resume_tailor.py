@@ -438,6 +438,29 @@ hardest problem, reframed into a crisp bullet. If no story fits a role, keep the
     # Tailoring still has to mean something at this length: lead with what the JD asks for, drop
     # what is genuinely irrelevant, and never pad. Long is the target, but only with real content —
     # the truthfulness rules are unchanged and a fabricated line is worse than a short résumé.
+    # An engagement runs on ONE cloud. Sprinkling AWS, Azure and GCP through the same role to catch
+    # every JD keyword reads as keyword-stuffing to any engineer who has done the work, and it
+    # invites an interview question the candidate cannot answer. Measured: 17% of tailored résumés
+    # had a single role claiming all three. The mapping below is what each engagement ACTUALLY ran
+    # on, so cloud emphasis becomes a question of WHICH ROLE TO LEAD WITH, not which words to add.
+    _coherence_directive = """
+
+ENGAGEMENT COHERENCE — each role ran on ONE primary cloud. Do not mix:
+  - JPMorgan Chase      -> AWS (EMR, S3, Glue, Athena, Lambda, DynamoDB) + Snowflake, Databricks
+  - Insight Global      -> Azure (ADF, ADLS Gen2, Functions, Event Hubs); Terraform spanned AWS/Azure/GCP
+  - Alignment Health    -> Azure (HDInsight/Databricks, ADLS) and GCP (BigQuery, Pub/Sub, Cloud Run)
+  - Ameriprise          -> Java/backend; no cloud claim
+Keep each role's stack inside its own engagement. Never add a cloud to a role that did not use it,
+and never list all three clouds inside one role's bullets.
+
+To match a JD's cloud, REORDER — lead with the role that genuinely used it and give that role's
+bullets the most detail — rather than sprinkling the keyword through every role. If the JD's primary
+cloud is one the candidate used only in one engagement, say so honestly through emphasis; a résumé
+that claims uniform depth in all three clouds is less credible than one that shows real depth in one.
+
+Likewise for tools: a bullet names the tools that bullet's work actually used. Do not append a
+technology list to a bullet to raise keyword coverage."""
+
     _length_directive = """
 
 LENGTH — FULL DEPTH, ROUGHLY SIX PAGES. This is NOT a trimmed two-page ATS résumé. Keep the base
@@ -467,7 +490,7 @@ NEVER pad, invent, or restate a bullet to reach length. Every line must be a rea
 from the base résumé or the experience bank. A fabricated line is far worse than a short résumé."""
 
     # VARIABLE block — changes per job, never cached.
-    variable_block = f"""*** {_directive} ***{_length_directive}
+    variable_block = f"""*** {_directive} ***{_length_directive}{_coherence_directive}
 
 JOB TITLE: {job['title']}
 COMPANY: {job['company_name']}

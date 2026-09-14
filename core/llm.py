@@ -7,6 +7,7 @@ import time
 import asyncio
 from typing import Any
 import anthropic
+import os
 from anthropic import AsyncAnthropic
 import openai
 from openai import AsyncOpenAI
@@ -117,6 +118,9 @@ _CHEAP_TIER_HINTS = ("haiku", "flash")
 
 # In "auto" thinking mode, only reason when the answer budget can absorb reasoning tokens without
 # truncating the content (tight-budget calls like short summaries would come back empty otherwise).
+# Per-request ceiling. Generous enough for a full-depth résumé on a slow day, short enough that a
+# stalled provider surfaces as an error instead of an indefinite hang.
+_REQUEST_TIMEOUT = 180.0
 _THINK_MIN_TOKENS = 1024
 # When thinking is enabled, add this many tokens on top of the caller's budget for the reasoning
 # trace, so the answer isn't truncated (max_tokens caps reasoning + answer combined).
@@ -134,7 +138,15 @@ def _resolve_model(requested_model: str, provider: str, cfg) -> str:
         return requested_model
     if requested_model.startswith("deepseek"):
         return requested_model
-    return cfg.deepseek_model_flash if _is_cheap(requested_model) else cfg.deepseek_model_pro
+    # A tier can go down on its own: deepseek's flash endpoint stalled (accepting connections,
+    # never answering) while pro stayed healthy, which hung every cheap-tier call in the pipeline —
+    # scoring, pre-tailoring, the lot. DEEPSEEK_DISABLE_FLASH routes the cheap tier to pro so work
+    # continues at a higher price rather than stopping. Cheaper than a stalled queue.
+    if _is_cheap(requested_model):
+        if os.getenv("DEEPSEEK_DISABLE_FLASH", "").strip() in ("1", "true", "yes"):
+            return cfg.deepseek_model_pro
+        return cfg.deepseek_model_flash
+    return cfg.deepseek_model_pro
 
 
 class LLMClient:
@@ -174,10 +186,17 @@ class LLMClient:
             self._client = AsyncOpenAI(
                 api_key=cfg.deepseek_api_key or "MISSING_DEEPSEEK_KEY",
                 base_url=cfg.deepseek_base_url,
+                # A provider that accepts the connection and then never answers will otherwise hang
+                # the caller forever. Seen in production: deepseek's flash tier stalled while pro
+                # stayed healthy, and a 87-role batch sat at zero completions for 13 minutes with
+                # open sockets and no error — indistinguishable from slow work. Fail fast instead.
+                timeout=_REQUEST_TIMEOUT,
+                max_retries=2,
             )
         else:
             self._key_missing = not cfg.anthropic_api_key
-            self._client = AsyncAnthropic(api_key=cfg.anthropic_api_key or "MISSING_ANTHROPIC_KEY")
+            self._client = AsyncAnthropic(api_key=cfg.anthropic_api_key or "MISSING_ANTHROPIC_KEY",
+                                          timeout=_REQUEST_TIMEOUT, max_retries=2)
 
     async def chat(
         self,
