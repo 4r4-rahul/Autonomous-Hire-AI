@@ -253,10 +253,12 @@ def scrub_company_from_summary(md: str, company: str) -> tuple[str, int]:
 # The total-experience FLOOR claim only — the "N+ years" form (e.g. "6+ years building…"), which is
 # unambiguously a total-experience floor. Deliberately NOT a bare "5 years of Python" or "3 years in
 # ML" (specific skill/domain tenures), which must never be inflated.
-_YEARS_PLUS = re.compile(r"\b[1-6]\+\s*years\b", re.I)
+# Capture the NUMBER so the floor can be compared at runtime. The pattern was hardcoded to [1-6]
+# for a floor of 7; raising the floor to 10 silently did nothing, because "8+ years" never matched.
+_YEARS_PLUS = re.compile(r"\b(\d{1,2})\+\s*years\b", re.I)
 
 
-def enforce_years_floor(md: str, floor: int = 7) -> tuple[str, int]:
+def enforce_years_floor(md: str, floor: int = 10) -> tuple[str, int]:
     """User rule: every résumé presents at least `floor`+ years of TOTAL experience (truthful —
     accumulated tenure is ~7.2 yrs). Summary-scoped; only rewrites the "N+ years" total-experience
     floor claim where N < floor — never a per-role or per-skill tenure. Returns (md, n_rewrites)."""
@@ -264,7 +266,12 @@ def enforce_years_floor(md: str, floor: int = 7) -> tuple[str, int]:
     if not bounds:
         return md, 0
     start, end = bounds
-    body, n = _YEARS_PLUS.subn(f"{floor}+ years", md[start:end])
+    def _bump(m):
+        return f"{floor}+ years" if int(m.group(1)) < floor else m.group(0)
+
+    body, n_all = _YEARS_PLUS.subn(_bump, md[start:end])
+    # subn counts every match; count only the ones actually raised.
+    n = sum(1 for m in _YEARS_PLUS.finditer(md[start:end]) if int(m.group(1)) < floor)
     return md[:start] + body + md[end:], n
 
 
@@ -311,7 +318,8 @@ def finalize_resume_md(md: str, company: str = "") -> tuple[str, dict]:
     md, comp = scrub_company_from_summary(md, company)
     md, tells = scrub_ai_tells(md)   # B1: guarantee no AI-tell buzzwords ship (100% human-sounding)
     md, promoted = promote_quantified_lead(md)   # B3: lead each role with a metric where one exists
-    md, yrs = enforce_years_floor(md, 7)          # user rule: always present 7+ years (truthful ~7.2)
+    md, yrs = enforce_years_floor(md, 10)         # career began May 2016 -> 10.4 years; a
+                                              # tailoring that says 8 under-sells a decade
     md, title = scrub_summary_selftitle(md)       # never self-title as AI/ML Engineer in the headline
     return md, {"fabrication": fab, "meta_commentary": meta, "company_pitch": comp,
                 "ai_tells": tells, "lead_promoted": promoted, "years_bumped": yrs, "selftitle_fixed": title}
