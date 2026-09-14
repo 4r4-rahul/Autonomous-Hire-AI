@@ -153,7 +153,14 @@ async def _attempt_fix(
 
     issues = review.get("critical_issues", [])
     missing_kw = review.get("missing_keywords", [])
-    if not issues and not missing_kw:
+    # The SME pass says WHAT to do, not just what is wrong. Feed the actionable half — the
+    # requirements the candidate demonstrably has but that this version omits or buries, plus what
+    # to cut. genuine_gap items are deliberately excluded: the correct action there is to leave the
+    # gap visible, and passing them to a rewriter is how a résumé starts claiming things.
+    actionable = [r for r in (review.get("requirements_review") or [])
+                  if r.get("status") in ("weak", "absent_but_available") and r.get("action")]
+    removals = review.get("remove") or []
+    if not issues and not missing_kw and not actionable:
         return None
 
     logger.info(
@@ -162,6 +169,10 @@ async def _attempt_fix(
         company=job["company_name"],
         issues=len(issues),
         missing_keywords=missing_kw[:5],
+        actionable=len(actionable),
+        removals=len(removals),
+        genuine_gaps=sum(1 for r in (review.get("requirements_review") or [])
+                         if r.get("status") == "genuine_gap"),
     )
 
     profile = yaml.safe_load(P("data/user_profile.yaml").read_text())
@@ -172,7 +183,12 @@ async def _attempt_fix(
         "score": 70,
         "reasoning": "Quality review fix attempt",
         "match_highlights": review.get("strengths", [])[:3],
-        "missing_skills": issues[:3] + [f"Missing keyword: {kw}" for kw in missing_kw[:3]],
+        "missing_skills": (
+            issues[:3]
+            + [f"Missing keyword: {kw}" for kw in missing_kw[:3]]
+            + [f"{r['requirement']} — {r['action']}" for r in actionable[:4]]
+            + [f"REMOVE: {r.get('content','')[:90]} ({r.get('why','')[:60]})" for r in removals[:2]]
+        ),
         "passed_threshold": True,
         "scored_at": "",
     }

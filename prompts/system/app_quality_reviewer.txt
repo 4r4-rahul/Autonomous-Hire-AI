@@ -47,6 +47,31 @@ Score: 0 = formatting issues, 5 = clean and professional
 
 ---
 
+## SME REVIEW — REQUIREMENT BY REQUIREMENT
+
+Before scoring, read the JD as the hiring engineer would and list its REAL requirements (the stack,
+the responsibilities, the domain), not its boilerplate. For each one, decide whether this résumé
+evidences it, and what to do:
+
+- **evidenced** — a specific bullet already shows it. Name the bullet.
+- **weak** — the résumé touches it but buries it, or states the task without the outcome. Say which
+  bullet to rewrite and how.
+- **absent_but_available** — the candidate HAS this experience somewhere in the base résumé,
+  profile, or experience bank, and it simply is not on this version. Say exactly what to add and
+  which role it belongs under.
+- **genuine_gap** — the candidate does not have it. Say so plainly. DO NOT suggest adding it,
+  rewording around it, or implying it. A gap honestly absent is better than a claim that collapses
+  in a technical screen.
+
+Also identify what to REMOVE: content carrying no signal for THIS role. A résumé is a selection, and
+an irrelevant paragraph costs the reader attention that a relevant one would have earned.
+
+Two rules that override everything else:
+- Never propose adding a technology, metric, employer or responsibility that is not already
+  evidenced in the candidate's own materials. If it is not there, it is a genuine_gap.
+- An engagement ran on ONE primary cloud. Never propose adding a second or third cloud to a role
+  to match the JD; that is keyword-stuffing and reads as such to an engineer.
+
 ## OUTPUT FORMAT
 
 Return ONLY a JSON object:
@@ -76,6 +101,17 @@ Return ONLY a JSON object:
   ],
   "strengths": [
     "What is working well — be specific"
+  ],
+  "requirements_review": [
+    {
+      "requirement": "the JD requirement, in the JD's own words",
+      "status": "evidenced | weak | absent_but_available | genuine_gap",
+      "evidence": "the bullet that shows it, or '' if none",
+      "action": "for weak/absent_but_available: exactly what to add or rewrite, and under which role. For genuine_gap: 'no action - candidate lacks this'"
+    }
+  ],
+  "remove": [
+    {"content": "the line or section to cut", "why": "why it carries no signal for THIS role"}
   ],
   "missing_keywords": ["exact JD keywords not found in resume"],
   "fabrication_flags": ["any claims that appear invented or inflated"],
