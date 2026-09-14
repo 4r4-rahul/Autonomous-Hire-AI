@@ -775,11 +775,16 @@
     // is exactly that. With both inputs anonymous the cover letter was attached to the RESUME slot,
     // which is worse than doing nothing. Which CARD an input sits in is unambiguous, so use that
     // first and keep the attribute heuristics as the fallback for ordinary forms.
+    // A card must contain EXACTLY ONE file input. Dice wraps both upload cards in a shared
+    // container, and that wrapper matches "cover letter" too — so the smallest text match was the
+    // wrapper, and querySelector returned its FIRST input, the résumé's. The cover letter was then
+    // attached to the Resume slot. Requiring a single input makes the wrapper ineligible and leaves
+    // only the real card, whichever way the page nests things.
     const cardFor = (rx, notRx) => [...document.querySelectorAll("div,section,fieldset")]
       .filter((el) => {
         const t = el.innerText || "";
         return rx.test(t) && (!notRx || !notRx.test(t)) && t.length < 600 &&
-               el.querySelector("input[type='file']");
+               el.querySelectorAll("input[type='file']").length === 1;
       })
       .sort((a, b) => (a.innerText || "").length - (b.innerText || "").length)[0];
     const coverCard = cardFor(/cover.?letter/i, null);

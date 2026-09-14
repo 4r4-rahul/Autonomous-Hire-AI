@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "AutonomousHire Autofill",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Fills job application forms from your AutonomousHire profile, in your own logged-in browser. You review, solve any CAPTCHA, and submit.",
   "permissions": [
     "activeTab",
