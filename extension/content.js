@@ -791,10 +791,22 @@
     const resumeCard = cardFor(/resume|curriculum|\bcv\b/i, /cover.?letter/i);
     const inCard = (card) => card ? card.querySelector("input[type='file']") : null;
 
-    coverInput = inCard(coverCard) || fileInputs.find(looksCover);
+    // DICE: use DOCUMENT ORDER, not text. The wizard always renders Resume first and Cover letter
+    // second, and its inputs are anonymous and nested in a shared wrapper — every text/containment
+    // heuristic tried here resolved the cover letter onto the Resume slot. Position is the one
+    // signal the page states unambiguously.
+    let diceResume = null, diceCover = null;
+    if (/(^|\.)dice\.com$/.test(location.hostname)) {
+      const ordered = fileInputs.slice().sort((a, b) =>
+        (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) ? -1 : 1);
+      diceResume = ordered[0] || null;
+      diceCover = ordered[1] || null;
+    }
+
+    coverInput = diceCover || inCard(coverCard) || fileInputs.find(looksCover);
     // Never let the résumé land in the cover-letter slot (the acceptsDoc fallback could).
     const resumeCandidates = fileInputs.filter((el) => el !== coverInput && !looksCover(el));
-    const resumeInput = inCard(resumeCard) ||
+    const resumeInput = diceResume || inCard(resumeCard) ||
       resumeCandidates.find(looksResume) || resumeCandidates.find(acceptsDoc);
     if (resumeInput && resumeInput !== coverInput &&
         !(resumeInput.files && resumeInput.files.length)) {
