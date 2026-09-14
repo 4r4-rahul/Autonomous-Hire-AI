@@ -698,7 +698,15 @@
   // runs and the worst case is the profile résumé being used, which is today's behaviour anyway.
   async function revealDiceReplace() {
     if (!/(^|\.)dice\.com$/.test(location.hostname)) return;
-    if (document.querySelector("input[type='file']")) return;   // already exposed
+    // Bail only if a RESUME input is already present. Dice ships the cover-letter dropzone's input
+    // in the DOM from the start, so "any file input exists" was always true here and this returned
+    // before opening the menu — the cover letter attached, the résumé never did.
+    const _isCoverEl = (el) => /cover.?letter|coverletter|motivation/i.test(
+      (el.name || "") + " " + (el.id || "") + " " + (el.getAttribute("aria-label") || "") + " " +
+      ((el.closest("[class],section,div") || {}).innerText || "").slice(0, 120));
+    const _resumeInputPresent = [...document.querySelectorAll("input[type='file']")]
+      .some((el) => !_isCoverEl(el));
+    if (_resumeInputPresent) return;   // résumé slot already exposed
     const byText = (sel, rx) =>
       [...document.querySelectorAll(sel)].find((e) => rx.test((e.innerText || e.getAttribute("aria-label") || "").trim()));
     // The kebab menu sits in the Resume card; it has no stable class, so match the glyph/label.
