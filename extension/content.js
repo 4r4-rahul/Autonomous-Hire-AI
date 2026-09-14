@@ -555,7 +555,14 @@
 
   // With allFrames injection, most frames have no form — stay silent there so we don't
   // litter empty panels. Only the frame holding the form proceeds.
-  if (!fields.length) return;
+  //
+  // ...but an UPLOAD-ONLY step is a real form with zero text fields. Dice's Easy Apply step 1 is
+  // exactly that: a résumé card and a cover-letter dropzone, nothing else. Returning here meant the
+  // résumé-attach block below never ran on the one page whose entire purpose is attaching a résumé.
+  const _hasUploadTarget = !!document.querySelector("input[type='file']") ||
+    /(^|\.)dice\.com$/.test(location.hostname) ||
+    !!document.querySelector("[class*='dropzone' i],[data-testid*='upload' i]");
+  if (!fields.length && !_hasUploadTarget) return;
 
   // ── De-duplicate by label ────────────────────────────────────────────────────
   // New-style Greenhouse (job-boards.greenhouse.io) scrapes the SAME question twice: once as the
