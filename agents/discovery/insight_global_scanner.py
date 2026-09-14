@@ -48,7 +48,7 @@ def _to_discovered(d: dict) -> dict | None:
     }
 
 
-async def run(state, *, limit: int = 10, tailor: bool = True, persist: bool = False, max_pages: int = 15):
+async def run(state, *, limit: int = 10, tailor: bool = True, persist: bool = False, max_pages: int = 15, fit_gate: bool = True):
     """Page the Jibe API, intake the fitting US direct-hire roles. Returns (state, report)."""
     known = {j.get("apply_url") for j in state.get("job_listings", [])}
     rows: list[dict] = []
@@ -80,7 +80,7 @@ async def run(state, *, limit: int = 10, tailor: bool = True, persist: bool = Fa
 
     pre_app_ids = {a.get("id") for a in state.get("applications", [])}
     pre_job_ids = {j.get("id") for j in state.get("job_listings", [])}
-    updated, report = await intake_jobs(discovered, state, limit=limit, tailor=tailor)
+    updated, report = await intake_jobs(discovered, state, limit=limit, tailor=tailor, fit_gate=fit_gate)
     report["fetched"] = len(rows)
     report["discovered"] = len(discovered)
 

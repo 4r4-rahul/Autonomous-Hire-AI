@@ -71,7 +71,7 @@ def _to_discovered(d: dict) -> dict | None:
     }
 
 
-async def run(state, *, limit: int = 10, tailor: bool = True, persist: bool = False, top: int = 30):
+async def run(state, *, limit: int = 10, tailor: bool = True, persist: bool = False, top: int = 30, fit_gate: bool = True):
     """Query Kforce's Azure Search index across fit keywords, intake the fitting US roles.
     Returns (state, report). tailor=False parks cheap leads (Opus tailoring stays on-demand)."""
     known = {j.get("apply_url") for j in state.get("job_listings", [])}
@@ -102,7 +102,7 @@ async def run(state, *, limit: int = 10, tailor: bool = True, persist: bool = Fa
 
     pre_app_ids = {a.get("id") for a in state.get("applications", [])}
     pre_job_ids = {j.get("id") for j in state.get("job_listings", [])}
-    updated, report = await intake_jobs(discovered, state, limit=limit, tailor=tailor)
+    updated, report = await intake_jobs(discovered, state, limit=limit, tailor=tailor, fit_gate=fit_gate)
     report["searched"] = len(by_id)
     report["discovered"] = len(discovered)
 

@@ -107,7 +107,7 @@ def _save_cursor(i: int) -> None:
 
 
 async def run(state, *, max_companies: int = 25, intake_limit: int = 10, tailor: bool = True,
-              persist: bool = False):
+              persist: bool = False, fit_gate: bool = True):
     """Scan a rotating slice of sponsor boards, intake the fitting roles. Returns (state, report).
 
     max_companies: how many sponsor boards to fetch this run (slice walks the list via a cursor).
@@ -167,7 +167,7 @@ async def run(state, *, max_companies: int = 25, intake_limit: int = 10, tailor:
 
     pre_app_ids = {a.get("id") for a in state.get("applications", [])}
     pre_job_ids = {j.get("id") for j in state.get("job_listings", [])}
-    updated, report = await intake_jobs(discovered, state, limit=intake_limit, tailor=tailor)
+    updated, report = await intake_jobs(discovered, state, limit=intake_limit, tailor=tailor, fit_gate=fit_gate)
     report["scanned"] = len(slice_)
     report["discovered"] = len(discovered)
 

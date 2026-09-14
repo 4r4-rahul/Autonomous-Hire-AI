@@ -139,7 +139,7 @@ async def _scan_host(client: httpx.AsyncClient, company: str, sitemap_index: str
 
 
 async def run(state, *, limit: int = 10, tailor: bool = False, persist: bool = False,
-              max_details: int = 60):
+              max_details: int = 60, fit_gate: bool = True):
     """Scan every configured Phenom host, intake the fitting US roles. Returns (state, report).
 
     limit:       cap on expensive Opus tailorings (parked apps) this run (tailor=False keeps it cheap).
@@ -162,7 +162,7 @@ async def run(state, *, limit: int = 10, tailor: bool = False, persist: bool = F
 
     pre_app_ids = {a.get("id") for a in state.get("applications", [])}
     pre_job_ids = {j.get("id") for j in state.get("job_listings", [])}
-    updated, report = await intake_jobs(discovered, state, limit=limit, tailor=tailor)
+    updated, report = await intake_jobs(discovered, state, limit=limit, tailor=tailor, fit_gate=fit_gate)
     report["hosts"] = len(PHENOM_HOSTS)
     report["discovered"] = len(discovered)
 
