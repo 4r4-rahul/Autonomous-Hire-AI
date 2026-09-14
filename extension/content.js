@@ -683,6 +683,32 @@
   let resumeStatus = null;
   let resumeViewUrl = null;
   let coverInput = null;   // hoisted: the cover-letter attach block below also needs it
+
+  // Dice's Easy Apply wizard shows the résumé already on your PROFILE ("Rahul V resume.docx") and
+  // keeps its file input out of the DOM until you open the card's "..." menu and pick Replace.
+  // Nothing to attach to until that happens, so open it ourselves, then fall through to the normal
+  // attach path below. Best-effort and silent: if the markup has moved on, the generic path still
+  // runs and the worst case is the profile résumé being used, which is today's behaviour anyway.
+  async function revealDiceReplace() {
+    if (!/(^|\.)dice\.com$/.test(location.hostname)) return;
+    if (document.querySelector("input[type='file']")) return;   // already exposed
+    const byText = (sel, rx) =>
+      [...document.querySelectorAll(sel)].find((e) => rx.test((e.innerText || e.getAttribute("aria-label") || "").trim()));
+    // The kebab menu sits in the Resume card; it has no stable class, so match the glyph/label.
+    const kebab = byText("button,[role='button']", /^(\u2026|\.\.\.|•••)$/) ||
+                  document.querySelector("button[aria-label*='more' i],button[aria-label*='option' i]");
+    if (kebab) {
+      kebab.click();
+      await sleep(350);
+    }
+    const replace = byText("button,[role='menuitem'],a,li,span", /^replace$/i);
+    if (replace) {
+      replace.click();
+      await sleep(600);   // Dice mounts the hidden <input type=file> after this
+    }
+  }
+  try { await revealDiceReplace(); } catch (e) {}
+
   try {
     const fileInputs = [...document.querySelectorAll("input[type='file']")];
     const fieldText = (el) => ((el.name || "") + " " + (el.id || "") + " " +
