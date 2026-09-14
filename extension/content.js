@@ -696,6 +696,24 @@
   // Nothing to attach to until that happens, so open it ourselves, then fall through to the normal
   // attach path below. Best-effort and silent: if the markup has moved on, the generic path still
   // runs and the worst case is the profile résumé being used, which is today's behaviour anyway.
+  // Suppress the native file picker while we drive the page. Dice's Replace handler calls
+  // input.click() on the file input it just mounted, which opens a macOS dialog no extension can
+  // drive — the automation dead-ends there. A programmatic click still dispatches a CANCELABLE
+  // event, so a capture-phase listener can preventDefault() it: the input mounts and stays in the
+  // DOM, the dialog never appears, and DataTransfer does the rest. Scoped to file inputs and
+  // removed immediately after, so a real click by the user is untouched.
+  function suppressFilePicker() {
+    const block = (e) => {
+      const t = e.target;
+      // preventDefault alone stops the picker. Deliberately NOT stopPropagation: Dice's own
+      // handlers may do bookkeeping on this click, and breaking that could leave the widget in a
+      // state where the attached file is never registered.
+      if (t && t.tagName === "INPUT" && t.type === "file") e.preventDefault();
+    };
+    document.addEventListener("click", block, true);
+    return () => document.removeEventListener("click", block, true);
+  }
+
   async function revealDiceReplace() {
     if (!/(^|\.)dice\.com$/.test(location.hostname)) return;
     const isCoverEl = (el) => /cover.?letter|coverletter|motivation/i.test(
@@ -722,6 +740,8 @@
       .map((el) => el.closest("button,[role='button']") || el)
       .filter((el, i, arr) => arr.indexOf(el) === i);
 
+    const release = suppressFilePicker();
+    try {
     for (const btn of clickable) {
       try { btn.click(); } catch (e) { continue; }
       await sleep(400);
@@ -734,6 +754,7 @@
       }
       if (resumeInputPresent()) return;
     }
+    } finally { release(); }
   }
 
   try { await revealDiceReplace(); } catch (e) {}
