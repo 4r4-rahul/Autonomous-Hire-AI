@@ -95,6 +95,50 @@ def parse_jobs(html: str) -> list[dict]:
     return out
 
 
+# The search page's `summary` is truncated at exactly 500 characters, and for some postings it is
+# text from an unrelated req entirely (a "Data Engineer" title carrying a "Product Owner" blurb).
+# Tailoring a résumé against that is tailoring against nothing. The DETAIL page carries the real
+# posting — ~3.3k chars — in a rendered job-description container.
+_JD_BLOCK = re.compile(r'<div[^>]*class="[^"]*job-?description[^"]*"[^>]*>(.*?)</div>', re.S | re.I)
+
+
+async def fetch_full_jd(client: httpx.AsyncClient, url: str) -> str:
+    """The complete posting text from a Dice job-detail page, or "" if it can't be read."""
+    try:
+        r = await client.get(url, timeout=25)
+        if r.status_code != 200:
+            return ""
+    except Exception:
+        return ""
+    m = _JD_BLOCK.search(r.text)
+    if not m:
+        return ""
+    txt = re.sub(r"<[^>]+>", " ", m.group(1))
+    txt = re.sub(r"&nbsp;|&amp;", " ", txt)
+    return re.sub(r"\s+", " ", txt).strip()
+
+
+async def enrich(jobs: list[dict], *, concurrency: int = 6) -> int:
+    """Replace each job's truncated summary with the full JD. Returns how many were improved."""
+    improved = 0
+    async with httpx.AsyncClient(follow_redirects=True, headers=_UA) as client:
+        sem = asyncio.Semaphore(concurrency)
+
+        async def one(j):
+            nonlocal improved
+            async with sem:
+                full = await fetch_full_jd(client, j.get("url") or j.get("apply_url") or "")
+            # Only accept a materially richer JD — a short/failed read must not overwrite what we have.
+            if len(full) > max(600, len(j.get("summary") or j.get("description") or "")):
+                j["summary"] = full
+                j["description"] = full
+                improved += 1
+
+        await asyncio.gather(*[one(j) for j in jobs])
+    logger.info("dice_jd_enriched", of=len(jobs), improved=improved)
+    return improved
+
+
 def in_lane(job: dict) -> bool:
     return bool(job.get("title")) and not _NOT_LANE.search(job["title"])
 
@@ -127,6 +171,7 @@ async def scan(*, age: str = "THREE", pages: int = 2, c2c_only: bool = True) -> 
         jobs = [j for j in jobs if "third party" in j["employment"].lower()]
     jobs = [j for j in jobs if in_lane(j)]
     logger.info("dice_scanned", found=len(seen), kept=len(jobs), age=age)
+    await enrich(jobs)
     return jobs
 
 
