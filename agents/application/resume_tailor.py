@@ -445,6 +445,25 @@ hardest problem, reframed into a crisp bullet. If no story fits a role, keep the
     # on, so cloud emphasis becomes a question of WHICH ROLE TO LEAD WITH, not which words to add.
     _coherence_directive = """
 
+DEPTH THROUGH REPETITION — WHERE IT IS REAL. When the JD's core requirement is something the
+candidate used across SEVERAL engagements, show it in EACH of those roles rather than once. One
+mention reads as exposure; the same skill solving a different problem at three employers reads as
+depth, and that is the honest impression when it is what actually happened.
+
+Skills genuinely spanning multiple roles in the base résumé:
+  Spark (JPMorgan, Alignment Health, Ameriprise) · PySpark (JPMorgan, Alignment Health)
+  Kafka / streaming (JPMorgan, Insight Global, Alignment Health) · Scala (JPMorgan, Alignment Health,
+  Ameriprise) · SQL (all four employers) · Terraform & CI/CD (JPMorgan, Insight Global)
+  Parquet (JPMorgan, Alignment Health) · Python (JPMorgan, Alignment Health)
+
+Each mention must be a DIFFERENT point: the problem that role solved with it, in that role's domain
+and scale — not the same sentence reworded. Repeating one achievement across roles is padding and
+reads as padding.
+
+CRITICAL: this applies ONLY to roles where the base résumé already shows the skill. Never add a
+requirement to a role that did not use it to make the experience look broader. A reviewer who probes
+one of those bullets ends the conversation, and in the contract market ends the relationship.
+
 ENGAGEMENT COHERENCE — each role ran on ONE primary cloud. Do not mix:
   - JPMorgan Chase      -> AWS (EMR, S3, Glue, Athena, Lambda, DynamoDB) + Snowflake, Databricks
   - Insight Global      -> Azure (ADF, ADLS Gen2, Functions, Event Hubs); Terraform spanned AWS/Azure/GCP
