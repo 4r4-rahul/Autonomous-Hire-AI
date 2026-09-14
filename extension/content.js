@@ -698,30 +698,44 @@
   // runs and the worst case is the profile résumé being used, which is today's behaviour anyway.
   async function revealDiceReplace() {
     if (!/(^|\.)dice\.com$/.test(location.hostname)) return;
-    // Bail only if a RESUME input is already present. Dice ships the cover-letter dropzone's input
-    // in the DOM from the start, so "any file input exists" was always true here and this returned
-    // before opening the menu — the cover letter attached, the résumé never did.
-    const _isCoverEl = (el) => /cover.?letter|coverletter|motivation/i.test(
+    const isCoverEl = (el) => /cover.?letter|coverletter|motivation/i.test(
       (el.name || "") + " " + (el.id || "") + " " + (el.getAttribute("aria-label") || "") + " " +
-      ((el.closest("[class],section,div") || {}).innerText || "").slice(0, 120));
-    const _resumeInputPresent = [...document.querySelectorAll("input[type='file']")]
-      .some((el) => !_isCoverEl(el));
-    if (_resumeInputPresent) return;   // résumé slot already exposed
-    const byText = (sel, rx) =>
-      [...document.querySelectorAll(sel)].find((e) => rx.test((e.innerText || e.getAttribute("aria-label") || "").trim()));
-    // The kebab menu sits in the Resume card; it has no stable class, so match the glyph/label.
-    const kebab = byText("button,[role='button']", /^(\u2026|\.\.\.|•••)$/) ||
-                  document.querySelector("button[aria-label*='more' i],button[aria-label*='option' i]");
-    if (kebab) {
-      kebab.click();
-      await sleep(350);
-    }
-    const replace = byText("button,[role='menuitem'],a,li,span", /^replace$/i);
-    if (replace) {
-      replace.click();
-      await sleep(600);   // Dice mounts the hidden <input type=file> after this
+      (((el.closest("section,div,form") || {}).innerText) || "").slice(0, 160));
+    const resumeInputPresent = () =>
+      [...document.querySelectorAll("input[type='file']")].some((el) => !isCoverEl(el));
+    if (resumeInputPresent()) return;
+
+    // Find the RESUME card by its own text rather than by class or glyph. Dice's kebab is an icon
+    // button with no stable class, no text and no aria-label, so matching on "•••" never hit it.
+    // Scoping to the card and trying each control inside it is markup-agnostic: it keeps working
+    // when Dice restyles, and it can't touch the cover-letter card.
+    const cards = [...document.querySelectorAll("div,section")].filter((el) => {
+      const t = (el.innerText || "");
+      return /resume/i.test(t) && !/cover.?letter/i.test(t) && t.length < 400 &&
+             el.querySelector("button,[role='button'],svg");
+    });
+    // Innermost match: the smallest element still containing the whole card.
+    const card = cards.sort((a, b) => (a.innerText || "").length - (b.innerText || "").length)[0];
+    if (!card) return;
+
+    const clickable = [...card.querySelectorAll("button,[role='button'],[aria-haspopup],svg")]
+      .map((el) => el.closest("button,[role='button']") || el)
+      .filter((el, i, arr) => arr.indexOf(el) === i);
+
+    for (const btn of clickable) {
+      try { btn.click(); } catch (e) { continue; }
+      await sleep(400);
+      const replace = [...document.querySelectorAll("button,[role='menuitem'],a,li,span,div")]
+        .find((e) => /^replace$/i.test((e.innerText || "").trim()) && e.offsetParent !== null);
+      if (replace) {
+        try { replace.click(); } catch (e) {}
+        await sleep(700);          // Dice mounts the hidden <input type=file> after this
+        if (resumeInputPresent()) return;
+      }
+      if (resumeInputPresent()) return;
     }
   }
+
   try { await revealDiceReplace(); } catch (e) {}
 
   try {
