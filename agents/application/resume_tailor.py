@@ -477,13 +477,16 @@ CRITICAL: this applies ONLY to roles where the base résumé already shows the s
 requirement to a role that did not use it to make the experience look broader. A reviewer who probes
 one of those bullets ends the conversation, and in the contract market ends the relationship.
 
-ENGAGEMENT COHERENCE — each role ran on ONE primary cloud. Do not mix:
+ENGAGEMENT COHERENCE — keep each role's stack inside the engagement that actually used it:
   - JPMorgan Chase      -> AWS (EMR, S3, Glue, Athena, Lambda, DynamoDB) + Snowflake, Databricks
+  - Humana              -> AWS (S3, Glue, Lambda) + Snowflake, dbt, Airflow — healthcare payer data
   - Insight Global      -> Azure (ADF, ADLS Gen2, Functions, Event Hubs); Terraform spanned AWS/Azure/GCP
-  - Alignment Health    -> Azure (HDInsight/Databricks, ADLS) and GCP (BigQuery, Pub/Sub, Cloud Run)
-  - Ameriprise          -> Java/backend; no cloud claim
-Keep each role's stack inside its own engagement. Never add a cloud to a role that did not use it,
-and never list all three clouds inside one role's bullets.
+  - Alignment Health    -> genuinely multi-cloud: Azure migration + AWS (Glue, EMR) + GCP (BigQuery,
+                           Dataproc, Pub/Sub) + Snowflake, Talend, Matillion, dbt
+  - Ameriprise          -> Java/Spring Boot + AWS (EC2, S3, RDS)
+Never add a cloud or tool to a role that did not use it. Where a role WAS multi-cloud (Alignment
+Health, Insight Global) that is real and may be shown — but do not flatten every role into the same
+multi-cloud claim, and do not attribute one role's stack to another.
 
 To match a JD's cloud, REORDER — lead with the role that genuinely used it and give that role's
 bullets the most detail — rather than sprinkling the keyword through every role. If the JD's primary
@@ -497,15 +500,15 @@ technology list to a bullet to raise keyword coverage."""
 
 LENGTH — FULL DEPTH, ROUGHLY SIX PAGES. This is NOT a trimmed two-page ATS résumé. Keep the base
 résumé's full technical depth: every real role, its full bullet set, and the complete skills
-inventory. Target the base résumé's own length (~76 bullets across the experience section).
+inventory. Target the base résumé's own length (~101 bullets across the experience section).
 
 RETENTION IS THE DEFAULT, AND IT IS MEASURED. The base résumé carries these bullet counts, and your
 output must match them per role, not merely in total:
 
-    JPMorgan Chase           32 bullets      Ameriprise Financial      7 bullets
-    Insight Global            6 bullets      AutonomousHire            8 bullets
-    Alignment Health         12 bullets      Live Meeting Assistant    5 bullets
-                                             Multi-Cloud Automation    6 bullets
+    JPMorgan Chase          33 bullets      Ameriprise Financial      7 bullets
+    Insight Global           6 bullets      AutonomousHire            8 bullets
+    Humana                  12 bullets      Live Meeting Assistant    5 bullets
+    Alignment Health        24 bullets      Multi-Cloud Automation    6 bullets
 
 Reproduce each role at its full count. "Less important" is NOT a reason to drop a bullet, and
 neither is length. Merging two bullets into one counts as dropping one; summarising a role instead
