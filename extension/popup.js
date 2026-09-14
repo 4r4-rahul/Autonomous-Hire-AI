@@ -1,7 +1,11 @@
 const statusEl = document.getElementById("status");
 // Bump this on every extension code change. If the popup doesn't show this exact build, the reload
 // didn't take — remove & re-add the extension.
-const BUILD = "resumedl-1 (2026-06-21)";
+// Read the version from the manifest instead of hardcoding it. The old literal
+// ("resumedl-1 (2026-06-21)") never changed no matter what code was loaded, so it actively
+// misled: a correctly-reloaded extension still displayed a three-month-old build string, and we
+// chased a reload problem that did not exist. Bump manifest.version when shipping a change.
+const BUILD = chrome.runtime.getManifest().version + " (dice-replace)";
 statusEl.textContent = "build " + BUILD;
 
 // DEBUG: capture the current form's field structure (no personal values) so a bespoke ATS form
