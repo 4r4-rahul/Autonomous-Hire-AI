@@ -1265,15 +1265,25 @@ async def domdump(body: DomDumpIn) -> dict:
     bespoke ATS form (e.g. apply.teksystems.com's custom widgets) can be reverse-engineered. Writes
     data/ah_domdump.json (gitignored). Keeps the RICHEST capture (most fields) so a later empty/small
     sub-frame can't clobber the real one. One-shot, triggered by the extension's capture button."""
+    from datetime import datetime, timezone
     p = Path("data/ah_domdump.json")
     try:
         prev = json.loads(p.read_text()) if p.exists() else {}
     except Exception:
         prev = {}
-    if prev.get("count", 0) > len(body.fields):
+    # Prefer the richest capture only WITHIN THE SAME PAGE — the point of the guard is that a form's
+    # empty sub-frame must not clobber the capture of the form itself. Applied across pages it
+    # silently discards every smaller form forever: a Dice upload step (2 fields) lost to a
+    # months-old TEKsystems capture (140 fields) and the user saw a success toast either way.
+    same_page = (prev.get("url") or "").split("?")[0] == (body.url or "").split("?")[0]
+    if same_page and prev.get("count", 0) > len(body.fields):
         return {"ok": True, "kept_existing": prev.get("count"), "ignored": len(body.fields)}
     try:
+        # Keep the displaced capture so a debugging session isn't lost by the next one.
+        if prev and not same_page:
+            Path("data/ah_domdump.prev.json").write_text(json.dumps(prev, indent=2))
         p.write_text(json.dumps({"url": body.url, "count": len(body.fields),
+                                 "captured_at": datetime.now(timezone.utc).isoformat(),
                                  "shadowHosts": body.shadowHosts, "fields": body.fields}, indent=2))
     except Exception as e:
         return {"ok": False, "error": str(e)[:120]}
