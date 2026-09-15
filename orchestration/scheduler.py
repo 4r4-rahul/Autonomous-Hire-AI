@@ -342,6 +342,27 @@ async def job_kforce_scan() -> None:
         logger.error("scheduled_kforce_scan_failed", error=str(e)[:140])
 
 
+async def job_dice_scan() -> None:
+    """Fresh C2C contract roles from Dice — the board US IT staffing actually posts on, and the only
+    source that labels corp-to-corp explicitly (employmentType "Contract, Third Party"). Enriches
+    each posting with the FULL job description from its detail page (the search API truncates at 500
+    chars and sometimes returns text from an unrelated req), then cheap-parks what fits.
+
+    This is the freshest contract supply the pipeline has: a 7-day sweep yields ~150 roles where the
+    vendor ATS boards yield ~1. Runs every 4h on a 3-day window so new postings are caught early
+    without re-reading the same week repeatedly."""
+    try:
+        from core.state_store import load_state
+        from agents.discovery.dice_scanner import run
+        _, summary = await run(load_state(), age="THREE", pages=2, limit=200,
+                               tailor=False, persist=True)
+        await _sync_db()
+        logger.info("scheduled_dice_scan_done", **summary)
+        return summary
+    except Exception as e:
+        logger.error("scheduled_dice_scan_failed", error=str(e)[:140])
+
+
 async def job_gov_scan() -> None:
     """State/local-GOVERNMENT contract (C2C) discovery — public-sector staff-augmentation vendor
     boards (data/gov_vendors.json). Plain HTTP JSON, no browser, no LinkedIn. Drops FEDERAL clients
@@ -590,7 +611,8 @@ async def job_referral_prep() -> None:
 _ACTIVE_JOBS = {"linkedin_health", "linkedin_scanner", "board_scanner", "phenom_scanner",
                 "kforce_scanner", "insightglobal_scanner", "workday_scanner", "apply_pipeline",
                 "referral_prep", "pretailor", "auto_submit", "email_monitor", "digest",
-                "dead_link_sweep", "log_rotate", "source_ingest", "gov_scanner"}
+                "dead_link_sweep", "log_rotate", "source_ingest", "gov_scanner",
+                "dice_scanner"}
 
 # id → (func, base_interval_seconds, display_name, misfire_grace_time)
 _JOB_SPECS = {
@@ -604,6 +626,7 @@ _JOB_SPECS = {
     "kforce_scanner":  (job_kforce_scan,     10800, "Kforce Scanner (Azure Search API, 3h)",   600),
     "insightglobal_scanner": (job_insight_global_scan, 10800, "Insight Global Scanner (Jibe API, 3h)", 600),
     "gov_scanner":     (job_gov_scan,        14400, "State/Local Gov C2C Scanner (staff-aug vendor boards, 4h)", 600),
+    "dice_scanner":    (job_dice_scan,       14400, "Dice C2C Scanner (contract/third-party, full JD, 4h)", 900),
     "workday_scanner": (job_workday_scan,    43200, "Workday IT-Services Scanner (NTT/Genpact/Accenture cxs, 12h)", 900),
     "jobdiva_scanner": (job_jobdiva_scan,    21600, "JobDiva C2C/Bench Scanner (headless, 6h)", 900),
     "apply_pipeline":  (job_apply_pipeline,  1800,  "Apply Pipeline (score+park cheap, 30m)",   600),
@@ -626,7 +649,7 @@ _JOB_SPECS = {
 _CONTRACT_JOBS = {"linkedin_health", "board_scanner", "phenom_scanner", "kforce_scanner",
                   "insightglobal_scanner", "workday_scanner", "jobdiva_scanner", "apply_pipeline",
                   "pretailor", "email_monitor", "digest", "dead_link_sweep", "log_rotate",
-                  "source_ingest", "gov_scanner"}
+                  "source_ingest", "gov_scanner", "dice_scanner"}
 
 
 def _active_jobs() -> set:
