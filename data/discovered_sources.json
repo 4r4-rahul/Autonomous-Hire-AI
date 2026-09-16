@@ -742,7 +742,9 @@
     "zscaler",
     "ncontracts",
     "uniswap",
-    "sosafe"
+    "sosafe",
+    "sumologic",
+    "odaseva"
   ],
   "ingested": [
     "outrider",
