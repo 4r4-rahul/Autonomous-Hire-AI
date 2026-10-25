@@ -1,7 +1,7 @@
 """Bench-marketing email composition — the constraints that protect long-lived vendor relationships."""
 from agents.outreach.vendor_blast import DAILY_CAP, _first_name, compose
 
-_PROFILE = {"personal": {"name": "Rahul Varikuppala", "email": "candidate@example.com",
+_PROFILE = {"personal": {"name": "Jane Doe", "email": "jane.doe@example.com",
                          "phone": "+1 555-010-0100", "location": "Plano, TX",
                          "linkedin_url": "https://linkedin.com/in/x"}}
 _KW = {"work_auth": "H-1B. Open to W2 or C2C.", "availability": "2 weeks' notice",

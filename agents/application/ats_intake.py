@@ -63,7 +63,12 @@ _FOREIGN = ("france", "paris", "marseille", "lyon", "germany", "munich", "berlin
             "warsaw", "portugal", "lisbon", "switzerland", "zurich", "emea", "apac", "latam",
             "brazil", "mexico", "israel", "tel aviv", "dubai", "uae", "ontario", "quebec",
             "europe", "korea", "seoul", "china", "shanghai", "beijing")
-_US = ("remote", "united states", "usa", "u.s.", "u.s ", "anywhere", " us ", "us-", "-us",
+# NOTE: bare "remote"/"anywhere" are deliberately NOT US signals. They are location-AGNOSTIC, and
+# treating them as US inverted the whole filter: a posting titled "Data Engineer ---- CANADA" with
+# location "Remote" and a "100% Remote Canada" description scored has_us=True and was queued, in
+# direct violation of the US-only hard rule. Only remote phrasings that NAME the US
+# ("us remote", "remote (us") count — those are still in the list below.
+_US = ("united states", "usa", "u.s.", "u.s ", " us ", "us-", "-us",
        "new york", "san francisco", "bay area", "austin", "seattle", "boston", "chicago",
        "denver", "atlanta", "los angeles", "dallas", "houston", "washington", "texas",
        "california", "new jersey", "remote (us", "us remote", "north america")
@@ -82,12 +87,62 @@ def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").strip().lower())
 
 
-def _is_relevant_location(*texts) -> bool:
-    """True unless the role is clearly foreign-only (foreign signal AND no US/remote signal)."""
-    t = " ".join((x or "") for x in texts).lower()
-    has_foreign = any(s in t for s in _FOREIGN)
-    has_us = any(s in t for s in _US)
-    return has_us or not has_foreign   # unknown → keep (don't over-filter)
+def _is_relevant_location(title: str = "", location: str = "", *context) -> bool:
+    """True unless the role is clearly foreign-only.
+
+    Signal strength is positional, and that matters in both directions:
+
+      TITLE and LOCATION are authoritative. "Data Engineer ---- CANADA" and "Toronto, Ontario" mean
+      the role is foreign, full stop.
+
+      Everything after them (the JD text) is weak CONTEXT and may MENTION a foreign place for
+      innocent reasons — "offices in London and Dallas", "collaborate with our Bangalore team". It
+      can support a US read but can never, on its own, reject.
+
+    Both halves of this were live bugs. Flattening all three fields into one blob let a JD's passing
+    mention of a foreign office kill genuine US roles ("Miami Remote", "Palo Alto Remote" — US
+    cities absent from the necessarily-short `_US` list). And counting bare "remote" as a US signal
+    did the opposite: a posting titled CANADA, located "Remote", described as "100% Remote Canada"
+    came back has_us=True and was queued, against the US-only hard rule. Hence: strong fields
+    decide, bare "remote" is agnostic rather than American, and the unknown case still keeps.
+    """
+    strong = f"{title or ''} {location or ''}".lower()
+    weak = " ".join((x or "") for x in context).lower()
+    foreign_strong = any(s in strong for s in _FOREIGN)
+    us_strong = any(s in strong for s in _US)
+    if foreign_strong and not us_strong:
+        return False
+    # Nothing decisive up front. A foreign word in the JD is only disqualifying when it is stated as
+    # the WORK LOCATION ("100% Remote Canada", "must be based in India") — not when the posting
+    # merely mentions the place ("offices in London and Miami", "our Bangalore team collaborates").
+    # Requiring that phrasing is what separates the two; a plain keyword test rejected real US roles.
+    if not foreign_strong and not us_strong and _FOREIGN_WORKSITE.search(weak):
+        return False
+    return True
+
+
+_FOREIGN_ALT = "|".join(sorted((s for s in _FOREIGN), key=len, reverse=True))
+# The foreign place named AS the worksite, rather than mentioned in passing.
+_FOREIGN_WORKSITE = re.compile(
+    r"(?:(?:100%\s*)?remote\s*(?:work(?:er)?\s*)?(?:in|from|[-–,:])?\s*(?:" + _FOREIGN_ALT + r")\b)"
+    r"|(?:\b(?:based|located|position|role|candidates?|must\s+be|work(?:ing)?)\s+"
+    r"(?:in|from|out\s+of)\s+(?:the\s+)?(?:" + _FOREIGN_ALT + r")\b)"
+    r"|(?:\b(?:" + _FOREIGN_ALT + r")\s*(?:based|only|residents?)\b)", re.I)
+
+
+# US STATE codes/names catch the cities a hand-written list never will ("Miami, FL", "Palo Alto, CA").
+_US_STATES = re.compile(
+    r"\b(a[klrz]|c[aot]|de|fl|ga|hi|i[adln]|k[sy]|la|m[adeinost]|n[cdehjmvy]|o[hkr]|pa|ri|"
+    r"s[cd]|t[nx]|ut|v[at]|w[aivy])\b|\b(alabama|alaska|arizona|arkansas|california|colorado|"
+    r"connecticut|delaware|florida|georgia|hawaii|idaho|illinois|indiana|iowa|kansas|kentucky|"
+    r"louisiana|maine|maryland|massachusetts|michigan|minnesota|mississippi|missouri|montana|"
+    r"nebraska|nevada|hampshire|jersey|mexico|york|carolina|dakota|ohio|oklahoma|oregon|"
+    r"pennsylvania|island|tennessee|texas|utah|vermont|virginia|washington|wisconsin|wyoming)\b",
+    re.I)
+
+
+def _looks_us(text: str) -> bool:
+    return bool(_US_STATES.search(text or ""))
 
 
 async def intake_jobs(discovered: list[dict], state: JobSearchState,

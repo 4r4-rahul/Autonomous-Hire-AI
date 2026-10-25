@@ -96,7 +96,24 @@ async def tailor_application(app_id: str = "", *, job_id: str = "",
         # into all-slow contention. Acquired here (not around the whole fn) so the dedup/state I/O
         # above stays lock-free and the gate only bounds the expensive score→tailor→review span.
         async with _tailor_gate():
-            fit = await _score_job(job, cheap)
+            # The re-score is a CHEAP-tier call, so it follows LLM_PROVIDER even when the quality
+            # tier is pinned to Claude via LLM_QUALITY_PROVIDER. When that cheap provider is down or
+            # out of credit it raised straight out of here and killed the whole on-demand tailor —
+            # the user saw "Tailoring failed" for a résumé the (working, Claude-backed) quality tier
+            # could have written fine. The score only drives emphasis, and the queue already scored
+            # this job at intake, so fall back to the stored FitScore and carry on.
+            try:
+                fit = await _score_job(job, cheap)
+            except Exception as e:
+                fit = next((f for f in state.get("fit_scores", [])
+                            if f.get("job_id") == job.get("id")), None)
+                if not fit:
+                    fit = {"id": "", "job_id": job.get("id", ""), "score": 70,
+                           "reasoning": "re-score unavailable; proceeding on stored/neutral fit",
+                           "match_highlights": [], "missing_skills": [],
+                           "passed_threshold": True, "scored_at": ""}
+                logger.warning("on_demand_rescore_failed", app_id=app.get("id"),
+                               error=str(e)[:90], fell_back_to=fit.get("score"))
             tailored = await tailor_one(job, fit, llm, profile, llm_cheap=cheap)
             if not tailored:
                 return {"error": "tailoring returned nothing"}

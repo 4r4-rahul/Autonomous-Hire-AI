@@ -2,46 +2,9 @@ You are helping fill out a job application form. Your task is to answer a custom
 
 ## CANDIDATE PROFILE
 
-**Name:** Rahul Varikuppala
-**Location:** Plano, TX (willing to relocate; prefers remote or hybrid)
-**Email:** candidate@example.com
+{{candidate_profile}}
 
-**Current Role:** Senior Data Engineer / Platform Engineer at JPMorgan Chase & Co. (2021–present)
-- Architected and own ML data pipelines serving 50M+ customer records using PySpark on AWS EMR
-- Built a real-time feature store and model-serving layer (FastAPI + Redis) supporting 12 production ML models
-- Led migration of legacy ETL (Oracle → Databricks Delta Lake), reducing processing time by 60%
-- Mentored 3 junior engineers; defined data engineering standards for the team
-
-**Previous Experience:**
-- Software Engineer, Slalom Consulting (2020–2021): Data platform consulting for enterprise clients; built Airflow DAGs and AWS Glue pipelines
-- Software Engineer, Infosys (2018–2020): Backend API development (Python/Java), data integration, client-facing dashboards
-
-**Education:** M.S. Computer Information Systems, New England College (2018)
-
-**Key Technical Skills:**
-- Languages: Python (expert), SQL (expert), Bash, Java (proficient)
-- ML/AI: LLM APIs (Anthropic Claude, OpenAI GPT-4), RAG pipelines, LangChain, LangGraph, multi-agent orchestration, vector databases (Pinecone, Weaviate), fine-tuning workflows
-- Data: PySpark, Databricks, Apache Kafka, Airflow, dbt, Delta Lake, Snowflake, PostgreSQL
-- Cloud/Infra: AWS (EKS, EMR, Glue, S3, Lambda, SageMaker), Kubernetes, Terraform, Docker, CI/CD (GitHub Actions, Jenkins)
-- Frameworks: FastAPI, Flask, Pydantic, Pytest
-
-**Notable Projects:**
-- AutonomousHire: Production 20-agent LangGraph system that autonomously discovers job postings, tailors resumes, and submits applications. Features browser automation (Playwright), Gmail OAuth integration, and a human-in-the-loop approval gate.
-- Live Meeting Assistant: Real-time RAG system with sub-2s latency. Transcribes meetings via Whisper, retrieves relevant context from a vector store, and surfaces talking points live. Used in production by a 10-person sales team.
-
-**Work Authorization:** Authorized to work in the US. No visa sponsorship required.
-**Salary Expectation:** $150,000–$200,000 USD base
-**Start Availability:** 2 weeks notice from offer acceptance
-
-**Leadership & Collaboration:**
-- Comfortable operating as a senior IC or tech lead; has led cross-functional projects with product, data science, and ML research teams
-- Strong written communicator; authored internal RFCs and design docs for data platform decisions
-- Experience in both large enterprises (JPMC, 300k+ employees) and consulting (Slalom), giving a range of engineering culture perspectives
-
-**Interests & Motivations:**
-- Deeply interested in LLM infrastructure, inference optimization, and making AI systems reliable and efficient at scale
-- Excited by companies where ML/AI is core product, not tooling — Anthropic, Datadog AI, MongoDB Atlas AI, and similar
-- Prefers roles with end-to-end ownership: from architecture to on-call to user impact
+(Loaded at runtime from data/user_profile.yaml, which is not tracked in git.)
 
 ## RULES
 - Answer truthfully — only use real experience from the profile above

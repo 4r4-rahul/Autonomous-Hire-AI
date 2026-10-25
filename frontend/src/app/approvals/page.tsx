@@ -65,10 +65,18 @@ export default function ApprovalsPage() {
 
   const qc = useQueryClient();
 
+  // The desk-scoped cache key. EVERY read/write of the pending list must use this exact key, not
+  // the bare PENDING_KEY prefix: the list lives at ["apps-pending-approvals","contract"], so an
+  // optimistic setQueryData against ["apps-pending-approvals"] silently wrote to a cache entry
+  // nothing renders — which is why clicking Applied left the row sitting in the queue.
+  // (invalidateQueries is prefix-matching and so still works on the bare key; setQueryData and
+  // getQueryData are EXACT-match and do not.)
+  const SCOPED_PENDING_KEY = [...PENDING_KEY, contractScope ? "contract" : "w2"];
+
   const { data: pending, isLoading: pendingLoading } = useQuery({
     // Scope the cache + fetch by desk: /contract fetches ONLY contract rows server-side (so the
     // paused W2 backlog can't fill the limit and hide contract roles), /approvals fetches the rest.
-    queryKey: [...PENDING_KEY, contractScope ? "contract" : "w2"],
+    queryKey: SCOPED_PENDING_KEY,
     queryFn: () => api.listApps(
       `status=pending_approval&sort_by=recency&limit=400${contractScope ? "&employment_type=contract" : ""}`),
     refetchInterval: 15_000,
@@ -91,13 +99,13 @@ export default function ApprovalsPage() {
       api.decideApp(id, action, reason),
     onMutate: async ({ id }) => {
       setActionError(null);
-      await qc.cancelQueries({ queryKey: PENDING_KEY });
-      const prev = qc.getQueryData<Application[]>(PENDING_KEY);
-      qc.setQueryData<Application[]>(PENDING_KEY, (old) => (old ?? []).filter((a) => a.id !== id));
+      await qc.cancelQueries({ queryKey: SCOPED_PENDING_KEY });
+      const prev = qc.getQueryData<Application[]>(SCOPED_PENDING_KEY);
+      qc.setQueryData<Application[]>(SCOPED_PENDING_KEY, (old) => (old ?? []).filter((a) => a.id !== id));
       return { prev };
     },
     onError: (_err, _vars, ctx) => {
-      if (ctx?.prev) qc.setQueryData(PENDING_KEY, ctx.prev);
+      if (ctx?.prev) qc.setQueryData(SCOPED_PENDING_KEY, ctx.prev);
       setActionError("Action failed — the application was NOT updated. Check the API and retry.");
     },
     onSettled: () => {

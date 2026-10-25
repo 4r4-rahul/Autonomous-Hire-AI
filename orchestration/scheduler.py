@@ -22,10 +22,12 @@ import asyncio
 import json
 import os
 import random
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from core.logger import get_logger
@@ -363,6 +365,110 @@ async def job_dice_scan() -> None:
         logger.error("scheduled_dice_scan_failed", error=str(e)[:140])
 
 
+async def job_simplyhired_scan() -> None:
+    """Indeed's inventory via SimplyHired — Indeed itself returns 403/401 to every direct route and
+    retired both its RSS feed and its Publisher API. This is a deliberately SMALL, slow source: its
+    median posting is ~3 weeks old and it has no working recency sort, so the scanner hard-gates on
+    a 4-day age. Yield is ~10 roles a pass, but they are real C2C vendor reqs that Dice does not
+    carry. Never put this on the fast lane — a stale source cannot help latency."""
+    try:
+        from core.state_store import load_state
+        from agents.discovery.simplyhired_scanner import run
+        _, summary = await run(load_state(), pages=3, limit=60, tailor=False, persist=True)
+        await _sync_db()
+        logger.info("scheduled_simplyhired_scan_done", **summary)
+        return summary
+    except Exception as e:
+        logger.error("scheduled_simplyhired_scan_failed", error=str(e)[:140])
+
+
+async def job_gov_jobs_scan() -> None:
+    """State/local government postings straight from the NEOGOV sitemap (governmentjobs.com).
+
+    Scheduled 2026-09-17 after noticing it was never wired in at all: it has produced 148 queued
+    roles — the second-largest contract source in the system — entirely from manual runs, while
+    gov_scanner (the vendor-BOARD scanner) ran every 4h and produced 1 role across 29 scans. The
+    working scanner was the idle one.
+
+    NEOGOV's search is bot-gated but its sitemap and server-rendered /jobs/{id}-0 detail pages are
+    open, which is why this works where the vendor boards don't."""
+    try:
+        from core.state_store import load_state
+        from agents.discovery.gov_jobs_scanner import run
+        _, summary = await run(load_state(), limit=150, tailor=False, persist=True)
+        await _sync_db()
+        logger.info("scheduled_gov_jobs_scan_done", **summary)
+        return summary
+    except Exception as e:
+        logger.error("scheduled_gov_jobs_scan_failed", error=str(e)[:140])
+
+
+async def job_vendor_batch_send() -> None:
+    """Work the vendor outreach queue whenever the 24h window has room.
+
+    Runs HOURLY rather than once a day on purpose. The cap is a ROLLING 24-hour window, so room
+    reappears gradually as old sends age out - a single daily firing would miss most of it. The
+    script is safe to call repeatedly: it counts Gmail's Sent folder first, keeps 140+ sends in
+    reserve for Rahul's manual replies, halts above a 10% bounce rate, honours the suppression list,
+    and no-ops with "room today 0" when there is nothing to claim.
+
+    Run as a subprocess with cwd at the repo root: core.config reads .env relative to the cwd, and a
+    scheduler-spawned call from elsewhere fails with a missing refresh_token.
+    """
+    import asyncio.subprocess as _sp
+    root = str(Path(__file__).parent.parent)
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable, "scripts/vendor_daily_send.py", "--send",
+            cwd=root, stdout=_sp.PIPE, stderr=_sp.STDOUT)
+        out, _ = await proc.communicate()
+        tail = (out or b"").decode("utf-8", "ignore").strip().splitlines()
+        summary = tail[-3:] if tail else []
+        sent = 0
+        for line in tail:
+            if "this batch" in line:
+                import re as _re
+                m = _re.search(r"this batch (\d+)", line)
+                if m:
+                    sent = int(m.group(1))
+        logger.info("vendor_batch_send_done", rc=proc.returncode, sent=sent,
+                    summary=" | ".join(summary)[:300])
+        return {"sent": sent}
+    except Exception as e:
+        logger.error("vendor_batch_send_failed", error=str(e)[:140])
+
+
+async def job_fast_lane() -> None:
+    """LOW-LATENCY contract discovery — a role posted at 7am should be in the queue by 7:10, not
+    10:53. Fetches Dice listing pages only (no per-posting JD fetch, no model, no ATS resolution),
+    applies the deterministic filters, and commits straight to the queue unscored. Measured at ~4s
+    per pass against the deep scan's 79 minutes, which is the whole reason this is a separate job:
+    the deep scan cannot be made frequent, so the cheap half of it was split out."""
+    try:
+        from agents.discovery.fast_lane import poll
+        report = await poll(age="ONE", persist=True)
+        if report.get("queued"):
+            await _sync_db()
+        logger.info("scheduled_fast_lane_done", **report)
+        return report
+    except Exception as e:
+        logger.error("scheduled_fast_lane_failed", error=str(e)[:140])
+
+
+async def job_fast_lane_score() -> None:
+    """Backfill the fit score + full JD the fast lane deliberately skipped. Runs behind it, so a
+    role is VISIBLE within minutes and gets sharper a few minutes later."""
+    try:
+        from agents.discovery.fast_lane import score_pending
+        report = await score_pending(limit=40)
+        if report.get("scored") or report.get("dropped_fit"):
+            await _sync_db()
+        logger.info("scheduled_fast_lane_score_done", **report)
+        return report
+    except Exception as e:
+        logger.error("scheduled_fast_lane_score_failed", error=str(e)[:140])
+
+
 async def job_gov_scan() -> None:
     """State/local-GOVERNMENT contract (C2C) discovery — public-sector staff-augmentation vendor
     boards (data/gov_vendors.json). Plain HTTP JSON, no browser, no LinkedIn. Drops FEDERAL clients
@@ -612,7 +718,32 @@ _ACTIVE_JOBS = {"linkedin_health", "linkedin_scanner", "board_scanner", "phenom_
                 "kforce_scanner", "insightglobal_scanner", "workday_scanner", "apply_pipeline",
                 "referral_prep", "pretailor", "auto_submit", "email_monitor", "digest",
                 "dead_link_sweep", "log_rotate", "source_ingest", "gov_scanner",
-                "dice_scanner"}
+                "dice_scanner", "fast_lane", "fast_lane_score", "simplyhired_scanner",
+                "gov_jobs_scanner", "vendor_batch_send"}
+
+# ── Dynamic cadence ────────────────────────────────────────────────────────────────────────
+# US IT staffing posts on a business-day rhythm, and on C2C the first few résumés a vendor receives
+# are the ones that get submitted — so discovery latency converts directly. Polling that hard around
+# the clock just burns requests at Dice (and risks a block) for hours when nothing is posted.
+#
+# MARKET_TZ is the candidate's own zone (Plano, TX). The window is deliberately wider than 9-5:
+# measured postings arrive from ~7am well into the evening.
+MARKET_TZ = os.getenv("MARKET_TZ", "America/Chicago")
+MARKET_DAYS = "mon-fri"
+MARKET_HOURS = "7-20"
+
+# job_id → (market_interval_seconds, offpeak_interval_seconds). A job listed here is registered as
+# TWO cron triggers instead of one flat interval.
+_CADENCE = {
+    # 15 min, not 10. Dice blocked this IP outright during build-out after a burst of probing, so
+    # the poll rate is set by what the source tolerates, not by what latency we'd like. 15 min still
+    # turns a 3-10 hour wait into a sub-20-minute one; the circuit breaker in fast_lane backs this
+    # off further and automatically if the source pushes back again.
+    "fast_lane":       (900, 3600),     # 15 min in market hours, hourly otherwise
+    "fast_lane_score": (1800, 3600),    # backfill scoring trails the poll
+    "dice_scanner":    (14400, 28800),  # deep scan: 4h in hours, 8h overnight
+}
+
 
 # id → (func, base_interval_seconds, display_name, misfire_grace_time)
 _JOB_SPECS = {
@@ -625,8 +756,16 @@ _JOB_SPECS = {
     "phenom_scanner":  (job_phenom_scan,     10800, "Phenom Staffing Scanner (TEKsystems+Aston Carter+Actalent, 3h)", 600),
     "kforce_scanner":  (job_kforce_scan,     10800, "Kforce Scanner (Azure Search API, 3h)",   600),
     "insightglobal_scanner": (job_insight_global_scan, 10800, "Insight Global Scanner (Jibe API, 3h)", 600),
-    "gov_scanner":     (job_gov_scan,        14400, "State/Local Gov C2C Scanner (staff-aug vendor boards, 4h)", 600),
-    "dice_scanner":    (job_dice_scan,       14400, "Dice C2C Scanner (contract/third-party, full JD, 4h)", 900),
+    # Demoted 4h -> 24h on 2026-09-17: 29 scans produced ONE queued role, and every recent pass
+    # dropped 100% as stale (107-288 postings, in_lane=0). The boards are dead inventory, not a
+    # tuning problem — kept on a daily tick as cheap insurance in case they refresh.
+    "gov_scanner":     (job_gov_scan,        86400, "State/Local Gov C2C Scanner (vendor boards - near-zero yield, daily)", 600),
+    "gov_jobs_scanner": (job_gov_jobs_scan,  21600, "NEOGOV Gov Jobs Scanner (governmentjobs.com sitemap, 6h)", 900),
+    "dice_scanner":    (job_dice_scan,       14400, "Dice C2C Scanner (deep: 6 pages, full JD)", 900),
+    "simplyhired_scanner": (job_simplyhired_scan, 21600, "SimplyHired Scanner (Indeed inventory, fresh-gated, 6h)", 600),
+    "vendor_batch_send": (job_vendor_batch_send, 3600, "Vendor Outreach Batch (hourly; claims 24h-window room)", 600),
+    "fast_lane":       (job_fast_lane,        600,  "Fast Lane (listings-only, 10m in market hours)", 300),
+    "fast_lane_score": (job_fast_lane_score,  900,  "Fast Lane Scoring Backfill (JD + fit)",   300),
     "workday_scanner": (job_workday_scan,    43200, "Workday IT-Services Scanner (NTT/Genpact/Accenture cxs, 12h)", 900),
     "jobdiva_scanner": (job_jobdiva_scan,    21600, "JobDiva C2C/Bench Scanner (headless, 6h)", 900),
     "apply_pipeline":  (job_apply_pipeline,  1800,  "Apply Pipeline (score+park cheap, 30m)",   600),
@@ -649,17 +788,28 @@ _JOB_SPECS = {
 _CONTRACT_JOBS = {"linkedin_health", "board_scanner", "phenom_scanner", "kforce_scanner",
                   "insightglobal_scanner", "workday_scanner", "jobdiva_scanner", "apply_pipeline",
                   "pretailor", "email_monitor", "digest", "dead_link_sweep", "log_rotate",
-                  "source_ingest", "gov_scanner", "dice_scanner"}
+                  "source_ingest", "gov_scanner", "dice_scanner",
+                  "fast_lane", "fast_lane_score", "simplyhired_scanner", "gov_jobs_scanner",
+                  "vendor_batch_send"}
 
 
 def _active_jobs() -> set:
-    """The live job set for the current PIPELINE_MODE — contract set pauses full-time discovery."""
+    """The live job set for the current PIPELINE_MODE.
+
+    "contract" pauses full-time discovery, "fulltime" pauses the C2C/bench scanners, and "both"
+    runs the union — every discovery source live, with `ats_intake._contract_only()` returning
+    False so nothing is dropped on employment type. Rahul asked for both lanes on 2026-10-14;
+    before that the contract set silently discarded every W2 role at intake.
+    """
     try:
         from core.config import get_settings
-        if (get_settings().pipeline_mode or "fulltime").lower() == "contract":
-            return _CONTRACT_JOBS
+        mode = (get_settings().pipeline_mode or "fulltime").lower()
     except Exception:
-        pass
+        return _ACTIVE_JOBS
+    if mode == "contract":
+        return _CONTRACT_JOBS
+    if mode in ("both", "all"):
+        return _ACTIVE_JOBS | _CONTRACT_JOBS
     return _ACTIVE_JOBS
 
 
@@ -730,6 +880,35 @@ def _record_run(job_id: str, func):
     return _wrapped
 
 
+def _cron_fields(interval_s: int, hours: list[int]) -> dict:
+    """Express an interval as cron fields restricted to `hours`.
+
+    Cron cannot say "every 4 hours" as a minute step — `minute="*/240"` is rejected outright, the
+    step has to fit inside 0-59. So sub-hour cadences become a minute step across the whole window,
+    and hour-or-longer cadences fire at the top of every Nth hour that falls inside it (h %% N == 0,
+    which keeps fire times predictable and aligned to the clock rather than to process start).
+    """
+    hrs = sorted(hours)
+    if interval_s < 3600:
+        return {"hour": ",".join(str(h) for h in hrs), "minute": f"*/{max(1, interval_s // 60)}"}
+    step = max(1, interval_s // 3600)
+    picked = [h for h in hrs if h % step == 0] or hrs[:1]
+    return {"hour": ",".join(str(h) for h in picked), "minute": "0"}
+
+
+def _market_hours_list() -> list[int]:
+    lo, hi = (int(x) for x in MARKET_HOURS.split("-"))
+    return list(range(lo, hi + 1))
+
+
+def _offpeak_hours() -> str:
+    """The complement of MARKET_HOURS, as a cron hour list. Derived rather than hardcoded so the two
+    triggers can never overlap or leave a gap when the window is retuned."""
+    lo, hi = (int(x) for x in MARKET_HOURS.split("-"))
+    off = [h for h in range(24) if not (lo <= h <= hi)]
+    return ",".join(str(h) for h in off) or "0"
+
+
 def build_scheduler() -> AsyncIOScheduler:
     """Build and return a configured APScheduler (not yet started).
 
@@ -746,13 +925,48 @@ def build_scheduler() -> AsyncIOScheduler:
         if job_id not in active:
             logger.info("scheduler_job_slept", job=job_id)
             continue
+        wrapped = _record_run(job_id, func)
+        cadence = _CADENCE.get(job_id)
+        if cadence:
+            market_s, offpeak_s = cadence
+            # Two cron triggers rather than one interval: an interval trigger cannot be
+            # time-of-day aware, and APScheduler has no built-in "different rate at different
+            # hours". The pair is disjoint by construction — the off-peak trigger's hour list is
+            # the complement of MARKET_HOURS — so a fire can never come from both.
+            scheduler.add_job(
+                wrapped, id=f"{job_id}:market", name=f"{name} [market hours]",
+                trigger=CronTrigger(day_of_week=MARKET_DAYS, timezone=MARKET_TZ,
+                                    **_cron_fields(market_s, _market_hours_list())),
+                max_instances=1, misfire_grace_time=grace, coalesce=True)
+            night_hours = [int(h) for h in _offpeak_hours().split(",")]
+            # Off-peak needs TWO triggers, not one. The complement of MARKET_HOURS covers nights,
+            # but market is also day-of-week limited — so Sat/Sun 7am-8pm belongs to neither and
+            # would have gone completely unpolled all weekend.
+            scheduler.add_job(
+                wrapped, id=f"{job_id}:offpeak_night", name=f"{name} [off-peak nights]",
+                trigger=CronTrigger(timezone=MARKET_TZ,
+                                    **_cron_fields(offpeak_s, night_hours)),
+                max_instances=1, misfire_grace_time=grace, coalesce=True)
+            scheduler.add_job(
+                wrapped, id=f"{job_id}:offpeak_weekend", name=f"{name} [off-peak weekend]",
+                trigger=CronTrigger(day_of_week="sat,sun", timezone=MARKET_TZ,
+                                    **_cron_fields(offpeak_s, _market_hours_list())),
+                max_instances=1, misfire_grace_time=grace, coalesce=True)
+            logger.info("scheduler_job_cadence", job=job_id, market_s=market_s,
+                        offpeak_s=offpeak_s, tz=MARKET_TZ)
+            continue
         scheduler.add_job(
-            _record_run(job_id, func),
+            wrapped,
             trigger=IntervalTrigger(seconds=_jitter_seconds(interval)),
             id=job_id,
             name=name,
             max_instances=1,
             misfire_grace_time=grace,
+            # Without coalesce, a fire that arrives while the loop is busy is DROPPED outright —
+            # which is what turned the nominal 4h Dice cadence into observed 9.2h gaps (exactly
+            # 2x the interval: one fire lost each time). With it, the run happens as soon as the
+            # loop frees instead of waiting a full further period.
+            coalesce=True,
         )
 
     return scheduler

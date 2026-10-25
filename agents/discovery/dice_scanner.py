@@ -143,8 +143,18 @@ def in_lane(job: dict) -> bool:
     return bool(job.get("title")) and not _NOT_LANE.search(job["title"])
 
 
-async def scan(*, age: str = "THREE", pages: int = 2, c2c_only: bool = True) -> list[dict]:
-    """Fetch fresh contract postings. `age`: ONE=24h, THREE=3d, SEVEN=7d."""
+async def scan(*, age: str = "THREE", pages: int = 6, c2c_only: bool = True,
+               queries: tuple[str, ...] | None = None, enrich_jds: bool = True) -> list[dict]:
+    """Fetch fresh contract postings. `age`: ONE=24h, THREE=3d, SEVEN=7d.
+
+    `pages` defaults to 6, not 2. Dice sorts by relevance, not date, and its C2C density RISES with
+    depth — measured on "data engineer"/SEVEN: pages 1-2 held 14 C2C roles, pages 3-6 held 42. Two
+    pages was reading a quarter of the available supply.
+
+    `enrich_jds=False` skips the per-posting detail fetch. The fast lane (agents/discovery/fast_lane)
+    needs the LISTING only — title, company, link — so it can surface a role minutes after it posts;
+    the full JD arrives later on the deep pass. Enrichment is ~160 extra HTTP round-trips and is what
+    makes the deep scan slow, so it must stay off the latency path."""
     seen: dict[str, dict] = {}
     async with httpx.AsyncClient(follow_redirects=True, headers=_UA) as client:
         sem = asyncio.Semaphore(4)
@@ -158,7 +168,8 @@ async def scan(*, age: str = "THREE", pages: int = 2, c2c_only: bool = True) -> 
                     return []
                 return parse_jobs(r.text) if r.status_code == 200 else []
 
-        for res in await asyncio.gather(*[one(q, p) for q in QUERIES
+        qs = queries or QUERIES
+        for res in await asyncio.gather(*[one(q, p) for q in qs
                                           for p in range(1, pages + 1)]):
             for j in res:
                 if j.get("url"):
@@ -170,12 +181,14 @@ async def scan(*, age: str = "THREE", pages: int = 2, c2c_only: bool = True) -> 
         # declaration, far better than inferring C2C from JD wording.
         jobs = [j for j in jobs if "third party" in j["employment"].lower()]
     jobs = [j for j in jobs if in_lane(j)]
-    logger.info("dice_scanned", found=len(seen), kept=len(jobs), age=age)
-    await enrich(jobs)
+    logger.info("dice_scanned", found=len(seen), kept=len(jobs), age=age,
+                pages=pages, enriched=enrich_jds)
+    if enrich_jds:
+        await enrich(jobs)
     return jobs
 
 
-async def run(state, *, age: str = "THREE", pages: int = 2, limit: int = 200,
+async def run(state, *, age: str = "THREE", pages: int = 6, limit: int = 200,
               tailor: bool = False, persist: bool = False, fit_gate: bool = True):
     """Scan Dice and hand fresh C2C roles to ats_intake."""
     from agents.application.ats_intake import intake_jobs

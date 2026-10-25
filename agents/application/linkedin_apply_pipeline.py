@@ -188,7 +188,7 @@ async def _score_job(job: JobListing, llm) -> FitScore:
         [{
             "role": "user",
             "content": (
-                f"Candidate: {profile.get('name', 'Rahul Varikuppala')}, "
+                f"Candidate: {profile.get('name', 'Candidate')}, "
                 f"{profile.get('summary', 'Senior Data/Platform Engineer, 6+ yrs, Python/AWS/Spark/MLOps')}\n\n"
                 f"Job: {job['title']} at {job['company_name']}\n"
                 f"Description (first 1500 chars):\n{job['description'][:1500]}\n\n"

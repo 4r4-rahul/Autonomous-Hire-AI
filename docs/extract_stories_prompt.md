@@ -20,7 +20,7 @@ you to mine these repos for REAL, differentiated engineering stories — the kin
 solved hard problems, not just what I worked on.
 
 STEP 1 — ATTRIBUTE THE WORK TO ME.
-- My git author identity may appear as: Rahul Varikuppala, rahulvari*, 4r4rahul, or my company email.
+- My git author identity may appear under my personal name, personal email aliases, or my company email.
 - Use `git log --author`, `git blame`, and commit history to find the code *I* actually wrote/owned.
 - Only build stories from work I authored or clearly led. Skip code that's purely someone else's.
 - If you can't attribute something to me, leave it out rather than guess.

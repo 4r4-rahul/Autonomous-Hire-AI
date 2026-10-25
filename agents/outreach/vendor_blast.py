@@ -139,7 +139,8 @@ def compose(contact: dict, profile: dict, *, work_auth: str, availability: str,
     Every claim here has to be literally true. These are long-lived relationships and a vendor that
     catches an inflated line drops you permanently — so the public-sector angle is framed as
     *transferable regulated-industry work* (healthcare claims/member data at a Medicare Advantage
-    plan, financial systems at two banks), never as state-government experience he doesn't have.
+    plan, financial systems at two banks) PLUS real state-government delivery — the Georgia
+    Department of Banking and Finance.
     """
     personal = profile.get("personal", {})
     states = [s for s in (contact.get("states") or []) if s]
@@ -175,6 +176,7 @@ def compose(contact: dict, profile: dict, *, work_auth: str, availability: str,
 - 10 years building backend and data-platform systems: Java/Spring Boot, Python, SQL, Spark, Kafka
 - Cloud across AWS, GCP and Azure (Snowflake, Databricks, Redshift, BigQuery), plus CI/CD, Terraform, Kubernetes
 - Currently Senior Data Engineer at JPMorgan Chase; previously Alignment Health (Medicare Advantage healthcare data) and Ameriprise Financial (Java)
+- State-government delivery: data engineering for the Georgia Department of Banking and Finance (banking/financial-services regulator)
 - Regulated-industry background - healthcare claims and member data, and financial systems - which maps closely onto state health, Medicaid and revenue programs
 
 Work authorization: {work_auth}
@@ -184,7 +186,7 @@ Availability: {availability}
 Resume attached ({resume_name}). If you have public-sector or commercial requirements that fit, I'd welcome a call.
 
 Best regards,
-{personal.get('name', 'Rahul Varikuppala')}
+{personal.get('name', 'Candidate')}
 {personal.get('phone', '')} | {personal.get('email', '')}
 {personal.get('linkedin_url', '')}
 

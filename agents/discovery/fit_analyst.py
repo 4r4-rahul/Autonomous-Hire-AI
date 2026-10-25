@@ -203,10 +203,15 @@ _EXCLUDE_TITLE_PATTERNS: list[str] = [
 ]
 
 
-# Drop roles that REQUIRE more years of experience than the candidate has (Rahul ≈ 6-7 yrs). Staff/
-# Principal reqs of 8/10/12+ are a poor fit and waste an application. Overridable via
-# profile target.max_required_years.
-_MAX_REQUIRED_YEARS = 7
+# Drop roles that REQUIRE more years of experience than the candidate has. This is a ceiling on what
+# the JOB demands, not on the candidate — set to 7 when Rahul presented 6-7 years, which made an
+# "8+ years" req correctly out of reach. He now presents 10+ (career from May 2016; see the résumé
+# years floor), so that ceiling was discarding 40% of all Dice contract supply — 457 of 1,140 roles —
+# for asking 8, 9 or 10 years, which is exactly the senior C2C work he should win. 12 keeps the
+# guard's real purpose (skip genuine Staff/Principal 15+/20+ reqs and mis-parsed numbers) without
+# throwing away his own band. Raise it with the years floor, never separately.
+# Overridable via profile target.max_required_years.
+_MAX_REQUIRED_YEARS = 12
 _YEARS_RE = re.compile(r"(\d{1,2})\s*\+?\s*(?:to|-|–|—)?\s*(?:\d{1,2})?\s*\+?\s*years?", re.I)
 
 

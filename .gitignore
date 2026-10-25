@@ -43,3 +43,6 @@ frontend/.next/
 data/llm_costs.jsonl
 data/autofill_reports.jsonl
 data/ah_autofill_debug.json
+
+# ───────────────────────── local tooling ─────────────────────────
+.claude/

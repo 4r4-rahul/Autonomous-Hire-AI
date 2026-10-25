@@ -11,6 +11,13 @@ import pytest
 from api.autofill import _resolve_one, _load_profile, FieldIn
 
 P = _load_profile()
+_PER = P.get("personal", {})
+_FIRST, _LAST = (_PER.get("name", "First Last").split() + ["", ""])[:2]
+_PHONE_DIGITS = "".join(ch for ch in str(_PER.get("phone", "")) if ch.isdigit())[-10:-7] or "555"
+_ADDR = P.get("address", {}) if isinstance(P.get("address"), dict) else {}
+_STREET = str(_ADDR.get("street") or _PER.get("street") or "").split(" ")[-1] or ""
+_CITY = str(_ADDR.get("city") or _PER.get("city") or _PER.get("location", "").split(",")[0] or "")
+_ZIP = str(_ADDR.get("zip") or _PER.get("zip") or "")
 
 
 def resolve(label, type="text", options=None):
@@ -20,19 +27,19 @@ def resolve(label, type="text", options=None):
 # (label, type, options, expected_kind, expected_value_substring_or_None)
 CASES = [
     # ── identity / contact ──
-    ("First Name", "text", None, "text", "Rahul"),
-    ("Last Name", "text", None, "text", "Varikuppala"),
-    ("Full Name", "text", None, "text", "Rahul Varikuppala"),
+    ("First Name", "text", None, "text", _FIRST),
+    ("Last Name", "text", None, "text", _LAST),
+    ("Full Name", "text", None, "text", f"{_FIRST} {_LAST}".strip()),
     ("Email", "email", None, "text", "@"),
-    ("Phone", "tel", None, "text", "409"),
+    ("Phone", "tel", None, "text", _PHONE_DIGITS),
     ("LinkedIn URL", "url", None, "text", "linkedin.com"),
     ("GitHub", "url", None, "text", "github.com"),
     # ── address + collision traps ──
-    ("Street Address", "text", None, "text", "Custer"),
+    ("Street Address", "text", None, "text", _STREET),
     ("Address Line 2", "text", None, "text", ""),
-    ("City", "text", None, "text", "Plano"),
+    ("City", "text", None, "text", _CITY),
     ("State", "select", ["Texas", "California"], "value", "Texas"),
-    ("Zip", "text", None, "text", "00000"),
+    ("Zip", "text", None, "text", _ZIP),
     ("Country", "select", ["United States", "India"], "value", "United States"),
     # TRAPS — must NOT answer United States:
     ("Country of Citizenship", "select", ["United States", "India"], "value", "India"),
@@ -94,7 +101,7 @@ CASES += [
     # Greenhouse appends "(required)" + a field-id hash — must still match the email/phone rule
     ("Email (required) 1fb4ed12", "email", None, "text", "@"),
     ("Phone Number (required) 291e4100", "tel", None, "text", "409"),
-    ("First Name (required) d70cf5ba", "text", None, "text", "Rahul"),
+    ("First Name (required) d70cf5ba", "text", None, "text", _FIRST),
 ]
 
 

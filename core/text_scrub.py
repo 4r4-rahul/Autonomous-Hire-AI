@@ -257,6 +257,24 @@ def scrub_company_from_summary(md: str, company: str) -> tuple[str, int]:
 # for a floor of 7; raising the floor to 10 silently did nothing, because "8+ years" never matched.
 _YEARS_PLUS = re.compile(r"\b(\d{1,2})\+\s*years\b", re.I)
 
+# The "+" was mandatory, so a bare total-experience claim never matched: a tailored résumé opening
+# "Senior Software Engineer with 9 years building production backend..." sailed past the floor and
+# under-sold a decade, while its siblings said 10+. Two more constructions, both unambiguously TOTAL
+# experience, so the "never inflate a skill tenure" rule above still holds:
+#   * the opening headline's "with [over] N years" — bounded to the headline below, because "with 5
+#     years of Python" deeper in a paragraph is a skill tenure and must stay untouched;
+#   * "N years of [professional|total|...] experience", which is a total claim wherever it appears.
+_YEARS_HEADLINE = re.compile(
+    r"\bwith\s+(?:over\s+|more than\s+|nearly\s+|almost\s+)?(\d{1,2})\s*\+?\s*years\b", re.I)
+_YEARS_OF_EXP = re.compile(
+    r"\b(\d{1,2})\s*\+?\s*years\s+of\s+"
+    r"(?:professional\s+|overall\s+|total\s+|combined\s+|industry\s+|hands-on\s+)?experience\b", re.I)
+_HEADLINE_CHARS = 200   # "Senior <title> with N years ..." always lands well inside this
+# Does the summary make ANY total-experience claim? Matches the three forms above plus a spelled-out
+# "a decade", so an insertion never duplicates a claim the writer already made in its own words.
+_ANY_TOTAL_CLAIM = re.compile(
+    r"\b\d{1,2}\s*\+?\s*years\b|\b(?:a|over a|more than a|nearly a)\s+decade\b", re.I)
+
 
 def enforce_years_floor(md: str, floor: int = 10) -> tuple[str, int]:
     """User rule: every résumé presents at least `floor`+ years of TOTAL experience (truthful —
@@ -266,12 +284,42 @@ def enforce_years_floor(md: str, floor: int = 10) -> tuple[str, int]:
     if not bounds:
         return md, 0
     start, end = bounds
-    def _bump(m):
-        return f"{floor}+ years" if int(m.group(1)) < floor else m.group(0)
+    body = md[start:end]
+    n = 0
 
-    body, n_all = _YEARS_PLUS.subn(_bump, md[start:end])
-    # subn counts every match; count only the ones actually raised.
-    n = sum(1 for m in _YEARS_PLUS.finditer(md[start:end]) if int(m.group(1)) < floor)
+    def _bump(m, tail: str = "") -> str:
+        nonlocal n
+        if int(m.group(1)) >= floor:
+            return m.group(0)
+        n += 1
+        return f"{floor}+ years{tail}"
+
+    body = _YEARS_PLUS.sub(lambda m: _bump(m), body)
+    body = _YEARS_OF_EXP.sub(lambda m: _bump(m, " of experience"), body)
+    # Headline only — past the opening sentence, "with N years" is a skill tenure, not a total.
+    def _bump_headline(m) -> str:
+        # The match spans the "with ..." lead-in, so rebuild the whole span — prefixing the bumped
+        # text instead produced "with with 10+ years" whenever the number was already at the floor.
+        if int(m.group(1)) >= floor:
+            return m.group(0)
+        nonlocal n
+        n += 1
+        return f"with {floor}+ years"
+
+    head, rest = body[:_HEADLINE_CHARS], body[_HEADLINE_CHARS:]
+    head = _YEARS_HEADLINE.sub(_bump_headline, head)
+    body = head + rest
+
+    # A floor can only RAISE a claim that exists. Some tailored summaries state no total experience
+    # at all ("At JPMorgan Chase I own the Snowflake query-execution services...") — those silently
+    # failed the rule while looking clean, because there was nothing to match. The rule is "every
+    # résumé presents 10+ years", so when the summary makes no total claim, state it: one leading
+    # clause, ahead of whatever the summary already says.
+    if not _ANY_TOTAL_CLAIM.search(body):
+        stripped = body.lstrip("\n")
+        pad = body[:len(body) - len(stripped)]
+        body = f"{pad}Senior engineer with {floor}+ years of experience. {stripped}"
+        n += 1
     return md[:start] + body + md[end:], n
 
 

@@ -62,7 +62,13 @@ _IN_LANE = re.compile(
     r"cloud[-_](engineer|architect|developer)|devops|site[-_]reliability|platform[-_]engineer|"
     r"systems[-_]programmer|database[-_](developer|engineer)|sql[-_]developer|"
     r"integration[-_](developer|engineer)|api[-_]developer|(java|python|\.net|dotnet)[-_]developer|"
-    r"information[-_](technology|systems)[-_](specialist|analyst|developer|engineer)"
+    r"information[-_](technology|systems)[-_](specialist|analyst|developer|engineer)|"
+    # Added after a 50-state coverage check: the pattern reached only 27 states because these
+    # common public-sector IT titles never matched. "database-architect", "it-specialist-...",
+    # "systems-analyst-..." and "it-applications-analyst" are all squarely in lane.
+    r"database[-_](architect|administrator|analyst)|"
+    r"(?<![a-z])it[-_](specialist|analyst|applications?|developer|engineer|programmer)|"
+    r"systems?[-_]analyst|data[-_]visualization|informatics[-_](analyst|specialist)"
     r")", re.I)
 # Public boards carry every job a government does, so the exclusions are broad: teaching, helpdesk,
 # non-IC roles, stacks outside the candidate's profile, and analyst work that isn't engineering.
@@ -75,6 +81,8 @@ _NOT_LANE = re.compile(
     # "Programmer" in a government title can mean someone who programs EVENTS, not software:
     # "Facility Programmer (Ice Arena)", "Performing Arts Educational Programmer".
     r"facility-programmer|facilities-programmer|arts-|recreation|arena|cultural|event-|"
+    r"general-application|application-template|application-submission|hr-use-only|"
+    r"equivalent-transfer|employment-information|for-payroll|"
     r"performing|theatre|theater|museum|park-)", re.I)
 
 _EMAIL = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
@@ -125,6 +133,32 @@ def in_lane(url: str) -> bool:
     return bool(_IN_LANE.search(slug)) and not _NOT_LANE.search(slug)
 
 
+# NEOGOV embeds schema.org JobPosting JSON-LD on every bulletin, which carries `datePosted`.
+# Nothing here read it, so every posting entered the queue with no age at all — and these boards are
+# mostly zombie reqs: the first bulletin sampled when this was added was dated **2006-09-21**. A
+# 20-year-old listing looked exactly like a fresh one. Parse it, and let callers filter.
+_DATE_POSTED = re.compile(r'"datePosted"\s*:\s*"([^"]{4,40})"')
+# A bulletin whose body says this is already gone; it was being kept and queued as a live role.
+_EXPIRED = re.compile(r"posting is not found or expired|no longer accepting applications", re.I)
+
+
+def _posted_date(html_text: str) -> str:
+    m = _DATE_POSTED.search(html_text)
+    return (m.group(1) or "")[:10] if m else ""
+
+
+def posting_age_days(posted: str) -> int | None:
+    """Days since posting, or None when the bulletin carried no date."""
+    if not posted:
+        return None
+    from datetime import date
+    try:
+        y, mo, d = (int(x) for x in posted[:10].split("-"))
+        return (date.today() - date(y, mo, d)).days
+    except Exception:
+        return None
+
+
 async def _bulletin(client: httpx.AsyncClient, url: str) -> dict | None:
     m = re.search(r"/jobs/(\d+)", url)
     if not m:
@@ -136,6 +170,9 @@ async def _bulletin(client: httpx.AsyncClient, url: str) -> dict | None:
     except Exception:
         return None
     body = _text(r.text)
+    if _EXPIRED.search(body[:4000]):
+        return None
+    posted = _posted_date(r.text)
     title_m = _TITLE.search(r.text)
     raw_title = html.unescape(title_m.group(1).strip()) if title_m else ""
     state = _state_from_title(raw_title)
@@ -159,6 +196,8 @@ async def _bulletin(client: httpx.AsyncClient, url: str) -> dict | None:
         "location": (_TITLE_LOCATION.search(raw_title).group(1).strip()
                      if _TITLE_LOCATION.search(raw_title) else ""),
         "description": body[:6000],
+        "posted_at": posted,
+        "age_days": posting_age_days(posted),
     }
 
 

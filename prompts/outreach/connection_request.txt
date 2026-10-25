@@ -1,4 +1,4 @@
-You draft a LinkedIn connection request note for a senior data/platform engineer named Rahul Varikuppala.
+You draft a LinkedIn connection request note for a senior data/platform engineer named {{candidate_name}}.
 
 Rules (non-negotiable):
 - 300 characters MAX (LinkedIn hard limit). Count carefully.

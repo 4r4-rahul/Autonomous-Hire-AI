@@ -59,6 +59,8 @@ def _render_story(s: dict, indent: str = "  ") -> str:
         f"{indent}  DECISION: {s.get('decision','')}",
         f"{indent}  TRADEOFF: {tradeoff}" if tradeoff and tradeoff != "n/a" else "",
         f"{indent}  IMPACT: {s.get('impact','')}",
+        # Framing only: why the work matters to AI/ML. Not evidence that AI was built there.
+        f"{indent}  AI-ANGLE: {s['ai_relevance']}" if s.get("ai_relevance") else "",
         f"{indent}  SHOWS: {shows}" if shows else "",
     ]
     return "\n".join(x for x in parts if x)
@@ -406,6 +408,11 @@ These are the SOURCE OF TRUTH for differentiated bullets: each is a real problem
 decision → the tradeoff → the measured impact. Draw the bullets that map to THIS job's hardest
 problem from here. Never copy a story verbatim — reframe it for the JD. NEVER use a story whose
 facts the base résumé/profile don't support.
+AI-ANGLE lines are FRAMING, not facts. A line starting "Direct" describes real AI/ML work and may be
+stated as such. Any other AI-ANGLE only explains why that work matters to AI/ML systems: use it to
+pick and phrase bullets for AI-leaning roles (for example "governed data foundation for ML"), but
+NEVER write that the candidate built, trained or ran AI/LLM/ML systems in that role, and never put
+LLM or GenAI claims on a role that ended before 2023.
 {_EXPERIENCE_BANK}""" if _EXPERIENCE_BANK else "")
 
     stable_block = f"""BASE RESUME:
@@ -465,8 +472,8 @@ depth, and that is the honest impression when it is what actually happened.
 
 Skills genuinely spanning multiple roles in the base résumé:
   Spark (JPMorgan, Alignment Health, Ameriprise) · PySpark (JPMorgan, Alignment Health)
-  Kafka / streaming (JPMorgan, Insight Global, Alignment Health) · Scala (JPMorgan, Alignment Health,
-  Ameriprise) · SQL (all four employers) · Terraform & CI/CD (JPMorgan, Insight Global)
+  Kafka / streaming (JPMorgan, Georgia DBF, Alignment Health) · Scala (JPMorgan, Alignment Health,
+  Ameriprise) · SQL (all four employers) · Terraform & CI/CD (JPMorgan, Georgia DBF)
   Parquet (JPMorgan, Alignment Health) · Python (JPMorgan, Alignment Health)
 
 Each mention must be a DIFFERENT point: the problem that role solved with it, in that role's domain
@@ -479,13 +486,17 @@ one of those bullets ends the conversation, and in the contract market ends the 
 
 ENGAGEMENT COHERENCE — keep each role's stack inside the engagement that actually used it:
   - JPMorgan Chase      -> AWS (EMR, S3, Glue, Athena, Lambda, DynamoDB) + Snowflake, Databricks
-  - Humana              -> AWS (S3, Glue, Lambda) + Snowflake, dbt, Airflow — healthcare payer data
-  - Insight Global      -> Azure (ADF, ADLS Gen2, Functions, Event Hubs); Terraform spanned AWS/Azure/GCP
+  - Humana (INTERNSHIP) -> AWS (S3, Glue, Lambda) + Snowflake, dbt, Airflow — healthcare payer
+                           data. Always presented as an internship, never as a staff role.
+  - Georgia Dept of Banking & Finance (DBF) -> Azure (ADF, ADLS Gen2, Functions, Event Hubs);
+                           Terraform spanned AWS/Azure/GCP. STATE GOVERNMENT, banking/financial-
+                           services regulator. Listed by CLIENT, not the staffing vendor — lead
+                           with it for public-sector and regulatory JDs.
   - Alignment Health    -> genuinely multi-cloud: Azure migration + AWS (Glue, EMR) + GCP (BigQuery,
                            Dataproc, Pub/Sub) + Snowflake, Talend, Matillion, dbt
   - Ameriprise          -> Java/Spring Boot + AWS (EC2, S3, RDS)
 Never add a cloud or tool to a role that did not use it. Where a role WAS multi-cloud (Alignment
-Health, Insight Global) that is real and may be shown — but do not flatten every role into the same
+Health, Georgia DBF) that is real and may be shown — but do not flatten every role into the same
 multi-cloud claim, and do not attribute one role's stack to another.
 
 To match a JD's cloud, REORDER — lead with the role that genuinely used it and give that role's
@@ -506,7 +517,7 @@ RETENTION IS THE DEFAULT, AND IT IS MEASURED. The base résumé carries these bu
 output must match them per role, not merely in total:
 
     JPMorgan Chase          33 bullets      Ameriprise Financial      7 bullets
-    Insight Global           6 bullets      AutonomousHire            8 bullets
+    Georgia DBF              6 bullets      AutonomousHire            8 bullets
     Humana                  12 bullets      Live Meeting Assistant    5 bullets
     Alignment Health        24 bullets      Multi-Cloud Automation    6 bullets
 
@@ -641,7 +652,7 @@ def _render_markdown(tailored: dict, job: JobListing, profile: dict) -> str:
         f"[{_disp_url(u)}]({u})" for u in (_li, _gh) if u)
 
     lines = [
-        f"# {p.get('name', 'Rahul Varikuppala')}",
+        f"# {p.get('name', 'Candidate')}",
         f"{p.get('location', '')} | {p.get('phone', '')} | {p.get('email', '')}",
         _contact,
         "",

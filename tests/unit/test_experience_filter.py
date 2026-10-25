@@ -28,11 +28,25 @@ def test_min_required_years(desc, expected):
 
 
 def test_prefilter_drops_high_experience():
-    job = {"title": "Principal Software Engineer", "company_name": "acme",
-           "description": "We need 10+ years of experience in distributed systems.",
+    """Only reqs beyond the candidate's own band. A 10+ req is now IN band (he presents 10+), so the
+    guard has to keep clearing genuine Staff/Principal bars without taking his own work with it."""
+    job = {"title": "Distinguished Engineer", "company_name": "acme",
+           "description": "We need 18+ years of experience in distributed systems.",
            "salary_max": None}
     ok, reason = _quick_prefilter(job, {"target": {}})
     assert not ok and "yrs experience" in reason
+
+
+def test_prefilter_keeps_the_candidates_own_band():
+    """Regression: the ceiling sat at 7 from the 6-7-year era and silently dropped 40% of Dice
+    contract supply for asking 8/9/10 years — the senior C2C work he is the right fit for."""
+    for jd in ("8+ years of experience in data engineering required",
+               "Minimum 9 years of hands-on experience with AWS",
+               "10+ years of experience building data platforms"):
+        job = {"title": "Senior Data Engineer", "company_name": "acme",
+               "description": jd, "salary_max": None}
+        ok, reason = _quick_prefilter(job, {"target": {}})
+        assert ok, f"{jd!r} was dropped: {reason}"
 
 
 def test_prefilter_keeps_in_range_experience():
@@ -43,5 +57,6 @@ def test_prefilter_keeps_in_range_experience():
     assert ok
 
 
-def test_ceiling_is_seven():
-    assert _MAX_REQUIRED_YEARS == 7
+def test_ceiling_matches_the_resume_years_floor():
+    # Tied to the 10+ years the résumé presents, plus headroom. Move them together, never apart.
+    assert _MAX_REQUIRED_YEARS == 12

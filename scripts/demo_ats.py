@@ -132,7 +132,7 @@ async def run_demo() -> None:
                 "Score candidate fit 0-100. Return JSON: "
                 "{\"score\":0-100,\"passed\":bool,\"highlights\":[str],\"missing\":[str]}",
                 [{"role":"user","content":(
-                    f"Candidate: Rahul Varikuppala, Senior Data/Platform Engineer, "
+                    f"Candidate: {profile name}, Senior Data/Platform Engineer, "
                     f"6+ yrs, Python/AWS/Spark/MLOps\n\n"
                     f"Job: {job['title']} at {job['company_name']}\n"
                     f"Description:\n{job.get('description','')[:1500]}"

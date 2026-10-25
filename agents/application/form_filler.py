@@ -52,7 +52,7 @@ def _named_upload(path: Path | str, kind: str = "Resume") -> str:
     src = Path(path)
     try:
         _UPLOAD_TMP.mkdir(parents=True, exist_ok=True)
-        nice = _UPLOAD_TMP / f"Rahul_Varikuppala_{kind}{src.suffix or '.pdf'}"
+        nice = _UPLOAD_TMP / f"Candidate_Resume_{kind}{src.suffix or '.pdf'}"
         shutil.copyfile(src, nice)
         return str(nice)
     except Exception:
@@ -716,14 +716,14 @@ async def _fill_greenhouse(page: Page, profile: dict, resume_pdf: Path, job: Job
         (("pronunciation", "name pronun", "personal preference", "pronounce your name"), "Rah-ool"),
         (("pronoun",),                                      defs.get("pronouns", "He/Him")),
         # Contact / location — home address fields (matched before generic city/zip)
-        (("home address line 1", "address line 1", "street address"), "[REDACTED ADDRESS]"),
+        (("home address line 1", "address line 1", "street address"), defs.get("location_address", "")),
         (("address from which you plan on working", "address where you will work",
-          "address you plan on working"), "[REDACTED ADDRESS]"),
+          "address you plan on working"), defs.get("location_full_address", "")),
         (("home address line 2", "address line 2", "apt,", "suite,", "unit,"), ""),
-        (("city",),                                         "McKinney"),
+        (("city",),                                         defs.get("location_city", "")),
         (("state", "province"),                             "Texas"),
         (("country",),                                      "United States"),
-        (("postal", "zip"),                                 "00000"),
+        (("postal", "zip"),                                 defs.get("location_zip", "")),
         # Work history
         (("current company", "current employer"),           defs.get("current_company", "JPMorgan Chase")),
         (("current title", "current role", "current position"), defs.get("current_title", "Senior Software Engineer")),
@@ -3748,10 +3748,10 @@ async def _fill_workday(page: Page, profile: dict, resume_pdf: Path, job: JobLis
             (["phone-number", "phoneNumber", "phone--phoneNumber"],
              ["Phone Number"], _phone_digits(p.get("phone", ""))),
             (["addressSection_addressLine1", "address--addressLine1"],
-             ["Address Line 1"], defs.get("location_address", "[REDACTED ADDRESS]")),
-            (["addressSection_city", "address--city"], ["City"], defs.get("location_city", "McKinney")),
+             ["Address Line 1"], defs.get("location_address", "")),
+            (["addressSection_city", "address--city"], ["City"], defs.get("location_city", "")),
             (["addressSection_postalCode", "address--postalCode"], ["Postal Code"],
-             defs.get("location_zip", "00000")),
+             defs.get("location_zip", "")),
         ]
         for aids, labels, value in _id_fields:
             if not value:
@@ -4522,8 +4522,8 @@ async def _workday_validate_review(page, profile: dict) -> dict:
     pdig = _phone_digits(p.get("phone", ""))
     chk("phone_present", bool(pdig) and pdig[-4:] in re.sub(r"\D", "", body), "phone on file")
     chk("address_present",
-        any(t and t in low for t in (str(defs.get("location_city", "mckinney")).lower(),
-                                     str(defs.get("location_zip", "00000")))),
+        any(t and t in low for t in (str(defs.get("location_city", "")).lower(),
+                                     str(defs.get("location_zip", "")))),
         "address city/zip")
 
     # 3) Work authorization — must NOT be missing/contradictory. Rahul requires sponsorship.

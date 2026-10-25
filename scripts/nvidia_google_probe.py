@@ -38,7 +38,7 @@ async def main():
                     hint: document.body.innerText.slice(0,260).replace(/\\n+/g,' | '),
                     hasPassword: !!document.querySelector("input[type='password']"),
                     hasEmail: !!document.querySelector("input[type='email']"),
-                    chooseAccount: /choose an account|4r4rahul|use another account/i.test(document.body.innerText||''),
+                    chooseAccount: /choose an account|use another account/i.test(document.body.innerText||''),
                     blocked: /browser or app may not be secure|couldn.t sign you in/i.test(document.body.innerText||'')})""")
                 print("\nGOOGLE OAUTH PAGE:", json.dumps(info, indent=2))
         await page.screenshot(path="data/screenshots/nvidia_google_result.png")

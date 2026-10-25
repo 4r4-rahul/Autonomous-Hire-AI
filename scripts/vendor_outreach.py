@@ -31,7 +31,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 # technical profile — recruiters keyword-match against it and forward it to the client — so depth
 # helps here. It is the WRONG shape for a direct ATS application, where two pages is the norm;
 # those keep using the tailored per-role résumés the pipeline generates.
-DEFAULT_RESUME = "Rahul_Varikuppala_Senior_Data_Engineer.pdf"
+DEFAULT_RESUME = "Candidate_Resume.pdf"
 DEFAULT_WORK_AUTH = ("H-1B. Open to W2 or C2C engagements - happy to discuss whichever "
                      "structure works best for you.")
 DEFAULT_AVAILABILITY = "2 weeks' notice"

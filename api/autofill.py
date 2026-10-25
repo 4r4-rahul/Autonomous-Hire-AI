@@ -364,8 +364,8 @@ def _resolve_one(f: FieldIn, P: dict) -> FillOut:
         return text("")
     if any(k in ll for k in ("address line 1", "street address", "home address", "mailing address",
                              "street")) and "email" not in ll:
-        return text(home.get("line1", "[REDACTED ADDRESS]"))
-    # Citizenship / birth / nationality → India (Rahul is an Indian national on a visa),
+        return text(home.get("line1", ""))
+    # Citizenship / birth / nationality come from the profile (candidate is a non-US national on a visa),
     # NOT his US residence. MUST come before the generic residence-country rule.
     if any(k in ll for k in ("citizenship", "nationality", "country of birth",
                              "birth country", "country of origin", "country of citizenship")):
@@ -394,7 +394,7 @@ def _resolve_one(f: FieldIn, P: dict) -> FillOut:
     if (re.search(r"\bstate\b", ll) or "province" in ll) and _addr_ok and not _is_yesno(opts):
         return choose(home.get("state", "Texas"))
     if any(k in ll for k in ("zip", "postal")):
-        return text(home.get("zip", "00000"))
+        return text(home.get("zip", ""))
 
     # ── Staffing/screening questions (Salesforce-LWC & similar custom apply forms) ──────────
     # Highest level of education as a CHOICE (Diploma/Associate/Bachelor/Master/Doctorate) — pick the
@@ -1005,7 +1005,7 @@ def _cover_pdf_for_job(job_id: str) -> Optional[Path]:
         return None
     P = _load_profile()
     per = P.get("personal", {}) or {}
-    name = per.get("name") or "Rahul Varikuppala"
+    name = per.get("name") or "Candidate"
     contact = "  |  ".join(x for x in (
         per.get("location", ""), per.get("phone", ""), per.get("email", ""),
         (per.get("linkedin_url", "") or "").replace("https://", "").replace("http://", ""),
