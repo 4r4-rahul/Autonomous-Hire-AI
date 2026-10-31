@@ -12,6 +12,14 @@ from datetime import datetime, timezone
 from email.message import EmailMessage
 from pathlib import Path
 
+
+def _sent_name(att: Path) -> str:
+    """Rahul (2026-10-28): recruiters get a plain file name, never the internal lane name."""
+    if att.name.startswith("Rahul_Varikuppala_") and att.suffix.lower() in (".docx", ".pdf") \
+            and att.name != f"Rahul_Varikuppala_Resume{att.suffix}":
+        return f"Rahul_Varikuppala_Resume{att.suffix}"
+    return att.name
+
 def _sender() -> str:
     """Sender address comes from the untracked profile (data/user_profile.yaml), never from code."""
     import yaml
@@ -40,15 +48,16 @@ def main() -> int:
     ap.add_argument("--to", required=True)
     ap.add_argument("--subject", required=True)
     ap.add_argument("--body", required=True, help="path to the body text file")
-    ap.add_argument("--attach", required=True)
+    ap.add_argument("--attach", required=True, nargs="+", help="one or more files to attach")
     ap.add_argument("--send", action="store_true")
     a = ap.parse_args()
 
     body = Path(a.body).read_text()
-    att = Path(a.attach)
-    if not att.exists():
-        print(f"attachment missing: {att}")
-        return 1
+    atts = [Path(x) for x in a.attach]
+    for att in atts:
+        if not att.exists():
+            print(f"attachment missing: {att}")
+            return 1
 
     if already_sent(a.to, a.subject):
         print(f"ALREADY SENT to {a.to} with this subject - refusing to duplicate.")
@@ -59,12 +68,14 @@ def main() -> int:
     msg["From"] = _sender()
     msg["Subject"] = a.subject
     msg.set_content(body)
-    ctype, _ = mimetypes.guess_type(att.name)
-    maintype, subtype = (ctype or "application/octet-stream").split("/", 1)
-    msg.add_attachment(att.read_bytes(), maintype=maintype, subtype=subtype, filename=att.name)
+    for att in atts:
+        ctype, _ = mimetypes.guess_type(att.name)
+        maintype, subtype = (ctype or "application/octet-stream").split("/", 1)
+        msg.add_attachment(att.read_bytes(), maintype=maintype, subtype=subtype, filename=_sent_name(att))
 
     print(f"To:      {a.to}\nFrom:    {_sender()}\nSubject: {a.subject}")
-    print(f"Attach:  {att.name}  ({att.stat().st_size:,} bytes)")
+    for att in atts:
+        print(f"Attach:  {att.name}  ({att.stat().st_size:,} bytes)  -> sent as {_sent_name(att)}")
     print("-" * 72)
     print(body)
     print("-" * 72)
@@ -79,7 +90,7 @@ def main() -> int:
     with LOG.open("a") as f:
         f.write(json.dumps({"to": a.to, "subject": a.subject,
                             "sent_at": datetime.now(timezone.utc).isoformat(),
-                            "message_id": sent.get("id"), "attachment": att.name}) + "\n")
+                            "message_id": sent.get("id"), "attachment": ", ".join(x.name for x in atts)}) + "\n")
     print(f"SENT - gmail id {sent.get('id')}")
     return 0
 
